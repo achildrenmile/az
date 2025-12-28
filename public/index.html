@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Arbeitszeit-Tracker</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <!-- LOGIN -->
+  <div id="login-view" class="view">
+    <div class="card login-card">
+      <h1>Arbeitszeit erfassen</h1>
+      <form id="login-form">
+        <div class="form-group">
+          <label for="mitarbeiter_nr">Mitarbeiter-Nr.</label>
+          <input type="text" id="mitarbeiter_nr" required autofocus>
+        </div>
+        <div class="form-group">
+          <label for="pin">PIN</label>
+          <input type="password" id="pin" required>
+        </div>
+        <button type="submit" class="btn btn-primary">Anmelden</button>
+        <div id="login-error" class="error"></div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ZEITERFASSUNG -->
+  <div id="erfassung-view" class="view hidden">
+    <nav class="navbar">
+      <span id="user-name"></span>
+      <div>
+        <button id="show-history-btn" class="btn btn-secondary">Meine Einträge</button>
+        <button id="show-admin-btn" class="btn btn-secondary hidden">Admin</button>
+        <button id="logout-btn" class="btn">Abmelden</button>
+      </div>
+    </nav>
+
+    <div class="container">
+      <div class="card">
+        <h2>Arbeitszeit eintragen</h2>
+        <form id="zeit-form">
+          <div class="form-row">
+            <div class="form-group">
+              <label for="datum">Datum *</label>
+              <input type="date" id="datum" required>
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label for="arbeitsbeginn">Arbeitsbeginn *</label>
+              <input type="time" id="arbeitsbeginn" required>
+            </div>
+            <div class="form-group">
+              <label for="arbeitsende">Arbeitsende *</label>
+              <input type="time" id="arbeitsende" required>
+            </div>
+            <div class="form-group">
+              <label for="pause_minuten">Pause (Min)</label>
+              <input type="number" id="pause_minuten" min="0" value="30">
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label for="baustelle">Baustelle / Projekt</label>
+            <input type="text" id="baustelle" placeholder="z.B. Neubau Musterstraße 12">
+          </div>
+
+          <div class="form-group">
+            <label for="kunde">Kunde</label>
+            <input type="text" id="kunde" placeholder="z.B. Firma Mustermann GmbH">
+          </div>
+
+          <div class="form-group">
+            <label for="anfahrt">Anfahrt</label>
+            <input type="text" id="anfahrt" placeholder="z.B. 45 min von Firma">
+          </div>
+
+          <div class="form-group">
+            <label for="notizen">Notizen</label>
+            <textarea id="notizen" rows="3" placeholder="Weitere Informationen..."></textarea>
+          </div>
+
+          <button type="submit" class="btn btn-primary">Eintrag speichern</button>
+          <div id="zeit-message" class="message"></div>
+        </form>
+      </div>
+
+      <!-- Letzte Einträge -->
+      <div id="history-section" class="card hidden">
+        <h2>Meine letzten Einträge</h2>
+        <div id="history-list"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ADMIN BEREICH -->
+  <div id="admin-view" class="view hidden">
+    <nav class="navbar">
+      <span>Admin-Bereich</span>
+      <div>
+        <button id="back-to-erfassung-btn" class="btn btn-secondary">Zurück</button>
+        <button id="admin-logout-btn" class="btn">Abmelden</button>
+      </div>
+    </nav>
+
+    <div class="container">
+      <!-- Tabs -->
+      <div class="tabs">
+        <button class="tab active" data-tab="eintraege">Zeiteinträge</button>
+        <button class="tab" data-tab="mitarbeiter">Mitarbeiter</button>
+      </div>
+
+      <!-- Zeiteinträge Tab -->
+      <div id="tab-eintraege" class="tab-content">
+        <div class="card">
+          <h2>Alle Zeiteinträge</h2>
+          <div class="filter-row">
+            <div class="form-group">
+              <label for="filter-von">Von</label>
+              <input type="date" id="filter-von">
+            </div>
+            <div class="form-group">
+              <label for="filter-bis">Bis</label>
+              <input type="date" id="filter-bis">
+            </div>
+            <button id="filter-btn" class="btn btn-primary">Filtern</button>
+            <button id="export-btn" class="btn btn-secondary">CSV Export</button>
+          </div>
+          <div class="table-container">
+            <table id="eintraege-table">
+              <thead>
+                <tr>
+                  <th>Datum</th>
+                  <th>Mitarbeiter</th>
+                  <th>Beginn</th>
+                  <th>Ende</th>
+                  <th>Pause</th>
+                  <th>Netto</th>
+                  <th>Baustelle</th>
+                  <th>Kunde</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Mitarbeiter Tab -->
+      <div id="tab-mitarbeiter" class="tab-content hidden">
+        <div class="card">
+          <h2>Mitarbeiter verwalten</h2>
+          <form id="new-mitarbeiter-form" class="inline-form">
+            <input type="text" id="new-ma-nr" placeholder="Nr." required>
+            <input type="text" id="new-ma-name" placeholder="Name" required>
+            <input type="password" id="new-ma-pin" placeholder="PIN (min. 4)" required>
+            <button type="submit" class="btn btn-primary">Hinzufügen</button>
+          </form>
+          <div id="new-ma-message" class="message"></div>
+
+          <div class="table-container">
+            <table id="mitarbeiter-table">
+              <thead>
+                <tr>
+                  <th>Nr.</th>
+                  <th>Name</th>
+                  <th>Admin</th>
+                  <th>Status</th>
+                  <th>Aktionen</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

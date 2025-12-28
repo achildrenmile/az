@@ -1,0 +1,18 @@
+{
+  "name": "arbeitszeit-tracker",
+  "version": "1.0.0",
+  "description": "Einfache Arbeitszeiterfassung konform mit österreichischem AZG",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "better-sqlite3": "^9.4.3",
+    "bcryptjs": "^2.4.3"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
