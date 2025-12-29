@@ -300,6 +300,93 @@ module.exports = {
     `).get(mitarbeiterId, von, bis);
   },
 
+  // Wochenstatistik (§26 AZG konform)
+  getWochenstatistik: (mitarbeiterId, jahr, woche) => {
+    // ISO Woche berechnen - Montag bis Sonntag
+    const result = db.prepare(`
+      SELECT
+        strftime('%W', datum) as kalenderwoche,
+        COUNT(*) as tage,
+        SUM(
+          (strftime('%H', arbeitsende) * 60 + strftime('%M', arbeitsende)) -
+          (strftime('%H', arbeitsbeginn) * 60 + strftime('%M', arbeitsbeginn)) -
+          pause_minuten
+        ) as gesamtminuten
+      FROM zeiteintraege
+      WHERE mitarbeiter_id = ?
+        AND strftime('%Y', datum) = ?
+        AND strftime('%W', datum) = ?
+      GROUP BY strftime('%W', datum)
+    `).get(mitarbeiterId, String(jahr), String(woche).padStart(2, '0'));
+
+    return result || { kalenderwoche: woche, tage: 0, gesamtminuten: 0 };
+  },
+
+  // Alle Wochen eines Jahres für einen Mitarbeiter
+  getJahresWochenstatistik: (mitarbeiterId, jahr) => {
+    return db.prepare(`
+      SELECT
+        strftime('%W', datum) as kalenderwoche,
+        MIN(datum) as woche_start,
+        MAX(datum) as woche_ende,
+        COUNT(*) as tage,
+        SUM(
+          (strftime('%H', arbeitsende) * 60 + strftime('%M', arbeitsende)) -
+          (strftime('%H', arbeitsbeginn) * 60 + strftime('%M', arbeitsbeginn)) -
+          pause_minuten
+        ) as gesamtminuten
+      FROM zeiteintraege
+      WHERE mitarbeiter_id = ?
+        AND strftime('%Y', datum) = ?
+      GROUP BY strftime('%W', datum)
+      ORDER BY kalenderwoche DESC
+    `).all(mitarbeiterId, String(jahr));
+  },
+
+  // Alle Monate eines Jahres für einen Mitarbeiter
+  getJahresMonatsstatistik: (mitarbeiterId, jahr) => {
+    return db.prepare(`
+      SELECT
+        strftime('%m', datum) as monat,
+        COUNT(*) as tage,
+        SUM(
+          (strftime('%H', arbeitsende) * 60 + strftime('%M', arbeitsende)) -
+          (strftime('%H', arbeitsbeginn) * 60 + strftime('%M', arbeitsbeginn)) -
+          pause_minuten
+        ) as gesamtminuten
+      FROM zeiteintraege
+      WHERE mitarbeiter_id = ?
+        AND strftime('%Y', datum) = ?
+      GROUP BY strftime('%m', datum)
+      ORDER BY monat DESC
+    `).all(mitarbeiterId, String(jahr));
+  },
+
+  // Statistik-Übersicht für Admin (alle Mitarbeiter)
+  getAlleMitarbeiterStatistik: (jahr, monat) => {
+    const von = `${jahr}-${String(monat).padStart(2, '0')}-01`;
+    const bis = `${jahr}-${String(monat).padStart(2, '0')}-31`;
+
+    return db.prepare(`
+      SELECT
+        m.id as mitarbeiter_id,
+        m.name as mitarbeiter_name,
+        m.mitarbeiter_nr,
+        COUNT(z.id) as tage,
+        COALESCE(SUM(
+          (strftime('%H', z.arbeitsende) * 60 + strftime('%M', z.arbeitsende)) -
+          (strftime('%H', z.arbeitsbeginn) * 60 + strftime('%M', z.arbeitsbeginn)) -
+          z.pause_minuten
+        ), 0) as gesamtminuten
+      FROM mitarbeiter m
+      LEFT JOIN zeiteintraege z ON m.id = z.mitarbeiter_id
+        AND z.datum BETWEEN ? AND ?
+      WHERE m.aktiv = 1
+      GROUP BY m.id
+      ORDER BY m.name
+    `).all(von, bis);
+  },
+
   // Session-Funktionen
   createSession: (sessionId, mitarbeiterId, expiresAt) => {
     return db.prepare(`

@@ -291,8 +291,10 @@ function initErfassungView() {
   loadKundenListe();
   loadBaustellenListe();
 
-  // Einträge immer laden
+  // Einträge und Statistik laden
   loadHistory();
+  initStatistikJahre();
+  loadUserStatistik();
 }
 
 document.getElementById('zeit-form').addEventListener('submit', async (e) => {
@@ -1449,3 +1451,186 @@ async function validateSession() {
 
 // Beim Laden Session validieren
 validateSession();
+
+// ==================== STATISTIK ====================
+
+let currentStatistikType = 'monate';
+
+// Jahre-Dropdown initialisieren
+function initStatistikJahre() {
+  const currentYear = new Date().getFullYear();
+  const years = [];
+  for (let y = currentYear; y >= currentYear - 5; y--) {
+    years.push(y);
+  }
+
+  // User Statistik
+  const userSelect = document.getElementById('statistik-jahr');
+  if (userSelect) {
+    userSelect.innerHTML = years.map(y => `<option value="${y}">${y}</option>`).join('');
+  }
+
+  // Admin Statistik
+  const adminSelect = document.getElementById('admin-statistik-jahr');
+  if (adminSelect) {
+    adminSelect.innerHTML = years.map(y => `<option value="${y}">${y}</option>`).join('');
+  }
+
+  // Aktuellen Monat vorauswählen
+  const adminMonat = document.getElementById('admin-statistik-monat');
+  if (adminMonat) {
+    adminMonat.value = new Date().getMonth() + 1;
+  }
+}
+
+// User Statistik laden
+async function loadUserStatistik() {
+  const jahr = document.getElementById('statistik-jahr')?.value || new Date().getFullYear();
+  const endpoint = currentStatistikType === 'wochen' ? '/statistik/wochen' : '/statistik/monate';
+
+  try {
+    const data = await api(`${endpoint}?jahr=${jahr}`);
+    const tbody = document.querySelector('#statistik-table tbody');
+
+    if (!data || data.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;padding:40px;color:var(--text-secondary)">Keine Daten für diesen Zeitraum</td></tr>';
+      document.getElementById('statistik-total').innerHTML = '';
+      return;
+    }
+
+    tbody.innerHTML = data.map(row => {
+      const zeitraum = currentStatistikType === 'wochen'
+        ? `KW ${row.kalenderwoche}`
+        : row.monatName;
+      const ueberstundenClass = row.ueberstunden >= 0 ? 'ueberstunden-positiv' : 'ueberstunden-negativ';
+      const ueberstundenPrefix = row.ueberstunden >= 0 ? '+' : '';
+
+      return `
+        <tr>
+          <td>${zeitraum}</td>
+          <td>${row.tage}</td>
+          <td>${row.stunden.toFixed(2)} h</td>
+          <td class="${ueberstundenClass}">${ueberstundenPrefix}${row.ueberstunden.toFixed(2)} h</td>
+        </tr>
+      `;
+    }).join('');
+
+    // Totals berechnen
+    const totalTage = data.reduce((sum, r) => sum + (r.tage || 0), 0);
+    const totalStunden = data.reduce((sum, r) => sum + (r.stunden || 0), 0);
+    const totalUeberstunden = data.reduce((sum, r) => sum + (r.ueberstunden || 0), 0);
+    const ueberstundenClass = totalUeberstunden >= 0 ? 'positive' : 'negative';
+    const ueberstundenPrefix = totalUeberstunden >= 0 ? '+' : '';
+
+    document.getElementById('statistik-total').innerHTML = `
+      <div class="statistik-total-item">
+        <span class="statistik-total-label">Arbeitstage</span>
+        <span class="statistik-total-value">${totalTage}</span>
+      </div>
+      <div class="statistik-total-item">
+        <span class="statistik-total-label">Gesamtstunden</span>
+        <span class="statistik-total-value">${totalStunden.toFixed(2)} h</span>
+      </div>
+      <div class="statistik-total-item">
+        <span class="statistik-total-label">Überstunden</span>
+        <span class="statistik-total-value ${ueberstundenClass}">${ueberstundenPrefix}${totalUeberstunden.toFixed(2)} h</span>
+      </div>
+    `;
+  } catch (error) {
+    console.error('Statistik laden fehlgeschlagen:', error);
+  }
+}
+
+// Admin Statistik laden
+async function loadAdminStatistik() {
+  const jahr = document.getElementById('admin-statistik-jahr')?.value || new Date().getFullYear();
+  const monat = document.getElementById('admin-statistik-monat')?.value || new Date().getMonth() + 1;
+
+  try {
+    const data = await api(`/admin/statistik/uebersicht?jahr=${jahr}&monat=${monat}`);
+    const tbody = document.querySelector('#admin-statistik-table tbody');
+
+    if (!data || data.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:40px;color:var(--text-secondary)">Keine Daten für diesen Zeitraum</td></tr>';
+      document.getElementById('admin-statistik-total').innerHTML = '';
+      return;
+    }
+
+    const SOLL_STUNDEN = 173; // Monatssoll
+
+    tbody.innerHTML = data.map(row => {
+      const ueberstundenClass = row.ueberstunden >= 0 ? 'ueberstunden-positiv' : 'ueberstunden-negativ';
+      const ueberstundenPrefix = row.ueberstunden >= 0 ? '+' : '';
+
+      return `
+        <tr>
+          <td>${row.mitarbeiter_name}</td>
+          <td>${row.mitarbeiter_nr}</td>
+          <td>${row.tage}</td>
+          <td>${row.stunden.toFixed(2)} h</td>
+          <td>${SOLL_STUNDEN} h</td>
+          <td class="${ueberstundenClass}">${ueberstundenPrefix}${row.ueberstunden.toFixed(2)} h</td>
+        </tr>
+      `;
+    }).join('');
+
+    // Totals
+    const totalTage = data.reduce((sum, r) => sum + (r.tage || 0), 0);
+    const totalStunden = data.reduce((sum, r) => sum + (r.stunden || 0), 0);
+    const totalUeberstunden = data.reduce((sum, r) => sum + (r.ueberstunden || 0), 0);
+    const ueberstundenClass = totalUeberstunden >= 0 ? 'positive' : 'negative';
+    const ueberstundenPrefix = totalUeberstunden >= 0 ? '+' : '';
+
+    document.getElementById('admin-statistik-total').innerHTML = `
+      <div class="statistik-total-item">
+        <span class="statistik-total-label">Mitarbeiter</span>
+        <span class="statistik-total-value">${data.length}</span>
+      </div>
+      <div class="statistik-total-item">
+        <span class="statistik-total-label">Arbeitstage gesamt</span>
+        <span class="statistik-total-value">${totalTage}</span>
+      </div>
+      <div class="statistik-total-item">
+        <span class="statistik-total-label">Stunden gesamt</span>
+        <span class="statistik-total-value">${totalStunden.toFixed(2)} h</span>
+      </div>
+      <div class="statistik-total-item">
+        <span class="statistik-total-label">Überstunden gesamt</span>
+        <span class="statistik-total-value ${ueberstundenClass}">${ueberstundenPrefix}${totalUeberstunden.toFixed(2)} h</span>
+      </div>
+    `;
+  } catch (error) {
+    console.error('Admin Statistik laden fehlgeschlagen:', error);
+  }
+}
+
+// Event Listeners für Statistik
+document.addEventListener('DOMContentLoaded', () => {
+  initStatistikJahre();
+
+  // User Statistik Tab-Wechsel
+  document.querySelectorAll('.statistik-tab').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.statistik-tab').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      currentStatistikType = btn.dataset.type;
+      loadUserStatistik();
+    });
+  });
+
+  // User Statistik Jahr-Wechsel
+  document.getElementById('statistik-jahr')?.addEventListener('change', loadUserStatistik);
+
+  // Admin Statistik Button
+  document.getElementById('admin-statistik-btn')?.addEventListener('click', loadAdminStatistik);
+});
+
+// Statistik bei Tab-Wechsel laden
+const originalTabHandler = document.querySelectorAll('.tab');
+originalTabHandler.forEach(tab => {
+  tab.addEventListener('click', () => {
+    if (tab.dataset.tab === 'statistik') {
+      loadAdminStatistik();
+    }
+  });
+});

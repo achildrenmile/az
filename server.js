@@ -320,6 +320,87 @@ app.delete('/api/zeiteintraege/:id', checkSession, (req, res) => {
   }
 });
 
+// ==================== STATISTIK ROUTES ====================
+
+// Standard-Wochenstunden für Überstundenberechnung
+const STANDARD_WOCHENSTUNDEN = 40;
+const STANDARD_MONATSSTUNDEN = 173; // ca. 40h * 4.33 Wochen
+
+// Eigene Statistik (Mitarbeiter)
+app.get('/api/statistik/wochen', checkSession, (req, res) => {
+  const jahr = parseInt(req.query.jahr) || new Date().getFullYear();
+  const wochen = db.getJahresWochenstatistik(req.session.id, jahr);
+
+  // Überstunden berechnen
+  const result = wochen.map(w => ({
+    ...w,
+    stunden: Math.round((w.gesamtminuten || 0) / 60 * 100) / 100,
+    ueberstunden: Math.round(((w.gesamtminuten || 0) / 60 - STANDARD_WOCHENSTUNDEN) * 100) / 100
+  }));
+
+  res.json(result);
+});
+
+app.get('/api/statistik/monate', checkSession, (req, res) => {
+  const jahr = parseInt(req.query.jahr) || new Date().getFullYear();
+  const monate = db.getJahresMonatsstatistik(req.session.id, jahr);
+
+  const monatsNamen = ['', 'Januar', 'Februar', 'März', 'April', 'Mai', 'Juni',
+    'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember'];
+
+  const result = monate.map(m => ({
+    ...m,
+    monatName: monatsNamen[parseInt(m.monat)],
+    stunden: Math.round((m.gesamtminuten || 0) / 60 * 100) / 100,
+    ueberstunden: Math.round(((m.gesamtminuten || 0) / 60 - STANDARD_MONATSSTUNDEN) * 100) / 100
+  }));
+
+  res.json(result);
+});
+
+// Admin Statistik (alle Mitarbeiter)
+app.get('/api/admin/statistik/uebersicht', checkSession, checkAdmin, (req, res) => {
+  const jahr = parseInt(req.query.jahr) || new Date().getFullYear();
+  const monat = parseInt(req.query.monat) || new Date().getMonth() + 1;
+
+  const statistik = db.getAlleMitarbeiterStatistik(jahr, monat);
+
+  const result = statistik.map(s => ({
+    ...s,
+    stunden: Math.round((s.gesamtminuten || 0) / 60 * 100) / 100,
+    ueberstunden: Math.round(((s.gesamtminuten || 0) / 60 - STANDARD_MONATSSTUNDEN) * 100) / 100
+  }));
+
+  res.json(result);
+});
+
+app.get('/api/admin/statistik/mitarbeiter/:id', checkSession, checkAdmin, (req, res) => {
+  const mitarbeiterId = parseInt(req.params.id);
+  const jahr = parseInt(req.query.jahr) || new Date().getFullYear();
+  const typ = req.query.typ || 'monate'; // 'wochen' oder 'monate'
+
+  if (typ === 'wochen') {
+    const wochen = db.getJahresWochenstatistik(mitarbeiterId, jahr);
+    const result = wochen.map(w => ({
+      ...w,
+      stunden: Math.round((w.gesamtminuten || 0) / 60 * 100) / 100,
+      ueberstunden: Math.round(((w.gesamtminuten || 0) / 60 - STANDARD_WOCHENSTUNDEN) * 100) / 100
+    }));
+    res.json(result);
+  } else {
+    const monate = db.getJahresMonatsstatistik(mitarbeiterId, jahr);
+    const monatsNamen = ['', 'Januar', 'Februar', 'März', 'April', 'Mai', 'Juni',
+      'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember'];
+    const result = monate.map(m => ({
+      ...m,
+      monatName: monatsNamen[parseInt(m.monat)],
+      stunden: Math.round((m.gesamtminuten || 0) / 60 * 100) / 100,
+      ueberstunden: Math.round(((m.gesamtminuten || 0) / 60 - STANDARD_MONATSSTUNDEN) * 100) / 100
+    }));
+    res.json(result);
+  }
+});
+
 // ==================== ADMIN ROUTES ====================
 
 // Alle Zeiteinträge (Admin)

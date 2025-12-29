@@ -143,6 +143,77 @@ body {
   padding: 0 4px;
 }
 
+/* Statistik */
+.statistik-total {
+  margin-top: 16px;
+  padding: 16px;
+  background: #f4f4f5;
+  border-radius: 8px;
+  display: flex;
+  gap: 24px;
+  flex-wrap: wrap;
+  font-size: 14px;
+}
+
+.statistik-total-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.statistik-total-label {
+  color: var(--text-secondary);
+  font-size: 12px;
+  text-transform: uppercase;
+}
+
+.statistik-total-value {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.statistik-total-value.positive {
+  color: var(--success);
+}
+
+.statistik-total-value.negative {
+  color: var(--danger);
+}
+
+.btn-group {
+  display: flex;
+  gap: 0;
+}
+
+.btn-group .btn {
+  border-radius: 0;
+  margin: 0;
+}
+
+.btn-group .btn:first-child {
+  border-radius: 6px 0 0 6px;
+}
+
+.btn-group .btn:last-child {
+  border-radius: 0 6px 6px 0;
+}
+
+.btn-group .btn.active {
+  background: var(--primary);
+  color: white;
+}
+
+.ueberstunden-positiv {
+  color: var(--success);
+  font-weight: 600;
+}
+
+.ueberstunden-negativ {
+  color: var(--danger);
+  font-weight: 600;
+}
+
 /* Layout */
 .container {
   max-width: 1200px;

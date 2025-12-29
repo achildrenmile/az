@@ -144,6 +144,35 @@
         </div>
         <div id="history-pagination" class="pagination"></div>
       </div>
+
+      <!-- Meine Statistik -->
+      <div id="statistik-section" class="card">
+        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom:16px;">
+          <h2 style="margin:0">Meine Statistik</h2>
+          <div style="display:flex; gap:10px; align-items:center;">
+            <select id="statistik-jahr" class="form-control" style="width:auto;padding:8px 12px;">
+            </select>
+            <div class="btn-group">
+              <button class="btn btn-secondary statistik-tab active" data-type="monate">Monate</button>
+              <button class="btn btn-secondary statistik-tab" data-type="wochen">Wochen</button>
+            </div>
+          </div>
+        </div>
+        <div class="table-container">
+          <table id="statistik-table">
+            <thead>
+              <tr>
+                <th>Zeitraum</th>
+                <th>Tage</th>
+                <th>Stunden</th>
+                <th>Überstunden</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <div id="statistik-total" class="statistik-total"></div>
+      </div>
     </div>
   </div>
 
@@ -220,6 +249,7 @@
       <!-- Tabs -->
       <div class="tabs">
         <button class="tab active" data-tab="eintraege">Zeiteinträge</button>
+        <button class="tab" data-tab="statistik">Statistik</button>
         <button class="tab" data-tab="mitarbeiter">Mitarbeiter</button>
         <button class="tab" data-tab="kunden">Kunden</button>
         <button class="tab" data-tab="baustellen">Baustellen</button>
@@ -281,6 +311,50 @@
             </table>
           </div>
           <div id="admin-pagination" class="pagination"></div>
+        </div>
+      </div>
+
+      <!-- Statistik Tab -->
+      <div id="tab-statistik" class="tab-content hidden">
+        <div class="card">
+          <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom:20px;">
+            <h2 style="margin:0">Arbeitszeit-Statistik</h2>
+            <div style="display:flex; gap:10px; align-items:center;">
+              <select id="admin-statistik-jahr" style="padding:8px 12px;border:1px solid var(--border);border-radius:6px;">
+              </select>
+              <select id="admin-statistik-monat" style="padding:8px 12px;border:1px solid var(--border);border-radius:6px;">
+                <option value="1">Januar</option>
+                <option value="2">Februar</option>
+                <option value="3">März</option>
+                <option value="4">April</option>
+                <option value="5">Mai</option>
+                <option value="6">Juni</option>
+                <option value="7">Juli</option>
+                <option value="8">August</option>
+                <option value="9">September</option>
+                <option value="10">Oktober</option>
+                <option value="11">November</option>
+                <option value="12">Dezember</option>
+              </select>
+              <button id="admin-statistik-btn" class="btn btn-primary">Anzeigen</button>
+            </div>
+          </div>
+          <div class="table-container">
+            <table id="admin-statistik-table">
+              <thead>
+                <tr>
+                  <th>Mitarbeiter</th>
+                  <th>Nr.</th>
+                  <th>Tage</th>
+                  <th>Stunden</th>
+                  <th>Soll (h)</th>
+                  <th>Überstunden</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+          <div id="admin-statistik-total" class="statistik-total"></div>
         </div>
       </div>
 
