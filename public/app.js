@@ -235,6 +235,7 @@ async function loadHistory() {
         <td>${calculateNetto(e.arbeitsbeginn, e.arbeitsende, e.pause_minuten)}</td>
         <td>${e.baustelle || '-'}</td>
         <td class="action-btns">
+          <button class="btn btn-small btn-icon" onclick="printEinzelnerEintrag(${e.id})" title="Drucken">🖨</button>
           <button class="btn btn-small btn-icon" onclick="openEditModal(${e.id})" title="Bearbeiten">✎</button>
           <button class="btn btn-small btn-danger btn-icon" onclick="deleteEintragUser(${e.id})" title="Löschen">✕</button>
         </td>
@@ -398,7 +399,10 @@ async function loadEintraege() {
         <td>${calculateNetto(e.arbeitsbeginn, e.arbeitsende, e.pause_minuten)}</td>
         <td>${e.baustelle || '-'}</td>
         <td>${e.kunde || '-'}</td>
-        <td><button class="btn btn-small btn-danger" onclick="deleteEintrag(${e.id})">X</button></td>
+        <td class="action-btns">
+          <button class="btn btn-small btn-icon" onclick="printEinzelnerEintrag(${e.id})" title="Drucken">🖨</button>
+          <button class="btn btn-small btn-danger btn-icon" onclick="deleteEintrag(${e.id})" title="Löschen">✕</button>
+        </td>
       </tr>
     `).join('');
   } catch (error) {
@@ -718,6 +722,153 @@ function printZeitnachweis(eintraege, vonAT, bisAT, mitarbeiterName) {
   printWindow.document.write(html);
   printWindow.document.close();
 }
+
+// Einzelnen Eintrag drucken
+window.printEinzelnerEintrag = async (id) => {
+  try {
+    const eintrag = await api(`/zeiteintraege/${id}`);
+    const netto = calculateNetto(eintrag.arbeitsbeginn, eintrag.arbeitsende, eintrag.pause_minuten);
+
+    const html = `
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <title>Arbeitsnachweis</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: Arial, sans-serif;
+      font-size: 11pt;
+      line-height: 1.6;
+      padding: 20mm;
+      color: #333;
+    }
+    .header {
+      text-align: center;
+      margin-bottom: 30px;
+      padding-bottom: 15px;
+      border-bottom: 2px solid #333;
+    }
+    .header h1 { font-size: 20pt; margin-bottom: 5px; }
+    .header .datum { font-size: 14pt; color: #666; }
+    .details {
+      max-width: 500px;
+      margin: 0 auto 30px;
+    }
+    .row {
+      display: flex;
+      border-bottom: 1px solid #ddd;
+      padding: 10px 0;
+    }
+    .row:last-child { border-bottom: none; }
+    .label {
+      width: 150px;
+      font-weight: bold;
+      color: #555;
+    }
+    .value { flex: 1; }
+    .summary {
+      margin-top: 30px;
+      padding: 20px;
+      background: #f5f5f5;
+      border: 1px solid #ddd;
+      text-align: center;
+    }
+    .summary .total {
+      font-size: 18pt;
+      font-weight: bold;
+      color: #2c3e50;
+    }
+    .footer {
+      margin-top: 60px;
+      padding-top: 20px;
+      border-top: 1px solid #ccc;
+    }
+    .signature {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 50px;
+    }
+    .signature-line {
+      width: 200px;
+      border-top: 1px solid #333;
+      padding-top: 5px;
+      text-align: center;
+      font-size: 9pt;
+    }
+    @media print {
+      body { padding: 15mm; }
+      @page { margin: 15mm; }
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>Arbeitsnachweis</h1>
+    <div class="datum">${formatDate(eintrag.datum)}</div>
+  </div>
+
+  <div class="details">
+    <div class="row">
+      <div class="label">Arbeitsbeginn:</div>
+      <div class="value">${eintrag.arbeitsbeginn} Uhr</div>
+    </div>
+    <div class="row">
+      <div class="label">Arbeitsende:</div>
+      <div class="value">${eintrag.arbeitsende} Uhr</div>
+    </div>
+    <div class="row">
+      <div class="label">Pause:</div>
+      <div class="value">${eintrag.pause_minuten} Minuten</div>
+    </div>
+    ${eintrag.baustelle ? `
+    <div class="row">
+      <div class="label">Baustelle:</div>
+      <div class="value">${eintrag.baustelle}</div>
+    </div>` : ''}
+    ${eintrag.kunde ? `
+    <div class="row">
+      <div class="label">Kunde:</div>
+      <div class="value">${eintrag.kunde}</div>
+    </div>` : ''}
+    ${eintrag.anfahrt ? `
+    <div class="row">
+      <div class="label">Anfahrt:</div>
+      <div class="value">${eintrag.anfahrt}</div>
+    </div>` : ''}
+    ${eintrag.notizen ? `
+    <div class="row">
+      <div class="label">Notizen:</div>
+      <div class="value">${eintrag.notizen}</div>
+    </div>` : ''}
+  </div>
+
+  <div class="summary">
+    <div>Nettoarbeitszeit</div>
+    <div class="total">${netto}</div>
+  </div>
+
+  <div class="footer">
+    <div class="signature">
+      <div class="signature-line">Datum</div>
+      <div class="signature-line">Unterschrift Mitarbeiter</div>
+      <div class="signature-line">Unterschrift Arbeitgeber</div>
+    </div>
+  </div>
+
+  <script>window.onload = function() { window.print(); };</script>
+</body>
+</html>
+    `;
+
+    const printWindow = window.open('', '_blank');
+    printWindow.document.write(html);
+    printWindow.document.close();
+  } catch (error) {
+    alert('Fehler beim Laden: ' + error.message);
+  }
+};
 
 // Neuer Mitarbeiter
 document.getElementById('new-mitarbeiter-form').addEventListener('submit', async (e) => {
