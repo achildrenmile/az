@@ -447,17 +447,13 @@ function initDatepickers() {
   }
 }
 
+// Datepickers initialisieren
+initDatepickers();
+
 // Beim Laden prüfen ob bereits eingeloggt
 if (sessionId && userName) {
   initErfassungView();
   showView('erfassung');
 } else {
   showView('login');
-}
-
-// Datepickers initialisieren wenn DOM bereit
-document.addEventListener('DOMContentLoaded', initDatepickers);
-// Falls DOM bereits geladen
-if (document.readyState !== 'loading') {
-  initDatepickers();
 }
