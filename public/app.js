@@ -43,10 +43,19 @@ function showView(viewName) {
   views[viewName].classList.remove('hidden');
 }
 
-// Helper: Formatierung
+// Helper: Formatierung (Österreich)
 function formatDate(dateStr) {
   const d = new Date(dateStr);
-  return d.toLocaleDateString('de-AT');
+  return d.toLocaleDateString('de-AT', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric'
+  });
+}
+
+function formatTime(timeStr) {
+  // Zeitformat: HH:MM Uhr
+  return timeStr + ' Uhr';
 }
 
 function calculateNetto(beginn, ende, pause) {
@@ -55,7 +64,15 @@ function calculateNetto(beginn, ende, pause) {
   const minuten = (eH * 60 + eM) - (bH * 60 + bM) - pause;
   const stunden = Math.floor(minuten / 60);
   const restMin = minuten % 60;
-  return `${stunden}:${String(restMin).padStart(2, '0')}`;
+  return `${stunden}:${String(restMin).padStart(2, '0')} Std`;
+}
+
+function formatNettoDecimal(beginn, ende, pause) {
+  const [bH, bM] = beginn.split(':').map(Number);
+  const [eH, eM] = ende.split(':').map(Number);
+  const minuten = (eH * 60 + eM) - (bH * 60 + bM) - pause;
+  // Österreichisches Format: Komma als Dezimaltrennzeichen
+  return (minuten / 60).toFixed(2).replace('.', ',');
 }
 
 // ==================== LOGIN ====================
@@ -165,8 +182,8 @@ async function loadHistory() {
       <div class="history-item">
         <div class="history-date">${formatDate(e.datum)}</div>
         <div class="history-time">
-          ${e.arbeitsbeginn} - ${e.arbeitsende}
-          (Pause: ${e.pause_minuten} Min, Netto: ${calculateNetto(e.arbeitsbeginn, e.arbeitsende, e.pause_minuten)})
+          ${e.arbeitsbeginn} Uhr - ${e.arbeitsende} Uhr
+          (Pause: ${e.pause_minuten} Min., Netto: ${calculateNetto(e.arbeitsbeginn, e.arbeitsende, e.pause_minuten)})
         </div>
         ${e.baustelle ? `<div class="history-detail"><strong>Baustelle:</strong> ${e.baustelle}</div>` : ''}
         ${e.kunde ? `<div class="history-detail"><strong>Kunde:</strong> ${e.kunde}</div>` : ''}
@@ -246,9 +263,9 @@ async function loadEintraege() {
       <tr>
         <td>${formatDate(e.datum)}</td>
         <td>${e.mitarbeiter_name} (${e.mitarbeiter_nr})</td>
-        <td>${e.arbeitsbeginn}</td>
-        <td>${e.arbeitsende}</td>
-        <td>${e.pause_minuten} Min</td>
+        <td>${e.arbeitsbeginn} Uhr</td>
+        <td>${e.arbeitsende} Uhr</td>
+        <td>${e.pause_minuten} Min.</td>
         <td>${calculateNetto(e.arbeitsbeginn, e.arbeitsende, e.pause_minuten)}</td>
         <td>${e.baustelle || '-'}</td>
         <td>${e.kunde || '-'}</td>

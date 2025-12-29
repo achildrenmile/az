@@ -192,21 +192,28 @@ app.put('/api/admin/mitarbeiter/:id', checkSession, checkAdmin, (req, res) => {
   res.json({ success: true });
 });
 
+// Helper: Datum formatieren (österreichisches Format DD.MM.YYYY)
+function formatDateAT(dateStr) {
+  const [year, month, day] = dateStr.split('-');
+  return `${day}.${month}.${year}`;
+}
+
 // CSV-Export (Admin)
 app.get('/api/admin/export', checkSession, checkAdmin, (req, res) => {
   const { von, bis } = req.query;
   const eintraege = db.getAllZeiteintraege(von, bis);
 
-  // CSV-Header
-  let csv = 'Datum;Mitarbeiter-Nr;Name;Beginn;Ende;Pause (Min);Netto (Std);Baustelle;Kunde;Anfahrt;Notizen\n';
+  // CSV-Header (österreichisches Format)
+  let csv = 'Datum;Mitarbeiter-Nr;Name;Beginn;Ende;Pause (Min.);Netto (Std.);Baustelle;Kunde;Anfahrt;Notizen\n';
 
   eintraege.forEach(e => {
     const beginnMin = parseInt(e.arbeitsbeginn.split(':')[0]) * 60 + parseInt(e.arbeitsbeginn.split(':')[1]);
     const endeMin = parseInt(e.arbeitsende.split(':')[0]) * 60 + parseInt(e.arbeitsende.split(':')[1]);
-    const nettoStunden = ((endeMin - beginnMin - e.pause_minuten) / 60).toFixed(2);
+    // Österreichisches Format: Komma als Dezimaltrennzeichen
+    const nettoStunden = ((endeMin - beginnMin - e.pause_minuten) / 60).toFixed(2).replace('.', ',');
 
     csv += [
-      e.datum,
+      formatDateAT(e.datum),
       e.mitarbeiter_nr,
       `"${e.mitarbeiter_name}"`,
       e.arbeitsbeginn,
