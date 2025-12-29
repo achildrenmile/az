@@ -74,11 +74,6 @@ pm2 start server.js --name arbeitszeit
 | `PORT` | 3000 | Server-Port |
 | `DATABASE_PATH` | ./arbeitszeit.db | SQLite-Datenbankpfad |
 
-## Standard-Login
-
-- **Benutzer:** admin
-- **Passwort:** 1234
-
 ## API Endpunkte
 
 ### Authentifizierung
@@ -101,7 +96,7 @@ pm2 start server.js --name arbeitszeit
 
 ## Lizenz
 
-Proprietär - Strali Solutions
+MIT License - siehe [LICENSE](LICENSE)
 
 ## Support
 
