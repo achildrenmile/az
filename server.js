@@ -1,25 +1,62 @@
 const express = require('express');
+const crypto = require('crypto');
 const path = require('path');
 const db = require('./database');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// Session-Konfiguration
+const SESSION_DURATION_HOURS = 8; // Session läuft nach 8 Stunden ab
+const SESSION_EXTEND_THRESHOLD_HOURS = 2; // Verlängern wenn weniger als 2h übrig
+
 // Middleware
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Session-Speicher (einfach, für Produktion besser express-session verwenden)
-const sessions = new Map();
+// Sichere Session-ID generieren
+function generateSessionId() {
+  return crypto.randomBytes(32).toString('hex');
+}
 
-// Session-Middleware
+// Session-Ablaufzeit berechnen
+function getSessionExpiry() {
+  const expiry = new Date();
+  expiry.setHours(expiry.getHours() + SESSION_DURATION_HOURS);
+  return expiry.toISOString().replace('T', ' ').substring(0, 19);
+}
+
+// Session-Middleware (mit DB-Lookup und automatischer Verlängerung)
 const checkSession = (req, res, next) => {
   const sessionId = req.headers['x-session-id'];
-  if (!sessionId || !sessions.has(sessionId)) {
+
+  if (!sessionId) {
     return res.status(401).json({ error: 'Nicht angemeldet' });
   }
-  req.session = sessions.get(sessionId);
+
+  const session = db.getSession(sessionId);
+
+  if (!session) {
+    return res.status(401).json({ error: 'Sitzung abgelaufen - bitte erneut anmelden' });
+  }
+
+  // Session automatisch verlängern wenn bald ablaufend
+  const expiresAt = new Date(session.laeuft_ab_am);
+  const now = new Date();
+  const hoursRemaining = (expiresAt - now) / (1000 * 60 * 60);
+
+  if (hoursRemaining < SESSION_EXTEND_THRESHOLD_HOURS) {
+    db.extendSession(sessionId, getSessionExpiry());
+  }
+
+  req.session = {
+    id: session.mitarbeiter_id,
+    mitarbeiter_nr: session.mitarbeiter_nr,
+    name: session.name,
+    ist_admin: session.ist_admin === 1
+  };
+
   next();
 };
 
@@ -29,6 +66,11 @@ const checkAdmin = (req, res, next) => {
   }
   next();
 };
+
+// Abgelaufene Sessions regelmäßig aufräumen (alle 15 Minuten)
+setInterval(() => {
+  db.cleanupExpiredSessions();
+}, 15 * 60 * 1000);
 
 // ==================== AUTH ROUTES ====================
 
@@ -49,19 +91,22 @@ app.post('/api/login', (req, res) => {
     return res.status(401).json({ error: 'Ungültige Anmeldedaten' });
   }
 
-  // Session erstellen
-  const sessionId = Math.random().toString(36).substring(2) + Date.now().toString(36);
-  sessions.set(sessionId, {
-    id: mitarbeiter.id,
-    mitarbeiter_nr: mitarbeiter.mitarbeiter_nr,
-    name: mitarbeiter.name,
-    ist_admin: mitarbeiter.ist_admin === 1
-  });
+  // Sichere Session in DB erstellen
+  const sessionId = generateSessionId();
+  const expiresAt = getSessionExpiry();
+
+  try {
+    db.createSession(sessionId, mitarbeiter.id, expiresAt);
+  } catch (error) {
+    console.error('Session-Erstellung fehlgeschlagen:', error);
+    return res.status(500).json({ error: 'Anmeldung fehlgeschlagen' });
+  }
 
   res.json({
     sessionId,
     name: mitarbeiter.name,
-    ist_admin: mitarbeiter.ist_admin === 1
+    ist_admin: mitarbeiter.ist_admin === 1,
+    expiresAt
   });
 });
 
@@ -69,9 +114,18 @@ app.post('/api/login', (req, res) => {
 app.post('/api/logout', (req, res) => {
   const sessionId = req.headers['x-session-id'];
   if (sessionId) {
-    sessions.delete(sessionId);
+    db.deleteSession(sessionId);
   }
   res.json({ success: true });
+});
+
+// Session-Status prüfen
+app.get('/api/session', checkSession, (req, res) => {
+  res.json({
+    valid: true,
+    name: req.session.name,
+    ist_admin: req.session.ist_admin
+  });
 });
 
 // ==================== ZEITEINTRAG ROUTES ====================

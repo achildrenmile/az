@@ -31,10 +31,25 @@ async function api(endpoint, method = 'GET', body = null) {
   const data = await response.json();
 
   if (!response.ok) {
+    // Bei Session-Ablauf automatisch ausloggen
+    if (response.status === 401) {
+      handleSessionExpired();
+    }
     throw new Error(data.error || 'Fehler');
   }
 
   return data;
+}
+
+// Session abgelaufen - zum Login weiterleiten
+function handleSessionExpired() {
+  sessionId = null;
+  userName = null;
+  isAdmin = false;
+  localStorage.removeItem('sessionId');
+  localStorage.removeItem('userName');
+  localStorage.removeItem('isAdmin');
+  showView('login');
 }
 
 // Helper: View wechseln
@@ -450,10 +465,28 @@ function initDatepickers() {
 // Datepickers initialisieren
 initDatepickers();
 
-// Beim Laden prüfen ob bereits eingeloggt
-if (sessionId && userName) {
-  initErfassungView();
-  showView('erfassung');
-} else {
-  showView('login');
+// Session beim Start validieren
+async function validateSession() {
+  if (!sessionId) {
+    showView('login');
+    return;
+  }
+
+  try {
+    const result = await api('/session');
+    if (result.valid) {
+      userName = result.name;
+      isAdmin = result.ist_admin;
+      localStorage.setItem('userName', userName);
+      localStorage.setItem('isAdmin', isAdmin);
+      initErfassungView();
+      showView('erfassung');
+    }
+  } catch (error) {
+    // Session ungültig - Login anzeigen
+    showView('login');
+  }
 }
+
+// Beim Laden Session validieren
+validateSession();

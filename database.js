@@ -37,6 +37,18 @@ db.exec(`
   -- Index für schnellere Abfragen
   CREATE INDEX IF NOT EXISTS idx_zeiteintraege_datum ON zeiteintraege(datum);
   CREATE INDEX IF NOT EXISTS idx_zeiteintraege_mitarbeiter ON zeiteintraege(mitarbeiter_id);
+
+  -- Sessions-Tabelle (persistent)
+  CREATE TABLE IF NOT EXISTS sessions (
+    id TEXT PRIMARY KEY,
+    mitarbeiter_id INTEGER NOT NULL,
+    erstellt_am DATETIME DEFAULT CURRENT_TIMESTAMP,
+    laeuft_ab_am DATETIME NOT NULL,
+    FOREIGN KEY (mitarbeiter_id) REFERENCES mitarbeiter(id)
+  );
+
+  -- Index für Session-Cleanup
+  CREATE INDEX IF NOT EXISTS idx_sessions_ablauf ON sessions(laeuft_ab_am);
 `);
 
 // Standard-Admin erstellen falls nicht vorhanden
@@ -149,5 +161,36 @@ module.exports = {
       FROM zeiteintraege
       WHERE mitarbeiter_id = ? AND datum BETWEEN ? AND ?
     `).get(mitarbeiterId, von, bis);
+  },
+
+  // Session-Funktionen
+  createSession: (sessionId, mitarbeiterId, expiresAt) => {
+    return db.prepare(`
+      INSERT INTO sessions (id, mitarbeiter_id, laeuft_ab_am)
+      VALUES (?, ?, ?)
+    `).run(sessionId, mitarbeiterId, expiresAt);
+  },
+
+  getSession: (sessionId) => {
+    return db.prepare(`
+      SELECT s.*, m.mitarbeiter_nr, m.name, m.ist_admin
+      FROM sessions s
+      JOIN mitarbeiter m ON s.mitarbeiter_id = m.id
+      WHERE s.id = ? AND s.laeuft_ab_am > datetime('now') AND m.aktiv = 1
+    `).get(sessionId);
+  },
+
+  extendSession: (sessionId, newExpiresAt) => {
+    return db.prepare(`
+      UPDATE sessions SET laeuft_ab_am = ? WHERE id = ?
+    `).run(newExpiresAt, sessionId);
+  },
+
+  deleteSession: (sessionId) => {
+    return db.prepare('DELETE FROM sessions WHERE id = ?').run(sessionId);
+  },
+
+  cleanupExpiredSessions: () => {
+    return db.prepare(`DELETE FROM sessions WHERE laeuft_ab_am <= datetime('now')`).run();
   }
 };
