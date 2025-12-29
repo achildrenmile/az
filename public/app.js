@@ -152,9 +152,6 @@ document.getElementById('zeit-form').addEventListener('submit', async (e) => {
   messageEl.textContent = '';
   messageEl.className = 'message';
 
-  const form = e.target;
-  const editId = form.dataset.editId;
-
   const data = {
     datum: parseATDate(document.getElementById('datum').value),
     arbeitsbeginn: document.getElementById('arbeitsbeginn').value,
@@ -167,35 +164,23 @@ document.getElementById('zeit-form').addEventListener('submit', async (e) => {
   };
 
   try {
-    let result;
-    if (editId) {
-      // Update
-      result = await api(`/zeiteintraege/${editId}`, 'PUT', data);
-      messageEl.textContent = 'Änderungen gespeichert!';
-      cancelEdit(); // Edit-Modus beenden
-    } else {
-      // Create
-      result = await api('/zeiteintraege', 'POST', data);
-      messageEl.textContent = 'Eintrag gespeichert!';
+    const result = await api('/zeiteintraege', 'POST', data);
+    messageEl.textContent = 'Eintrag gespeichert!';
+    messageEl.className = 'message success';
 
-      if (result.warnung) {
-        messageEl.textContent += ' ' + result.warnung;
-        messageEl.className = 'message warning';
-      } else {
-        messageEl.className = 'message success';
-      }
-
-      // Formular zurücksetzen (außer Datum)
-      document.getElementById('arbeitsbeginn').value = '';
-      document.getElementById('arbeitsende').value = '';
-      document.getElementById('pause_minuten').value = '30';
-      document.getElementById('baustelle').value = '';
-      document.getElementById('kunde').value = '';
-      document.getElementById('anfahrt').value = '';
-      document.getElementById('notizen').value = '';
+    if (result.warnung) {
+      messageEl.textContent += ' ' + result.warnung;
+      messageEl.className = 'message warning';
     }
 
-    messageEl.className = messageEl.className || 'message success';
+    // Formular zurücksetzen (außer Datum)
+    document.getElementById('arbeitsbeginn').value = '';
+    document.getElementById('arbeitsende').value = '';
+    document.getElementById('pause_minuten').value = '30';
+    document.getElementById('baustelle').value = '';
+    document.getElementById('kunde').value = '';
+    document.getElementById('anfahrt').value = '';
+    document.getElementById('notizen').value = '';
 
     // History aktualisieren falls sichtbar
     if (!document.getElementById('history-section').classList.contains('hidden')) {
@@ -220,100 +205,97 @@ document.getElementById('show-history-btn').addEventListener('click', async () =
 async function loadHistory() {
   try {
     const eintraege = await api('/zeiteintraege');
-    const listEl = document.getElementById('history-list');
+    const tbody = document.querySelector('#user-eintraege-table tbody');
 
     if (eintraege.length === 0) {
-      listEl.innerHTML = '<p>Noch keine Einträge vorhanden.</p>';
+      tbody.innerHTML = '<tr><td colspan="7" style="text-align:center">Noch keine Einträge vorhanden.</td></tr>';
       return;
     }
 
-    listEl.innerHTML = eintraege.map(e => `
-      <div class="history-item" data-id="${e.id}">
-        <div class="history-header">
-          <div class="history-date">${formatDate(e.datum)}</div>
-          <div class="history-actions">
-            <button class="btn btn-small" onclick="editEintrag(${e.id})">Bearbeiten</button>
-            <button class="btn btn-small btn-danger" onclick="deleteEintragUser(${e.id})">Löschen</button>
-          </div>
-        </div>
-        <div class="history-time">
-          ${e.arbeitsbeginn} Uhr - ${e.arbeitsende} Uhr
-          (Pause: ${e.pause_minuten} Min., Netto: ${calculateNetto(e.arbeitsbeginn, e.arbeitsende, e.pause_minuten)})
-        </div>
-        ${e.baustelle ? `<div class="history-detail"><strong>Baustelle:</strong> ${e.baustelle}</div>` : ''}
-        ${e.kunde ? `<div class="history-detail"><strong>Kunde:</strong> ${e.kunde}</div>` : ''}
-        ${e.anfahrt ? `<div class="history-detail"><strong>Anfahrt:</strong> ${e.anfahrt}</div>` : ''}
-        ${e.notizen ? `<div class="history-detail"><strong>Notizen:</strong> ${e.notizen}</div>` : ''}
-      </div>
+    tbody.innerHTML = eintraege.map(e => `
+      <tr>
+        <td>${formatDate(e.datum)}</td>
+        <td>${e.arbeitsbeginn}</td>
+        <td>${e.arbeitsende}</td>
+        <td>${e.pause_minuten} Min.</td>
+        <td>${calculateNetto(e.arbeitsbeginn, e.arbeitsende, e.pause_minuten)}</td>
+        <td>${e.baustelle || '-'}</td>
+        <td class="action-btns">
+          <button class="btn btn-small btn-icon" onclick="openEditModal(${e.id})" title="Bearbeiten">✎</button>
+          <button class="btn btn-small btn-danger btn-icon" onclick="deleteEintragUser(${e.id})" title="Löschen">✕</button>
+        </td>
+      </tr>
     `).join('');
   } catch (error) {
     console.error(error);
   }
 }
 
-// Eintrag bearbeiten
-window.editEintrag = async (id) => {
+// Modal Datepicker
+let editDatumPicker = null;
+
+// Edit Modal öffnen
+window.openEditModal = async (id) => {
   try {
     const eintrag = await api(`/zeiteintraege/${id}`);
 
-    // Formular mit Daten füllen
-    document.getElementById('datum').value = formatDate(eintrag.datum);
-    if (datumPicker) datumPicker.setDate(eintrag.datum);
+    document.getElementById('edit-id').value = id;
+    document.getElementById('edit-datum').value = formatDate(eintrag.datum);
+    document.getElementById('edit-beginn').value = eintrag.arbeitsbeginn;
+    document.getElementById('edit-ende').value = eintrag.arbeitsende;
+    document.getElementById('edit-pause').value = eintrag.pause_minuten || 0;
+    document.getElementById('edit-baustelle').value = eintrag.baustelle || '';
+    document.getElementById('edit-kunde').value = eintrag.kunde || '';
+    document.getElementById('edit-anfahrt').value = eintrag.anfahrt || '';
+    document.getElementById('edit-notizen').value = eintrag.notizen || '';
 
-    document.getElementById('arbeitsbeginn').value = eintrag.arbeitsbeginn;
-    document.getElementById('arbeitsende').value = eintrag.arbeitsende;
-    document.getElementById('pause_minuten').value = eintrag.pause_minuten;
-    document.getElementById('baustelle').value = eintrag.baustelle || '';
-    document.getElementById('kunde').value = eintrag.kunde || '';
-    document.getElementById('anfahrt').value = eintrag.anfahrt || '';
-    document.getElementById('notizen').value = eintrag.notizen || '';
-
-    // Formular in Edit-Modus setzen
-    const form = document.getElementById('zeit-form');
-    form.dataset.editId = id;
-
-    const submitBtn = form.querySelector('button[type="submit"]');
-    submitBtn.textContent = 'Änderungen speichern';
-
-    // Abbrechen-Button hinzufügen falls nicht vorhanden
-    if (!document.getElementById('cancel-edit-btn')) {
-      const cancelBtn = document.createElement('button');
-      cancelBtn.type = 'button';
-      cancelBtn.id = 'cancel-edit-btn';
-      cancelBtn.className = 'btn btn-secondary';
-      cancelBtn.textContent = 'Abbrechen';
-      cancelBtn.onclick = cancelEdit;
-      submitBtn.parentNode.insertBefore(cancelBtn, submitBtn.nextSibling);
+    // Datepicker für Modal initialisieren
+    if (!editDatumPicker) {
+      editDatumPicker = flatpickr('#edit-datum', {
+        ...flatpickrConfig
+      });
     }
+    editDatumPicker.setDate(eintrag.datum);
 
-    // Nach oben scrollen
-    form.scrollIntoView({ behavior: 'smooth' });
+    document.getElementById('edit-message').textContent = '';
+    document.getElementById('edit-modal').classList.remove('hidden');
   } catch (error) {
     alert('Fehler beim Laden: ' + error.message);
   }
 };
 
-// Bearbeitung abbrechen
-function cancelEdit() {
-  const form = document.getElementById('zeit-form');
-  delete form.dataset.editId;
+// Edit Modal schließen
+window.closeEditModal = () => {
+  document.getElementById('edit-modal').classList.add('hidden');
+};
 
-  const submitBtn = form.querySelector('button[type="submit"]');
-  submitBtn.textContent = 'Eintrag speichern';
+// Edit Form Submit
+document.getElementById('edit-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const messageEl = document.getElementById('edit-message');
+  messageEl.textContent = '';
 
-  const cancelBtn = document.getElementById('cancel-edit-btn');
-  if (cancelBtn) cancelBtn.remove();
+  const id = document.getElementById('edit-id').value;
+  const data = {
+    datum: parseATDate(document.getElementById('edit-datum').value),
+    arbeitsbeginn: document.getElementById('edit-beginn').value,
+    arbeitsende: document.getElementById('edit-ende').value,
+    pause_minuten: parseInt(document.getElementById('edit-pause').value) || 0,
+    baustelle: document.getElementById('edit-baustelle').value,
+    kunde: document.getElementById('edit-kunde').value,
+    anfahrt: document.getElementById('edit-anfahrt').value,
+    notizen: document.getElementById('edit-notizen').value
+  };
 
-  // Formular zurücksetzen
-  if (datumPicker) datumPicker.setDate('today');
-  document.getElementById('arbeitsbeginn').value = '';
-  document.getElementById('arbeitsende').value = '';
-  document.getElementById('pause_minuten').value = '30';
-  document.getElementById('baustelle').value = '';
-  document.getElementById('kunde').value = '';
-  document.getElementById('anfahrt').value = '';
-  document.getElementById('notizen').value = '';
-}
+  try {
+    await api(`/zeiteintraege/${id}`, 'PUT', data);
+    closeEditModal();
+    loadHistory();
+  } catch (error) {
+    messageEl.textContent = error.message;
+    messageEl.className = 'message error';
+  }
+});
 
 // Eintrag löschen (User)
 window.deleteEintragUser = async (id) => {

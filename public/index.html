@@ -90,11 +90,78 @@
         </form>
       </div>
 
-      <!-- Letzte Einträge -->
+      <!-- Meine Einträge als Tabelle -->
       <div id="history-section" class="card hidden">
-        <h2>Meine letzten Einträge</h2>
-        <div id="history-list"></div>
+        <h2>Meine Einträge</h2>
+        <div class="table-container">
+          <table id="user-eintraege-table">
+            <thead>
+              <tr>
+                <th>Datum</th>
+                <th>Beginn</th>
+                <th>Ende</th>
+                <th>Pause</th>
+                <th>Netto</th>
+                <th>Baustelle</th>
+                <th>Aktionen</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
       </div>
+    </div>
+  </div>
+
+  <!-- EDIT MODAL -->
+  <div id="edit-modal" class="modal hidden">
+    <div class="modal-backdrop" onclick="closeEditModal()"></div>
+    <div class="modal-content card">
+      <h2>Eintrag bearbeiten</h2>
+      <form id="edit-form">
+        <input type="hidden" id="edit-id">
+        <div class="form-row">
+          <div class="form-group">
+            <label for="edit-datum">Datum</label>
+            <input type="text" id="edit-datum" class="datepicker-modal" required>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="edit-beginn">Beginn</label>
+            <input type="text" id="edit-beginn" placeholder="07:00" required>
+          </div>
+          <div class="form-group">
+            <label for="edit-ende">Ende</label>
+            <input type="text" id="edit-ende" placeholder="16:30" required>
+          </div>
+          <div class="form-group">
+            <label for="edit-pause">Pause (Min.)</label>
+            <input type="number" id="edit-pause" min="0">
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="edit-baustelle">Baustelle</label>
+          <input type="text" id="edit-baustelle">
+        </div>
+        <div class="form-group">
+          <label for="edit-kunde">Kunde</label>
+          <input type="text" id="edit-kunde">
+        </div>
+        <div class="form-group">
+          <label for="edit-anfahrt">Anfahrt</label>
+          <input type="text" id="edit-anfahrt">
+        </div>
+        <div class="form-group">
+          <label for="edit-notizen">Notizen</label>
+          <textarea id="edit-notizen" rows="2"></textarea>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-secondary" onclick="closeEditModal()">Abbrechen</button>
+          <button type="submit" class="btn btn-primary">Speichern</button>
+        </div>
+        <div id="edit-message" class="message"></div>
+      </form>
     </div>
   </div>
 
