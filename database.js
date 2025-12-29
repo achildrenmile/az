@@ -50,7 +50,7 @@ db.exec(`
   -- Index für Session-Cleanup
   CREATE INDEX IF NOT EXISTS idx_sessions_ablauf ON sessions(laeuft_ab_am);
 
-  -- Audit-Log für Änderungen (AZG-konform)
+  -- Audit-Log für Änderungen (AZG-konform, unveränderlich)
   CREATE TABLE IF NOT EXISTS audit_log (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     zeitpunkt DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -60,6 +60,9 @@ db.exec(`
     datensatz_id INTEGER,
     alte_werte TEXT,
     neue_werte TEXT,
+    ip_adresse TEXT,
+    vorheriger_hash TEXT,
+    eintrag_hash TEXT,
     FOREIGN KEY (mitarbeiter_id) REFERENCES mitarbeiter(id)
   );
 
@@ -170,6 +173,37 @@ try {
 try {
   db.exec(`ALTER TABLE kunden ADD COLUMN notizen TEXT`);
 } catch (e) {}
+
+// Migration: Audit-Log erweitern für Unveränderlichkeit
+try {
+  db.exec(`ALTER TABLE audit_log ADD COLUMN ip_adresse TEXT`);
+} catch (e) {}
+try {
+  db.exec(`ALTER TABLE audit_log ADD COLUMN vorheriger_hash TEXT`);
+} catch (e) {}
+try {
+  db.exec(`ALTER TABLE audit_log ADD COLUMN eintrag_hash TEXT`);
+} catch (e) {}
+
+// Index für Hash-Spalte erstellen (nach Migration)
+try {
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_audit_hash ON audit_log(eintrag_hash)`);
+} catch (e) {}
+
+// Bestehende Audit-Einträge mit Hash versehen (falls noch ohne)
+const crypto = require('crypto');
+try {
+  const unhashed = db.prepare('SELECT id, zeitpunkt, mitarbeiter_id, aktion, tabelle, datensatz_id, alte_werte, neue_werte FROM audit_log WHERE eintrag_hash IS NULL').all();
+  let prevHash = null;
+  unhashed.forEach(entry => {
+    const hashData = `${entry.zeitpunkt}|${entry.mitarbeiter_id}|${entry.aktion}|${entry.tabelle}|${entry.datensatz_id}|${entry.alte_werte}|${entry.neue_werte}|${prevHash || 'GENESIS'}`;
+    const hash = crypto.createHash('sha256').update(hashData).digest('hex');
+    db.prepare('UPDATE audit_log SET eintrag_hash = ?, vorheriger_hash = ? WHERE id = ?').run(hash, prevHash, entry.id);
+    prevHash = hash;
+  });
+} catch (e) {
+  console.error('Audit-Hash Migration:', e.message);
+}
 
 // Standard-Admin erstellen falls nicht vorhanden
 const adminExists = db.prepare('SELECT id FROM mitarbeiter WHERE mitarbeiter_nr = ?').get('admin');
@@ -494,24 +528,43 @@ module.exports = {
     );
   },
 
-  // Audit-Log Funktionen
-  logAudit: (mitarbeiterId, aktion, tabelle, datensatzId, alteWerte, neueWerte) => {
+  // Audit-Log Funktionen (unveränderlich, hash-verkettet)
+  logAudit: (mitarbeiterId, aktion, tabelle, datensatzId, alteWerte, neueWerte, ipAdresse = null) => {
+    // Letzten Hash holen für Verkettung
+    const lastEntry = db.prepare('SELECT eintrag_hash FROM audit_log ORDER BY id DESC LIMIT 1').get();
+    const vorherigerHash = lastEntry?.eintrag_hash || 'GENESIS';
+
+    // Zeitstempel generieren
+    const zeitpunkt = new Date().toISOString().replace('T', ' ').substring(0, 19);
+
+    // Werte serialisieren
+    const alteWerteJson = alteWerte ? JSON.stringify(alteWerte) : null;
+    const neueWerteJson = neueWerte ? JSON.stringify(neueWerte) : null;
+
+    // Hash für diesen Eintrag berechnen
+    const hashData = `${zeitpunkt}|${mitarbeiterId}|${aktion}|${tabelle}|${datensatzId}|${alteWerteJson}|${neueWerteJson}|${vorherigerHash}`;
+    const eintragHash = crypto.createHash('sha256').update(hashData).digest('hex');
+
     return db.prepare(`
-      INSERT INTO audit_log (mitarbeiter_id, aktion, tabelle, datensatz_id, alte_werte, neue_werte)
-      VALUES (?, ?, ?, ?, ?, ?)
+      INSERT INTO audit_log (zeitpunkt, mitarbeiter_id, aktion, tabelle, datensatz_id, alte_werte, neue_werte, ip_adresse, vorheriger_hash, eintrag_hash)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
+      zeitpunkt,
       mitarbeiterId,
       aktion,
       tabelle,
       datensatzId,
-      alteWerte ? JSON.stringify(alteWerte) : null,
-      neueWerte ? JSON.stringify(neueWerte) : null
+      alteWerteJson,
+      neueWerteJson,
+      ipAdresse,
+      vorherigerHash,
+      eintragHash
     );
   },
 
   getAuditLog: (tabelle, datensatzId) => {
     return db.prepare(`
-      SELECT a.*, m.name as mitarbeiter_name
+      SELECT a.*, m.name as mitarbeiter_name, m.mitarbeiter_nr
       FROM audit_log a
       JOIN mitarbeiter m ON a.mitarbeiter_id = m.id
       WHERE a.tabelle = ? AND a.datensatz_id = ?
@@ -519,14 +572,108 @@ module.exports = {
     `).all(tabelle, datensatzId);
   },
 
-  getAllAuditLogs: (limit = 100) => {
-    return db.prepare(`
-      SELECT a.*, m.name as mitarbeiter_name
+  getAllAuditLogs: (page = 1, limit = 50, tabelle = null, aktion = null) => {
+    const offset = (page - 1) * limit;
+    let whereClause = '';
+    const params = [];
+
+    if (tabelle) {
+      whereClause = 'WHERE a.tabelle = ?';
+      params.push(tabelle);
+      if (aktion) {
+        whereClause += ' AND a.aktion = ?';
+        params.push(aktion);
+      }
+    } else if (aktion) {
+      whereClause = 'WHERE a.aktion = ?';
+      params.push(aktion);
+    }
+
+    const data = db.prepare(`
+      SELECT a.*, m.name as mitarbeiter_name, m.mitarbeiter_nr
       FROM audit_log a
       JOIN mitarbeiter m ON a.mitarbeiter_id = m.id
+      ${whereClause}
       ORDER BY a.zeitpunkt DESC
-      LIMIT ?
-    `).all(limit);
+      LIMIT ? OFFSET ?
+    `).all(...params, limit, offset);
+
+    const countParams = params.slice(); // Clone params for count query
+    const total = db.prepare(`
+      SELECT COUNT(*) as count FROM audit_log a
+      ${whereClause}
+    `).get(...countParams).count;
+
+    return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
+  },
+
+  // Audit-Log Integrität prüfen (Hash-Kette verifizieren)
+  verifyAuditIntegrity: () => {
+    const entries = db.prepare(`
+      SELECT id, zeitpunkt, mitarbeiter_id, aktion, tabelle, datensatz_id,
+             alte_werte, neue_werte, vorheriger_hash, eintrag_hash
+      FROM audit_log ORDER BY id ASC
+    `).all();
+
+    const results = {
+      total: entries.length,
+      valid: 0,
+      invalid: [],
+      chainBroken: false
+    };
+
+    let expectedPrevHash = 'GENESIS';
+
+    for (const entry of entries) {
+      // Prüfe ob vorheriger_hash korrekt ist
+      if (entry.vorheriger_hash !== expectedPrevHash) {
+        results.invalid.push({
+          id: entry.id,
+          error: 'Ketten-Hash unterbrochen',
+          expected: expectedPrevHash,
+          actual: entry.vorheriger_hash
+        });
+        results.chainBroken = true;
+      }
+
+      // Hash neu berechnen und vergleichen
+      const hashData = `${entry.zeitpunkt}|${entry.mitarbeiter_id}|${entry.aktion}|${entry.tabelle}|${entry.datensatz_id}|${entry.alte_werte}|${entry.neue_werte}|${entry.vorheriger_hash}`;
+      const expectedHash = crypto.createHash('sha256').update(hashData).digest('hex');
+
+      if (entry.eintrag_hash !== expectedHash) {
+        results.invalid.push({
+          id: entry.id,
+          error: 'Eintrag manipuliert',
+          expected: expectedHash,
+          actual: entry.eintrag_hash
+        });
+      } else {
+        results.valid++;
+      }
+
+      expectedPrevHash = entry.eintrag_hash;
+    }
+
+    return results;
+  },
+
+  // Audit-Export für rechtliche Nachweise
+  getAuditExport: (von, bis, tabelle = null) => {
+    let whereClause = 'WHERE DATE(a.zeitpunkt) BETWEEN ? AND ?';
+    const params = [von, bis];
+
+    if (tabelle) {
+      whereClause += ' AND a.tabelle = ?';
+      params.push(tabelle);
+    }
+
+    return db.prepare(`
+      SELECT a.*, m.name as mitarbeiter_name, m.mitarbeiter_nr
+      FROM audit_log a
+      JOIN mitarbeiter m ON a.mitarbeiter_id = m.id
+      ${whereClause}
+      ORDER BY a.zeitpunkt ASC
+    `).all(...params);
   },
 
   // Kunden-Funktionen

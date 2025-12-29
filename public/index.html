@@ -256,6 +256,7 @@
         <button class="tab" data-tab="baustellen">Baustellen</button>
         <button class="tab" data-tab="pausenregeln">Pausenregeln</button>
         <button class="tab" data-tab="einstellungen">Einstellungen</button>
+        <button class="tab" data-tab="audit">Audit-Log</button>
       </div>
 
       <!-- Zeiteinträge Tab -->
@@ -536,6 +537,69 @@
               <button type="submit" class="btn btn-primary">Einstellungen speichern</button>
             </div>
           </form>
+        </div>
+      </div>
+
+      <!-- Audit-Log Tab -->
+      <div id="tab-audit" class="tab-content hidden">
+        <div class="card">
+          <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom:20px;">
+            <h2 style="margin:0">Audit-Log (Änderungsprotokoll)</h2>
+            <div style="display:flex; gap:10px; align-items:center;">
+              <select id="audit-filter-tabelle" style="padding:8px 12px;border:1px solid var(--border);border-radius:6px;">
+                <option value="">Alle Tabellen</option>
+                <option value="zeiteintraege">Zeiteinträge</option>
+              </select>
+              <select id="audit-filter-aktion" style="padding:8px 12px;border:1px solid var(--border);border-radius:6px;">
+                <option value="">Alle Aktionen</option>
+                <option value="CREATE">Erstellt</option>
+                <option value="UPDATE">Geändert</option>
+                <option value="DELETE">Gelöscht</option>
+              </select>
+              <button id="audit-filter-btn" class="btn btn-primary">Filtern</button>
+              <button id="audit-verify-btn" class="btn btn-secondary">Integrität prüfen</button>
+            </div>
+          </div>
+
+          <div id="audit-integrity" class="audit-integrity hidden"></div>
+
+          <div class="table-container">
+            <table id="audit-table">
+              <thead>
+                <tr>
+                  <th>Zeitpunkt</th>
+                  <th>Benutzer</th>
+                  <th>Aktion</th>
+                  <th>Tabelle</th>
+                  <th>ID</th>
+                  <th>IP</th>
+                  <th>Details</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+          <div id="audit-pagination" class="pagination"></div>
+
+          <div class="audit-export-section" style="margin-top: 20px; padding-top: 20px; border-top: 1px solid var(--border);">
+            <h3>Audit-Export</h3>
+            <p style="color: var(--text-secondary); margin-bottom: 15px;">
+              Exportieren Sie das Änderungsprotokoll für rechtliche Nachweise (inkl. Hash-Integritätsprüfung).
+            </p>
+            <div class="form-row">
+              <div class="form-group">
+                <label for="audit-export-von">Von</label>
+                <input type="text" id="audit-export-von" class="datepicker" placeholder="TT.MM.JJJJ">
+              </div>
+              <div class="form-group">
+                <label for="audit-export-bis">Bis</label>
+                <input type="text" id="audit-export-bis" class="datepicker" placeholder="TT.MM.JJJJ">
+              </div>
+              <div class="form-group" style="align-self: flex-end;">
+                <button id="audit-export-btn" class="btn btn-primary">CSV exportieren</button>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>

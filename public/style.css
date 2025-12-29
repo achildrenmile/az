@@ -957,3 +957,112 @@ td[title] {
   font-size: 0.8em;
   color: var(--text-secondary);
 }
+
+/* Audit-Log Styles */
+.audit-integrity {
+  padding: 16px 20px;
+  border-radius: 8px;
+  margin-bottom: 20px;
+}
+
+.audit-integrity.valid {
+  background: var(--success-light, #d1fae5);
+  border: 1px solid var(--success);
+}
+
+.audit-integrity.invalid {
+  background: var(--danger-light, #fee2e2);
+  border: 1px solid var(--danger);
+}
+
+.audit-integrity h4 {
+  margin: 0 0 10px 0;
+}
+
+.audit-integrity p {
+  margin: 5px 0;
+  font-size: 0.9rem;
+}
+
+.audit-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.audit-badge.create {
+  background: var(--success-light, #d1fae5);
+  color: var(--success);
+}
+
+.audit-badge.update {
+  background: #fef3c7;
+  color: #d97706;
+}
+
+.audit-badge.delete {
+  background: var(--danger-light, #fee2e2);
+  color: var(--danger);
+}
+
+.audit-details-btn {
+  background: none;
+  border: none;
+  color: var(--primary);
+  cursor: pointer;
+  font-size: 0.85rem;
+  padding: 4px 8px;
+}
+
+.audit-details-btn:hover {
+  text-decoration: underline;
+}
+
+/* Audit Details Modal */
+.audit-details {
+  background: var(--bg-secondary);
+  padding: 12px;
+  border-radius: 6px;
+  margin-top: 10px;
+  font-size: 0.85rem;
+}
+
+.audit-details pre {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: 'Monaco', 'Consolas', monospace;
+  font-size: 0.8rem;
+  background: var(--bg-primary);
+  padding: 10px;
+  border-radius: 4px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.audit-diff {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.audit-diff-col h5 {
+  margin: 0 0 8px 0;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+
+.audit-diff-col.old {
+  border-right: 1px solid var(--border);
+  padding-right: 10px;
+}
+
+.audit-hash {
+  font-family: monospace;
+  font-size: 0.7rem;
+  color: var(--text-secondary);
+  word-break: break-all;
+}

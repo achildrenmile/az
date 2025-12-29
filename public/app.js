@@ -2056,7 +2056,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 });
 
-// Tab-Wechsel: Pausenregeln und Einstellungen laden
+// Tab-Wechsel: Pausenregeln, Einstellungen und Audit laden
 document.addEventListener('DOMContentLoaded', () => {
   document.querySelectorAll('.tab').forEach(tab => {
     tab.addEventListener('click', () => {
@@ -2066,6 +2066,184 @@ document.addEventListener('DOMContentLoaded', () => {
       if (tab.dataset.tab === 'einstellungen') {
         loadEinstellungen();
       }
+      if (tab.dataset.tab === 'audit') {
+        loadAuditLog();
+      }
     });
   });
+});
+
+// ==================== AUDIT-LOG FUNKTIONEN ====================
+
+let auditPage = 1;
+
+async function loadAuditLog(page = 1) {
+  auditPage = page;
+  const tabelle = document.getElementById('audit-filter-tabelle')?.value || '';
+  const aktion = document.getElementById('audit-filter-aktion')?.value || '';
+
+  try {
+    let url = `/admin/audit?page=${page}&limit=20`;
+    if (tabelle) url += `&tabelle=${tabelle}`;
+    if (aktion) url += `&aktion=${aktion}`;
+
+    const result = await api(url);
+    const tbody = document.querySelector('#audit-table tbody');
+
+    if (!result.data || result.data.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:40px;color:var(--text-secondary)">Keine Audit-Einträge gefunden</td></tr>';
+      document.getElementById('audit-pagination').innerHTML = '';
+      return;
+    }
+
+    tbody.innerHTML = result.data.map(log => {
+      const aktionClass = log.aktion.toLowerCase();
+      const aktionLabel = log.aktion === 'CREATE' ? 'Erstellt' :
+                          log.aktion === 'UPDATE' ? 'Geändert' :
+                          log.aktion === 'DELETE' ? 'Gelöscht' : log.aktion;
+
+      return `
+        <tr>
+          <td>${formatDateTime(log.zeitpunkt)}</td>
+          <td>${log.mitarbeiter_name} (${log.mitarbeiter_nr})</td>
+          <td><span class="audit-badge ${aktionClass}">${aktionLabel}</span></td>
+          <td>${log.tabelle}</td>
+          <td>${log.datensatz_id || '-'}</td>
+          <td style="font-size:0.8em;color:var(--text-secondary)">${log.ip_adresse || '-'}</td>
+          <td>
+            <button class="audit-details-btn" onclick="showAuditDetails(${log.id}, '${log.aktion}', '${escapeHtml(log.alte_werte || '')}', '${escapeHtml(log.neue_werte || '')}', '${log.eintrag_hash || ''}')">
+              Details
+            </button>
+          </td>
+        </tr>
+      `;
+    }).join('');
+
+    // Pagination
+    renderPagination('audit-pagination', result.page, result.totalPages, result.total, 'loadAuditLog');
+
+  } catch (error) {
+    console.error('Audit-Log laden fehlgeschlagen:', error);
+  }
+}
+
+function formatDateTime(dateStr) {
+  if (!dateStr) return '-';
+  const date = new Date(dateStr.replace(' ', 'T'));
+  return date.toLocaleString('de-AT', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  });
+}
+
+function escapeHtml(str) {
+  if (!str) return '';
+  return str.replace(/'/g, "\\'").replace(/"/g, '\\"').replace(/\n/g, '\\n');
+}
+
+function showAuditDetails(id, aktion, alteWerte, neueWerte, hash) {
+  // Parse JSON values
+  let oldObj = null, newObj = null;
+  try {
+    if (alteWerte) oldObj = JSON.parse(alteWerte.replace(/\\'/g, "'").replace(/\\n/g, "\n"));
+  } catch (e) {}
+  try {
+    if (neueWerte) newObj = JSON.parse(neueWerte.replace(/\\'/g, "'").replace(/\\n/g, "\n"));
+  } catch (e) {}
+
+  let content = `<div class="audit-details">`;
+
+  if (aktion === 'UPDATE' && oldObj && newObj) {
+    content += `<div class="audit-diff">
+      <div class="audit-diff-col old">
+        <h5>Vorher</h5>
+        <pre>${JSON.stringify(oldObj, null, 2)}</pre>
+      </div>
+      <div class="audit-diff-col new">
+        <h5>Nachher</h5>
+        <pre>${JSON.stringify(newObj, null, 2)}</pre>
+      </div>
+    </div>`;
+  } else if (aktion === 'CREATE' && newObj) {
+    content += `<h5>Erstellte Daten</h5><pre>${JSON.stringify(newObj, null, 2)}</pre>`;
+  } else if (aktion === 'DELETE' && oldObj) {
+    content += `<h5>Gelöschte Daten</h5><pre>${JSON.stringify(oldObj, null, 2)}</pre>`;
+  }
+
+  if (hash) {
+    content += `<div style="margin-top: 10px;"><strong>Hash:</strong> <span class="audit-hash">${hash}</span></div>`;
+  }
+
+  content += `</div>`;
+
+  // Show in modal or inline
+  const modal = document.createElement('div');
+  modal.className = 'modal';
+  modal.innerHTML = `
+    <div class="modal-backdrop" onclick="this.parentElement.remove()"></div>
+    <div class="modal-content card" style="max-width: 700px;">
+      <h2>Audit-Details #${id}</h2>
+      ${content}
+      <div class="modal-actions">
+        <button class="btn btn-secondary" onclick="this.closest('.modal').remove()">Schließen</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(modal);
+}
+
+async function verifyAuditIntegrity() {
+  try {
+    const result = await api('/admin/audit/verify');
+    const container = document.getElementById('audit-integrity');
+
+    const isValid = result.invalid.length === 0 && !result.chainBroken;
+
+    container.className = `audit-integrity ${isValid ? 'valid' : 'invalid'}`;
+    container.innerHTML = `
+      <h4>${isValid ? 'Integrität bestätigt' : 'Integritätsprobleme gefunden!'}</h4>
+      <p><strong>Geprüfte Einträge:</strong> ${result.total}</p>
+      <p><strong>Gültige Einträge:</strong> ${result.valid}</p>
+      <p><strong>Hash-Kette:</strong> ${result.chainBroken ? 'UNTERBROCHEN' : 'Intakt'}</p>
+      ${result.invalid.length > 0 ? `
+        <p style="color: var(--danger); font-weight: bold;">
+          ${result.invalid.length} ungültige Einträge gefunden!
+        </p>
+      ` : ''}
+    `;
+    container.classList.remove('hidden');
+
+  } catch (error) {
+    console.error('Integritätsprüfung fehlgeschlagen:', error);
+    alert('Fehler bei der Integritätsprüfung: ' + error.message);
+  }
+}
+
+function exportAuditLog() {
+  const vonInput = document.getElementById('audit-export-von');
+  const bisInput = document.getElementById('audit-export-bis');
+
+  if (!vonInput.value || !bisInput.value) {
+    alert('Bitte Von- und Bis-Datum auswählen');
+    return;
+  }
+
+  // Konvertiere DD.MM.YYYY zu YYYY-MM-DD
+  const vonParts = vonInput.value.split('.');
+  const bisParts = bisInput.value.split('.');
+  const von = `${vonParts[2]}-${vonParts[1]}-${vonParts[0]}`;
+  const bis = `${bisParts[2]}-${bisParts[1]}-${bisParts[0]}`;
+
+  // Download starten
+  window.location.href = `/api/admin/audit/export?von=${von}&bis=${bis}`;
+}
+
+// Audit Event Listeners
+document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('audit-filter-btn')?.addEventListener('click', () => loadAuditLog(1));
+  document.getElementById('audit-verify-btn')?.addEventListener('click', verifyAuditIntegrity);
+  document.getElementById('audit-export-btn')?.addEventListener('click', exportAuditLog);
 });

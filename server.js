@@ -191,7 +191,7 @@ app.post('/api/zeiteintraege', checkSession, (req, res) => {
   }
 
   try {
-    db.createZeiteintrag({
+    const neueWerte = {
       mitarbeiter_id: req.session.id,
       datum,
       arbeitsbeginn,
@@ -201,7 +201,21 @@ app.post('/api/zeiteintraege', checkSession, (req, res) => {
       kunde,
       anfahrt,
       notizen
-    });
+    };
+
+    const result = db.createZeiteintrag(neueWerte);
+
+    // Audit-Log für CREATE
+    const clientIp = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+    db.logAudit(
+      req.session.id,
+      'CREATE',
+      'zeiteintraege',
+      result.lastInsertRowid,
+      null,
+      neueWerte,
+      clientIp
+    );
 
     res.json({
       success: true,
@@ -277,14 +291,16 @@ app.put('/api/zeiteintraege/:id', checkSession, (req, res) => {
     // Update durchführen
     db.updateZeiteintrag(req.params.id, neueWerte);
 
-    // Audit-Log erstellen
+    // Audit-Log erstellen (mit IP-Adresse)
+    const clientIp = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
     db.logAudit(
       req.session.id,
       'UPDATE',
       'zeiteintraege',
       parseInt(req.params.id),
       alterEintrag,
-      neueWerte
+      neueWerte,
+      clientIp
     );
 
     res.json({ success: true });
@@ -308,14 +324,16 @@ app.delete('/api/zeiteintraege/:id', checkSession, (req, res) => {
   }
 
   try {
-    // Audit-Log vor Löschung erstellen
+    // Audit-Log vor Löschung erstellen (mit IP-Adresse)
+    const clientIp = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
     db.logAudit(
       req.session.id,
       'DELETE',
       'zeiteintraege',
       parseInt(req.params.id),
       eintrag,
-      null
+      null,
+      clientIp
     );
 
     // Löschen
@@ -524,18 +542,78 @@ app.put('/api/admin/mitarbeiter/:id', checkSession, checkAdmin, (req, res) => {
   res.json({ success: true });
 });
 
-// Audit-Log abrufen (Admin)
+// Audit-Log abrufen (Admin) - mit Pagination und Filter
 app.get('/api/admin/audit', checkSession, checkAdmin, (req, res) => {
-  const { tabelle, datensatz_id, limit } = req.query;
+  const { tabelle, datensatz_id, aktion, page, limit } = req.query;
 
-  let logs;
+  // Einzelner Datensatz
   if (tabelle && datensatz_id) {
-    logs = db.getAuditLog(tabelle, parseInt(datensatz_id));
-  } else {
-    logs = db.getAllAuditLogs(parseInt(limit) || 100);
+    const logs = db.getAuditLog(tabelle, parseInt(datensatz_id));
+    return res.json(logs);
   }
 
-  res.json(logs);
+  // Paginierte Liste mit optionalen Filtern
+  const result = db.getAllAuditLogs(
+    parseInt(page) || 1,
+    parseInt(limit) || 50,
+    tabelle || null,
+    aktion || null
+  );
+
+  res.json(result);
+});
+
+// Audit-Log Integrität prüfen (Admin)
+app.get('/api/admin/audit/verify', checkSession, checkAdmin, (req, res) => {
+  const result = db.verifyAuditIntegrity();
+  res.json(result);
+});
+
+// Audit-Log Export (Admin) - CSV für rechtliche Nachweise
+app.get('/api/admin/audit/export', checkSession, checkAdmin, (req, res) => {
+  const { von, bis, tabelle, format } = req.query;
+
+  if (!von || !bis) {
+    return res.status(400).json({ error: 'Zeitraum (von, bis) erforderlich' });
+  }
+
+  const logs = db.getAuditExport(von, bis, tabelle || null);
+
+  if (format === 'json') {
+    return res.json(logs);
+  }
+
+  // CSV Export
+  let csv = 'ID;Zeitpunkt;Mitarbeiter-Nr;Name;Aktion;Tabelle;Datensatz-ID;IP-Adresse;Hash;Vorheriger Hash\n';
+
+  logs.forEach(log => {
+    csv += [
+      log.id,
+      log.zeitpunkt,
+      log.mitarbeiter_nr,
+      `"${log.mitarbeiter_name}"`,
+      log.aktion,
+      log.tabelle,
+      log.datensatz_id || '',
+      log.ip_adresse || '',
+      log.eintrag_hash?.substring(0, 16) + '...',
+      log.vorheriger_hash?.substring(0, 16) + '...'
+    ].join(';') + '\n';
+  });
+
+  // Integritätsprüfung anfügen
+  const integrity = db.verifyAuditIntegrity();
+  csv += '\n=== INTEGRITÄTSPRÜFUNG ===\n';
+  csv += `Geprüfte Einträge;${integrity.total}\n`;
+  csv += `Gültige Einträge;${integrity.valid}\n`;
+  csv += `Ungültige Einträge;${integrity.invalid.length}\n`;
+  csv += `Hash-Kette intakt;${!integrity.chainBroken ? 'JA' : 'NEIN'}\n`;
+  csv += `Exportiert am;${new Date().toLocaleString('de-AT')}\n`;
+
+  const filename = `audit_log_${von}_${bis}.csv`;
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+  res.send('\ufeff' + csv);
 });
 
 // ==================== KUNDEN ROUTES ====================
