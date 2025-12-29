@@ -72,21 +72,21 @@ setInterval(() => {
   db.cleanupExpiredSessions();
 }, 15 * 60 * 1000);
 
-// Passwort-Validierung (moderne Standards)
+// Passwort-Validierung (erhöhte Sicherheitsstandards)
 function validatePassword(password) {
   const errors = [];
 
-  if (!password || password.length < 8) {
-    errors.push('Mindestens 8 Zeichen');
+  if (!password || password.length < 12) {
+    errors.push('Mindestens 12 Zeichen');
   }
-  if (!/[A-Z]/.test(password)) {
-    errors.push('Mindestens ein Großbuchstabe');
+  if (!/[A-Z].*[A-Z]/.test(password)) {
+    errors.push('Mindestens 2 Großbuchstaben');
   }
-  if (!/[a-z]/.test(password)) {
-    errors.push('Mindestens ein Kleinbuchstabe');
+  if (!/[a-z].*[a-z]/.test(password)) {
+    errors.push('Mindestens 2 Kleinbuchstaben');
   }
-  if (!/[0-9]/.test(password)) {
-    errors.push('Mindestens eine Zahl');
+  if (!/[0-9].*[0-9]/.test(password)) {
+    errors.push('Mindestens 2 Zahlen');
   }
   if (!/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password)) {
     errors.push('Mindestens ein Sonderzeichen (!@#$%^&*...)');
