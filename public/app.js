@@ -59,6 +59,9 @@ let kundenPage = 1;
 let baustellenPage = 1;
 const PAGE_LIMIT = 10;
 
+// Statistik State
+let currentStatistikType = 'monate';
+
 // Pagination rendern
 function renderPagination(containerId, currentPage, totalPages, total, onPageChange) {
   const container = document.getElementById(containerId);
@@ -257,7 +260,8 @@ document.getElementById('login-form').addEventListener('submit', async (e) => {
 // Kundenliste für Dropdown laden
 async function loadKundenListe() {
   try {
-    const kunden = await api('/kunden');
+    const result = await api('/kunden');
+    const kunden = result.data || result;
     const datalist = document.getElementById('kunden-liste');
     datalist.innerHTML = kunden.map(k => `<option value="${k.name}">`).join('');
   } catch (error) {
@@ -268,7 +272,8 @@ async function loadKundenListe() {
 // Baustellenliste für Dropdown laden
 async function loadBaustellenListe() {
   try {
-    const baustellen = await api('/baustellen');
+    const result = await api('/baustellen');
+    const baustellen = result.data || result;
     const datalist = document.getElementById('baustellen-liste');
     datalist.innerHTML = baustellen.map(b => `<option value="${b.name}">`).join('');
   } catch (error) {
@@ -518,11 +523,15 @@ async function loadAdminData() {
 // Filter-Dropdowns befüllen
 async function loadFilterOptions() {
   try {
-    const [mitarbeiter, baustellen, kunden] = await Promise.all([
-      api('/admin/mitarbeiter'),
-      api('/admin/baustellen'),
-      api('/admin/kunden')
+    const [maResult, bsResult, kdResult] = await Promise.all([
+      api('/admin/mitarbeiter?limit=1000'),
+      api('/admin/baustellen?limit=1000'),
+      api('/admin/kunden?limit=1000')
     ]);
+
+    const mitarbeiter = maResult.data || maResult;
+    const baustellen = bsResult.data || bsResult;
+    const kunden = kdResult.data || kdResult;
 
     // Mitarbeiter-Dropdown
     const maSelect = document.getElementById('filter-mitarbeiter');
@@ -715,34 +724,7 @@ window.goToBaustellenPage = function(page) {
 // Filter
 document.getElementById('filter-btn').addEventListener('click', loadEintraege);
 
-// Export
-document.getElementById('export-btn').addEventListener('click', () => {
-  const vonAT = document.getElementById('filter-von').value;
-  const bisAT = document.getElementById('filter-bis').value;
-  const von = parseATDate(vonAT);
-  const bis = parseATDate(bisAT);
-
-  let url = '/api/admin/export';
-  const params = [];
-  if (von) params.push(`von=${von}`);
-  if (bis) params.push(`bis=${bis}`);
-  if (params.length) url += '?' + params.join('&');
-
-  // Session-ID als URL-Parameter (für Download)
-  url += (params.length ? '&' : '?') + `session=${sessionId}`;
-
-  // Workaround: Fetch mit Header
-  fetch(url, {
-    headers: { 'X-Session-ID': sessionId }
-  })
-    .then(res => res.blob())
-    .then(blob => {
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(blob);
-      a.download = `arbeitszeiten_${von || 'alle'}_${bis || 'alle'}.csv`;
-      a.click();
-    });
-});
+// Export - jetzt über Modal (export-dialog-btn)
 
 // Zeitnachweis drucken (Admin)
 document.getElementById('print-btn').addEventListener('click', async () => {
@@ -755,25 +737,18 @@ document.getElementById('print-btn').addEventListener('click', async () => {
   const baustelle = document.getElementById('filter-baustelle').value;
   const kunde = document.getElementById('filter-kunde').value;
 
-  let url = '/admin/zeiteintraege';
+  let url = '/admin/zeiteintraege?limit=10000';
   const params = [];
   if (von) params.push(`von=${von}`);
   if (bis) params.push(`bis=${bis}`);
-  if (params.length) url += '?' + params.join('&');
+  if (mitarbeiterId) params.push(`mitarbeiter=${mitarbeiterId}`);
+  if (baustelle) params.push(`baustelle=${encodeURIComponent(baustelle)}`);
+  if (kunde) params.push(`kunde=${encodeURIComponent(kunde)}`);
+  if (params.length) url += '&' + params.join('&');
 
   try {
-    let eintraege = await api(url);
-
-    // Client-seitig filtern
-    if (mitarbeiterId) {
-      eintraege = eintraege.filter(e => e.mitarbeiter_id == mitarbeiterId);
-    }
-    if (baustelle) {
-      eintraege = eintraege.filter(e => e.baustelle === baustelle);
-    }
-    if (kunde) {
-      eintraege = eintraege.filter(e => e.kunde === kunde);
-    }
+    const result = await api(url);
+    let eintraege = result.data || result;
 
     // Filter-Info für Druckansicht
     const filterInfo = {
@@ -791,7 +766,8 @@ document.getElementById('print-btn').addEventListener('click', async () => {
 // Zeitnachweis drucken (User)
 document.getElementById('print-user-btn').addEventListener('click', async () => {
   try {
-    const eintraege = await api('/zeiteintraege');
+    const result = await api('/zeiteintraege?limit=10000');
+    const eintraege = result.data || result;
     printZeitnachweis(eintraege, null, null, userName);
   } catch (error) {
     alert('Fehler beim Laden: ' + error.message);
@@ -1454,8 +1430,6 @@ validateSession();
 
 // ==================== STATISTIK ====================
 
-let currentStatistikType = 'monate';
-
 // Jahre-Dropdown initialisieren
 function initStatistikJahre() {
   const currentYear = new Date().getFullYear();
@@ -1683,12 +1657,14 @@ function closeExportModal() {
   document.getElementById('export-modal').classList.add('hidden');
 }
 
-// Format-Buttons
-document.querySelectorAll('.export-format').forEach(btn => {
-  btn.addEventListener('click', () => {
-    document.querySelectorAll('.export-format').forEach(b => b.classList.remove('active'));
-    btn.classList.add('active');
-    exportFormat = btn.dataset.format;
+// Format-Buttons - im DOMContentLoaded initialisieren
+document.addEventListener('DOMContentLoaded', () => {
+  document.querySelectorAll('.export-format').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.export-format').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      exportFormat = btn.dataset.format;
+    });
   });
 });
 
@@ -1734,60 +1710,72 @@ async function previewExport() {
   }
 }
 
-// Export-Form absenden
-document.getElementById('export-form')?.addEventListener('submit', async (e) => {
-  e.preventDefault();
+// Export-Form absenden - im DOMContentLoaded
+document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('export-form')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
 
-  const vonAT = document.getElementById('export-von').value;
-  const bisAT = document.getElementById('export-bis').value;
-  const von = parseATDate(vonAT);
-  const bis = parseATDate(bisAT);
-  const mitarbeiter = document.getElementById('export-mitarbeiter').value;
+    const vonAT = document.getElementById('export-von').value;
+    const bisAT = document.getElementById('export-bis').value;
+    const von = parseATDate(vonAT);
+    const bis = parseATDate(bisAT);
+    const mitarbeiter = document.getElementById('export-mitarbeiter').value;
 
-  if (!von || !bis) {
-    document.getElementById('export-message').innerHTML = '<span class="error">Bitte Zeitraum auswählen</span>';
-    return;
-  }
-
-  // Download starten
-  let url = `/api/admin/export/${exportFormat}?von=${von}&bis=${bis}`;
-  if (mitarbeiter) url += `&mitarbeiter=${mitarbeiter}`;
-
-  // Session-Header für Download
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = `arbeitszeit_export_${von}_${bis}.${exportFormat}`;
-
-  // Fetch mit Session-Header für PDF/CSV
-  try {
-    showLoading();
-    const response = await fetch(url, {
-      headers: { 'X-Session-Id': sessionId }
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Export fehlgeschlagen');
+    if (!von || !bis) {
+      document.getElementById('export-message').innerHTML = '<span class="error">Bitte Zeitraum auswählen</span>';
+      return;
     }
 
-    const blob = await response.blob();
-    const downloadUrl = window.URL.createObjectURL(blob);
-    link.href = downloadUrl;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    window.URL.revokeObjectURL(downloadUrl);
+    // Download starten
+    let url = `/api/admin/export/${exportFormat}?von=${von}&bis=${bis}`;
+    if (mitarbeiter) url += `&mitarbeiter=${mitarbeiter}`;
 
-    closeExportModal();
-  } catch (error) {
-    document.getElementById('export-message').innerHTML = `<span class="error">${error.message}</span>`;
-  } finally {
-    hideLoading();
-  }
+    // Session-Header für Download
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `arbeitszeit_export_${von}_${bis}.${exportFormat}`;
+
+    // Fetch mit Session-Header für PDF/CSV
+    try {
+      showLoading();
+      const response = await fetch(url, {
+        headers: { 'X-Session-Id': sessionId }
+      });
+
+      if (!response.ok) {
+        // Versuche JSON zu parsen, falls Fehler
+        const text = await response.text();
+        let errorMsg = 'Export fehlgeschlagen';
+        try {
+          const error = JSON.parse(text);
+          errorMsg = error.error || errorMsg;
+        } catch (e) {
+          errorMsg = text || errorMsg;
+        }
+        throw new Error(errorMsg);
+      }
+
+      const blob = await response.blob();
+      const downloadUrl = window.URL.createObjectURL(blob);
+      link.href = downloadUrl;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(downloadUrl);
+
+      closeExportModal();
+    } catch (error) {
+      document.getElementById('export-message').innerHTML = `<span class="error">${error.message}</span>`;
+    } finally {
+      hideLoading();
+    }
+  });
 });
 
-// Export-Dialog Button Event
-document.getElementById('export-dialog-btn')?.addEventListener('click', openExportModal);
+// Export-Dialog Button Event - im DOMContentLoaded
+document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('export-dialog-btn')?.addEventListener('click', openExportModal);
+});
 
 // Verstöße Modal
 function openVerstoesseModal(verstoesse) {
