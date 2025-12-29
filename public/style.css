@@ -37,7 +37,7 @@ body {
 
 /* Layout */
 .container {
-  max-width: 1000px;
+  max-width: 1200px;
   margin: 0 auto;
   padding: 24px;
 }
@@ -340,18 +340,22 @@ h2 {
 table {
   width: 100%;
   border-collapse: collapse;
+  table-layout: fixed;
 }
 
 th, td {
-  padding: 14px 12px;
+  padding: 12px 10px;
   text-align: left;
   border-bottom: 1px solid var(--border);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 th {
   background: #f4f4f5;
   font-weight: 600;
-  font-size: 0.8rem;
+  font-size: 0.75rem;
   color: var(--text-secondary);
   text-transform: uppercase;
   letter-spacing: 0.5px;
@@ -367,6 +371,38 @@ tbody tr:hover {
 
 tbody tr:last-child td {
   border-bottom: none;
+}
+
+/* Admin Zeiteinträge Tabelle - kompakte Spaltenbreiten */
+#eintraege-table {
+  font-size: 13px;
+}
+#eintraege-table th,
+#eintraege-table td {
+  padding: 10px 6px;
+}
+#eintraege-table th:nth-child(1),
+#eintraege-table td:nth-child(1) { width: 80px; } /* Datum */
+#eintraege-table th:nth-child(2),
+#eintraege-table td:nth-child(2) { width: 110px; } /* Mitarbeiter */
+#eintraege-table th:nth-child(3),
+#eintraege-table td:nth-child(3) { width: 50px; } /* Beginn */
+#eintraege-table th:nth-child(4),
+#eintraege-table td:nth-child(4) { width: 50px; } /* Ende */
+#eintraege-table th:nth-child(5),
+#eintraege-table td:nth-child(5) { width: 45px; } /* Pause */
+#eintraege-table th:nth-child(6),
+#eintraege-table td:nth-child(6) { width: 50px; } /* Netto */
+#eintraege-table th:nth-child(7),
+#eintraege-table td:nth-child(7) { width: 140px; } /* Baustelle */
+#eintraege-table th:nth-child(8),
+#eintraege-table td:nth-child(8) { width: 120px; } /* Kunde */
+#eintraege-table th:nth-child(9),
+#eintraege-table td:nth-child(9) { width: 90px; overflow: visible; } /* Aktionen */
+
+/* Tooltip für abgeschnittene Texte */
+td[title] {
+  cursor: default;
 }
 
 /* Tabs */

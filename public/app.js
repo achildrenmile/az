@@ -489,13 +489,13 @@ async function loadEintraege() {
     tbody.innerHTML = eintraege.map(e => `
       <tr>
         <td>${formatDate(e.datum)}</td>
-        <td>${e.mitarbeiter_name} (${e.mitarbeiter_nr})</td>
-        <td>${e.arbeitsbeginn} Uhr</td>
-        <td>${e.arbeitsende} Uhr</td>
-        <td>${e.pause_minuten} Min.</td>
+        <td title="${e.mitarbeiter_name} (${e.mitarbeiter_nr})">${e.mitarbeiter_name}</td>
+        <td>${e.arbeitsbeginn}</td>
+        <td>${e.arbeitsende}</td>
+        <td>${e.pause_minuten}</td>
         <td>${calculateNetto(e.arbeitsbeginn, e.arbeitsende, e.pause_minuten)}</td>
-        <td>${e.baustelle || '-'}</td>
-        <td>${e.kunde || '-'}</td>
+        <td title="${e.baustelle || '-'}">${e.baustelle || '-'}</td>
+        <td title="${e.kunde || '-'}">${e.kunde || '-'}</td>
         <td class="action-btns">
           <button class="btn btn-small btn-icon" onclick="printEinzelnerEintrag(${e.id})" title="Drucken">🖨</button>
           <button class="btn btn-small btn-danger btn-icon" onclick="deleteEintrag(${e.id})" title="Löschen">✕</button>
