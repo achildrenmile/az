@@ -184,6 +184,9 @@ function initErfassungView() {
   // Listen laden
   loadKundenListe();
   loadBaustellenListe();
+
+  // Einträge immer laden
+  loadHistory();
 }
 
 document.getElementById('zeit-form').addEventListener('submit', async (e) => {
@@ -222,23 +225,11 @@ document.getElementById('zeit-form').addEventListener('submit', async (e) => {
     document.getElementById('anfahrt').value = '';
     document.getElementById('notizen').value = '';
 
-    // History aktualisieren falls sichtbar
-    if (!document.getElementById('history-section').classList.contains('hidden')) {
-      loadHistory();
-    }
+    // History aktualisieren
+    loadHistory();
   } catch (error) {
     messageEl.textContent = error.message;
     messageEl.className = 'message error';
-  }
-});
-
-// History anzeigen
-document.getElementById('show-history-btn').addEventListener('click', async () => {
-  const section = document.getElementById('history-section');
-  section.classList.toggle('hidden');
-
-  if (!section.classList.contains('hidden')) {
-    await loadHistory();
   }
 });
 
@@ -246,11 +237,20 @@ async function loadHistory() {
   try {
     const eintraege = await api('/zeiteintraege');
     const tbody = document.querySelector('#user-eintraege-table tbody');
+    const emptyState = document.getElementById('history-empty');
+    const tableContainer = document.getElementById('history-table-container');
+    const printBtn = document.getElementById('print-user-btn');
 
     if (eintraege.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="7" style="text-align:center">Noch keine Einträge vorhanden.</td></tr>';
+      emptyState.classList.remove('hidden');
+      tableContainer.classList.add('hidden');
+      printBtn.classList.add('hidden');
       return;
     }
+
+    emptyState.classList.add('hidden');
+    tableContainer.classList.remove('hidden');
+    printBtn.classList.remove('hidden');
 
     tbody.innerHTML = eintraege.map(e => `
       <tr>

@@ -500,6 +500,18 @@ tbody tr:last-child td {
   gap: 6px;
 }
 
+/* Empty State */
+.empty-state {
+  text-align: center;
+  padding: 40px 20px;
+  color: var(--text-secondary);
+}
+
+.empty-state p {
+  font-size: 1rem;
+  margin: 0;
+}
+
 /* Responsive */
 @media (max-width: 768px) {
   .container {

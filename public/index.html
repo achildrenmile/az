@@ -47,7 +47,6 @@
       <div class="navbar-user">
         <span id="user-name"></span>
         <div class="navbar-actions">
-          <button id="show-history-btn" class="btn btn-secondary">Meine Einträge</button>
           <button id="show-admin-btn" class="btn btn-secondary hidden">Admin</button>
           <button id="logout-btn" class="btn btn-secondary">Abmelden</button>
         </div>
@@ -108,12 +107,15 @@
       </div>
 
       <!-- Meine Einträge als Tabelle -->
-      <div id="history-section" class="card hidden">
+      <div id="history-section" class="card">
         <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom:16px;">
           <h2 style="margin:0">Meine Einträge</h2>
           <button id="print-user-btn" class="btn btn-secondary">Zeitnachweis drucken</button>
         </div>
-        <div class="table-container">
+        <div id="history-empty" class="empty-state hidden">
+          <p>Du hast noch keine Einträge erfasst.</p>
+        </div>
+        <div id="history-table-container" class="table-container">
           <table id="user-eintraege-table">
             <thead>
               <tr>
