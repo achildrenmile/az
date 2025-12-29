@@ -553,6 +553,9 @@ app.get('/api/monatsabrechnung', checkSession, (req, res) => {
   // Gleitzeit-Saldo abrufen (falls aktiviert)
   const gleitzeitSaldo = db.getGleitzeitSaldo(req.session.id, jahr, monat);
 
+  // Bestätigungsstatus abrufen
+  const bestaetigung = db.getMonatsbestaetigung(req.session.id, jahr, monat);
+
   res.json({
     ...abrechnung,
     berechnung: {
@@ -562,7 +565,13 @@ app.get('/api/monatsabrechnung', checkSession, (req, res) => {
       ueberstunden: Math.max(0, differenz),
       minderstunden: Math.max(0, -differenz)
     },
-    gleitzeit: gleitzeitSaldo
+    gleitzeit: gleitzeitSaldo,
+    bestaetigung: bestaetigung ? {
+      bestaetigt: true,
+      bestaetigt_am: bestaetigung.bestaetigt_am
+    } : {
+      bestaetigt: false
+    }
   });
 });
 
@@ -1267,6 +1276,92 @@ app.post('/api/admin/gleitzeit/abschliessen', checkSession, checkAdmin, (req, re
   }
 
   res.json(result);
+});
+
+// ==================== MONATSBESTÄTIGUNG ROUTES ====================
+
+// Eigene Bestätigung abrufen
+app.get('/api/monatsbestaetigung/status', checkSession, (req, res) => {
+  const jahr = parseInt(req.query.jahr) || new Date().getFullYear();
+  const monat = parseInt(req.query.monat) || new Date().getMonth() + 1;
+
+  const bestaetigung = db.getMonatsbestaetigung(req.session.id, jahr, monat);
+  res.json({
+    bestaetigt: !!bestaetigung,
+    bestaetigung
+  });
+});
+
+// Monat bestätigen (Mitarbeiter)
+app.post('/api/monatsbestaetigung', checkSession, (req, res) => {
+  const { jahr, monat, kommentar } = req.body;
+
+  if (!jahr || !monat) {
+    return res.status(400).json({ error: 'Jahr und Monat erforderlich' });
+  }
+
+  // Validierung: Nur aktuelle oder vergangene Monate können bestätigt werden
+  const heute = new Date();
+  const gewaehltesDatum = new Date(jahr, monat - 1, 1);
+  const aktuellerMonatsStart = new Date(heute.getFullYear(), heute.getMonth(), 1);
+
+  if (gewaehltesDatum > aktuellerMonatsStart) {
+    return res.status(400).json({ error: 'Zukünftige Monate können nicht bestätigt werden' });
+  }
+
+  const ipAdresse = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+  const result = db.bestaetigeMonat(req.session.id, parseInt(jahr), parseInt(monat), ipAdresse, kommentar);
+
+  if (!result.success) {
+    return res.status(400).json({ error: result.error, already_confirmed: result.already_confirmed });
+  }
+
+  res.json(result);
+});
+
+// Eigene Bestätigungshistorie
+app.get('/api/monatsbestaetigung/historie', checkSession, (req, res) => {
+  const limit = parseInt(req.query.limit) || 24;
+  const bestaetigungen = db.getMitarbeiterBestaetigungen(req.session.id, limit);
+  res.json(bestaetigungen);
+});
+
+// Admin: Bestätigungsübersicht für einen Monat
+app.get('/api/admin/monatsbestaetigung/uebersicht', checkSession, checkAdmin, (req, res) => {
+  const jahr = parseInt(req.query.jahr) || new Date().getFullYear();
+  const monat = parseInt(req.query.monat) || new Date().getMonth() + 1;
+
+  const uebersicht = db.getBestaetigungsUebersicht(jahr, monat);
+
+  // Statistik berechnen
+  const bestaetigt = uebersicht.filter(m => m.bestaetigt).length;
+  const offen = uebersicht.filter(m => !m.bestaetigt && m.eintraege > 0).length;
+  const ohneEintraege = uebersicht.filter(m => m.eintraege === 0).length;
+
+  res.json({
+    jahr,
+    monat,
+    statistik: {
+      gesamt: uebersicht.length,
+      bestaetigt,
+      offen,
+      ohneEintraege
+    },
+    mitarbeiter: uebersicht
+  });
+});
+
+// Admin: Bestätigung für bestimmten Mitarbeiter prüfen
+app.get('/api/admin/monatsbestaetigung/:mitarbeiterId', checkSession, checkAdmin, (req, res) => {
+  const mitarbeiterId = parseInt(req.params.mitarbeiterId);
+  const jahr = parseInt(req.query.jahr) || new Date().getFullYear();
+  const monat = parseInt(req.query.monat) || new Date().getMonth() + 1;
+
+  const bestaetigung = db.getMonatsbestaetigung(mitarbeiterId, jahr, monat);
+  res.json({
+    bestaetigt: !!bestaetigung,
+    bestaetigung
+  });
 });
 
 // Helper: Datum formatieren (österreichisches Format DD.MM.YYYY)

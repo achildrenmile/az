@@ -2606,9 +2606,99 @@ async function loadMonatsabrechnung() {
 
     contentEl.innerHTML = html;
 
+    // Bestätigungsbereich anzeigen
+    updateBestaetigungsAnzeige(data);
+
   } catch (error) {
     contentEl.innerHTML = `<p style="text-align:center; color:var(--danger); padding:40px;">Fehler: ${error.message}</p>`;
   }
+}
+
+// Bestätigungsanzeige in Monatsabrechnung aktualisieren
+function updateBestaetigungsAnzeige(data) {
+  const container = document.getElementById('ma-bestaetigung');
+  const contentEl = document.getElementById('ma-bestaetigung-content');
+
+  if (!container || !contentEl) return;
+
+  container.style.display = 'block';
+
+  if (data.bestaetigung && data.bestaetigung.bestaetigt) {
+    // Bereits bestätigt
+    const datum = new Date(data.bestaetigung.bestaetigt_am.replace(' ', 'T'));
+    const formatiert = datum.toLocaleString('de-AT', {
+      day: '2-digit', month: '2-digit', year: 'numeric',
+      hour: '2-digit', minute: '2-digit'
+    });
+
+    contentEl.innerHTML = `
+      <div style="display:flex; align-items:center; gap:15px;">
+        <span style="font-size:2rem; color:var(--success);">&#10003;</span>
+        <div>
+          <strong style="color:var(--success);">Monat bestätigt</strong><br>
+          <span style="color:var(--text-secondary); font-size:0.9rem;">Bestätigt am ${formatiert}</span>
+        </div>
+      </div>
+    `;
+    container.style.background = '#ecfdf5';
+    container.style.borderColor = '#a7f3d0';
+  } else if (data.eintraege && data.eintraege.length > 0) {
+    // Noch nicht bestätigt - Button anzeigen
+    contentEl.innerHTML = `
+      <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:15px;">
+        <div>
+          <strong>Monat noch nicht bestätigt</strong><br>
+          <span style="color:var(--text-secondary); font-size:0.9rem;">
+            Bitte prüfe deine Einträge und bestätige die Richtigkeit.
+          </span>
+        </div>
+        <button class="btn btn-primary" onclick="bestaetigeMonat()">
+          Monat bestätigen
+        </button>
+      </div>
+    `;
+    container.style.background = '#fffbeb';
+    container.style.borderColor = '#fde68a';
+  } else {
+    // Keine Einträge
+    container.style.display = 'none';
+  }
+}
+
+// Monat bestätigen
+async function bestaetigeMonat() {
+  const jahr = document.getElementById('ma-jahr').value;
+  const monat = document.getElementById('ma-monat').value;
+
+  if (!confirm(`Möchtest du den ${getMonatsName(parseInt(monat))} ${jahr} wirklich bestätigen?\n\nDiese Aktion kann nicht rückgängig gemacht werden.`)) {
+    return;
+  }
+
+  try {
+    const result = await api('/monatsbestaetigung', 'POST', { jahr: parseInt(jahr), monat: parseInt(monat) });
+
+    if (result.success) {
+      // Aktualisiere currentMonatsabrechnung
+      currentMonatsabrechnung.bestaetigung = {
+        bestaetigt: true,
+        bestaetigt_am: result.bestaetigt_am
+      };
+      updateBestaetigungsAnzeige(currentMonatsabrechnung);
+      showMessage('ma-bestaetigung-content', 'Monat erfolgreich bestätigt!', 'success');
+    }
+  } catch (error) {
+    if (error.message.includes('bereits bestätigt')) {
+      loadMonatsabrechnung(); // Neu laden
+    } else {
+      alert('Fehler beim Bestätigen: ' + error.message);
+    }
+  }
+}
+
+function getMonatsName(monat) {
+  const namen = ['', 'Januar', 'Februar', 'März', 'April', 'Mai', 'Juni',
+    'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember'];
+  return namen[monat] || '';
 }
 
 function printMonatsabrechnung() {
@@ -2920,4 +3010,97 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Konfig-Formular
   document.getElementById('gleitzeit-konfig-form')?.addEventListener('submit', saveGleitzeitKonfig);
+});
+
+// ==================== BESTÄTIGUNGEN FUNKTIONEN (Admin) ====================
+
+// Jahre-Dropdown für Bestätigungen initialisieren
+function initBestaetigungJahre() {
+  const select = document.getElementById('bestaetigung-jahr');
+  if (!select) return;
+
+  const currentYear = new Date().getFullYear();
+  select.innerHTML = '';
+  for (let y = currentYear; y >= currentYear - 3; y--) {
+    const opt = document.createElement('option');
+    opt.value = y;
+    opt.textContent = y;
+    select.appendChild(opt);
+  }
+
+  // Aktuellen Monat vorauswählen
+  const monatSelect = document.getElementById('bestaetigung-monat');
+  if (monatSelect) {
+    monatSelect.value = new Date().getMonth() + 1;
+  }
+}
+
+// Bestätigungsübersicht laden (Admin)
+async function loadBestaetigungsUebersicht() {
+  const jahr = document.getElementById('bestaetigung-jahr')?.value || new Date().getFullYear();
+  const monat = document.getElementById('bestaetigung-monat')?.value || (new Date().getMonth() + 1);
+
+  try {
+    const data = await api(`/admin/monatsbestaetigung/uebersicht?jahr=${jahr}&monat=${monat}`);
+
+    // Statistik aktualisieren
+    document.getElementById('bestaetigung-stat-gesamt').textContent = data.statistik.gesamt;
+    document.getElementById('bestaetigung-stat-bestaetigt').textContent = data.statistik.bestaetigt;
+    document.getElementById('bestaetigung-stat-offen').textContent = data.statistik.offen;
+
+    // Tabelle befüllen
+    const tbody = document.querySelector('#bestaetigungen-table tbody');
+
+    if (!data.mitarbeiter || data.mitarbeiter.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:40px;color:var(--text-secondary)">Keine Mitarbeiter gefunden</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = data.mitarbeiter.map(m => {
+      let statusHtml;
+      if (m.bestaetigt) {
+        statusHtml = '<span class="status-badge ok">Bestätigt</span>';
+      } else if (m.eintraege > 0) {
+        statusHtml = '<span class="status-badge warning">Offen</span>';
+      } else {
+        statusHtml = '<span class="status-badge" style="background:#f3f4f6;color:var(--text-secondary);">Keine Einträge</span>';
+      }
+
+      let bestaetigtAm = '-';
+      if (m.bestaetigt_am) {
+        const datum = new Date(m.bestaetigt_am.replace(' ', 'T'));
+        bestaetigtAm = datum.toLocaleString('de-AT', {
+          day: '2-digit', month: '2-digit', year: 'numeric',
+          hour: '2-digit', minute: '2-digit'
+        });
+      }
+
+      return `
+        <tr>
+          <td>${m.name}</td>
+          <td>${m.mitarbeiter_nr}</td>
+          <td style="text-align:center">${m.eintraege}</td>
+          <td style="text-align:right">${m.stunden.replace('.', ',')}h</td>
+          <td>${statusHtml}</td>
+          <td style="font-size:0.85em; color:var(--text-secondary)">${bestaetigtAm}</td>
+        </tr>
+      `;
+    }).join('');
+
+  } catch (error) {
+    console.error('Bestätigungsübersicht laden fehlgeschlagen:', error);
+  }
+}
+
+// Tab-Wechsel Handler für Bestätigungen
+document.addEventListener('DOMContentLoaded', () => {
+  initBestaetigungJahre();
+
+  document.querySelectorAll('.tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      if (tab.dataset.tab === 'bestaetigungen') {
+        loadBestaetigungsUebersicht();
+      }
+    });
+  });
 });

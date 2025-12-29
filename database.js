@@ -110,6 +110,22 @@ db.exec(`
     erstellt_am DATETIME DEFAULT CURRENT_TIMESTAMP
   );
 
+  -- Monatsbestätigung-Tabelle (Mitarbeiter-Bestätigung der Monatsabrechnung)
+  CREATE TABLE IF NOT EXISTS monatsbestaetigung (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    mitarbeiter_id INTEGER NOT NULL,
+    jahr INTEGER NOT NULL,
+    monat INTEGER NOT NULL,
+    bestaetigt_am DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    ip_adresse TEXT,
+    kommentar TEXT,
+    FOREIGN KEY (mitarbeiter_id) REFERENCES mitarbeiter(id),
+    UNIQUE(mitarbeiter_id, jahr, monat)
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_bestaetigung_mitarbeiter ON monatsbestaetigung(mitarbeiter_id);
+  CREATE INDEX IF NOT EXISTS idx_bestaetigung_periode ON monatsbestaetigung(jahr, monat);
+
   -- Gleitzeit-Saldo-Tabelle (Periodenbasierte Salden)
   CREATE TABLE IF NOT EXISTS gleitzeit_saldo (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1775,5 +1791,137 @@ module.exports = {
       konfig,
       mitarbeiter: uebersicht
     };
+  },
+
+  // ==================== MONATSBESTÄTIGUNG FUNKTIONEN ====================
+
+  // Monatsbestätigung erstellen
+  bestaetigeMonat: (mitarbeiterId, jahr, monat, ipAdresse = null, kommentar = null) => {
+    // Prüfen ob bereits bestätigt
+    const existing = db.prepare(`
+      SELECT id FROM monatsbestaetigung WHERE mitarbeiter_id = ? AND jahr = ? AND monat = ?
+    `).get(mitarbeiterId, jahr, monat);
+
+    if (existing) {
+      return { success: false, error: 'Monat bereits bestätigt', already_confirmed: true };
+    }
+
+    // Prüfen ob Einträge für diesen Monat existieren
+    const startDatum = `${jahr}-${String(monat).padStart(2, '0')}-01`;
+    const endeDatum = `${jahr}-${String(monat).padStart(2, '0')}-31`;
+
+    const eintraege = db.prepare(`
+      SELECT COUNT(*) as anzahl FROM zeiteintraege
+      WHERE mitarbeiter_id = ? AND datum BETWEEN ? AND ?
+    `).get(mitarbeiterId, startDatum, endeDatum);
+
+    if (eintraege.anzahl === 0) {
+      return { success: false, error: 'Keine Einträge für diesen Monat vorhanden' };
+    }
+
+    // Bestätigung speichern
+    const zeitpunkt = new Date().toISOString().replace('T', ' ').substring(0, 19);
+
+    const result = db.prepare(`
+      INSERT INTO monatsbestaetigung (mitarbeiter_id, jahr, monat, bestaetigt_am, ip_adresse, kommentar)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `).run(mitarbeiterId, jahr, monat, zeitpunkt, ipAdresse, kommentar);
+
+    // Audit-Log Eintrag
+    const lastEntry = db.prepare('SELECT eintrag_hash FROM audit_log ORDER BY id DESC LIMIT 1').get();
+    const vorherigerHash = lastEntry?.eintrag_hash || 'GENESIS';
+
+    const neueWerteJson = JSON.stringify({
+      jahr,
+      monat,
+      bestaetigt_am: zeitpunkt,
+      eintraege_anzahl: eintraege.anzahl
+    });
+
+    const hashData = `${zeitpunkt}|${mitarbeiterId}|CONFIRM|monatsbestaetigung|${result.lastInsertRowid}|null|${neueWerteJson}|${vorherigerHash}`;
+    const eintragHash = crypto.createHash('sha256').update(hashData).digest('hex');
+
+    db.prepare(`
+      INSERT INTO audit_log (zeitpunkt, mitarbeiter_id, aktion, tabelle, datensatz_id, alte_werte, neue_werte, ip_adresse, vorheriger_hash, eintrag_hash)
+      VALUES (?, ?, 'CONFIRM', 'monatsbestaetigung', ?, NULL, ?, ?, ?, ?)
+    `).run(
+      zeitpunkt,
+      mitarbeiterId,
+      result.lastInsertRowid,
+      neueWerteJson,
+      ipAdresse,
+      vorherigerHash,
+      eintragHash
+    );
+
+    return {
+      success: true,
+      id: result.lastInsertRowid,
+      bestaetigt_am: zeitpunkt,
+      eintraege_anzahl: eintraege.anzahl
+    };
+  },
+
+  // Bestätigungsstatus für einen Monat prüfen
+  getMonatsbestaetigung: (mitarbeiterId, jahr, monat) => {
+    const bestaetigung = db.prepare(`
+      SELECT mb.*, m.name as mitarbeiter_name, m.mitarbeiter_nr
+      FROM monatsbestaetigung mb
+      JOIN mitarbeiter m ON m.id = mb.mitarbeiter_id
+      WHERE mb.mitarbeiter_id = ? AND mb.jahr = ? AND mb.monat = ?
+    `).get(mitarbeiterId, jahr, monat);
+
+    return bestaetigung || null;
+  },
+
+  // Alle Bestätigungen für einen Mitarbeiter
+  getMitarbeiterBestaetigungen: (mitarbeiterId, limit = 24) => {
+    return db.prepare(`
+      SELECT * FROM monatsbestaetigung
+      WHERE mitarbeiter_id = ?
+      ORDER BY jahr DESC, monat DESC
+      LIMIT ?
+    `).all(mitarbeiterId, limit);
+  },
+
+  // Bestätigungsübersicht für Admin (alle Mitarbeiter für einen Monat)
+  getBestaetigungsUebersicht: (jahr, monat) => {
+    // Alle aktiven Mitarbeiter holen
+    const mitarbeiter = db.prepare(`
+      SELECT id, mitarbeiter_nr, name FROM mitarbeiter WHERE aktiv = 1 ORDER BY name
+    `).all();
+
+    const startDatum = `${jahr}-${String(monat).padStart(2, '0')}-01`;
+    const endeDatum = `${jahr}-${String(monat).padStart(2, '0')}-31`;
+
+    return mitarbeiter.map(m => {
+      // Bestätigung prüfen
+      const bestaetigung = db.prepare(`
+        SELECT bestaetigt_am FROM monatsbestaetigung
+        WHERE mitarbeiter_id = ? AND jahr = ? AND monat = ?
+      `).get(m.id, jahr, monat);
+
+      // Einträge zählen
+      const eintraege = db.prepare(`
+        SELECT COUNT(*) as anzahl,
+               COALESCE(SUM(
+                 (strftime('%H', arbeitsende) * 60 + strftime('%M', arbeitsende)) -
+                 (strftime('%H', arbeitsbeginn) * 60 + strftime('%M', arbeitsbeginn)) -
+                 pause_minuten
+               ), 0) as minuten
+        FROM zeiteintraege
+        WHERE mitarbeiter_id = ? AND datum BETWEEN ? AND ?
+      `).get(m.id, startDatum, endeDatum);
+
+      return {
+        mitarbeiter_id: m.id,
+        mitarbeiter_nr: m.mitarbeiter_nr,
+        name: m.name,
+        eintraege: eintraege.anzahl,
+        stunden: (eintraege.minuten / 60).toFixed(2),
+        bestaetigt: !!bestaetigung,
+        bestaetigt_am: bestaetigung?.bestaetigt_am || null
+      };
+    });
   }
 };

@@ -265,6 +265,11 @@
         </p>
       </div>
 
+      <!-- Bestätigungsbereich -->
+      <div id="ma-bestaetigung" class="ma-bestaetigung" style="display:none; margin-top:20px; padding:20px; background:var(--bg-light); border-radius:8px; border:1px solid var(--border);">
+        <div id="ma-bestaetigung-content"></div>
+      </div>
+
       <div class="modal-actions" style="margin-top:20px; border-top:1px solid var(--border); padding-top:20px;">
         <button type="button" class="btn btn-secondary" onclick="closeMonatsabrechnungModal()">Schließen</button>
         <button type="button" class="btn btn-primary" onclick="printMonatsabrechnung()">Drucken / PDF</button>
@@ -294,6 +299,7 @@
       <div class="tabs">
         <button class="tab active" data-tab="eintraege">Zeiteinträge</button>
         <button class="tab" data-tab="statistik">Statistik</button>
+        <button class="tab" data-tab="bestaetigungen">Bestätigungen</button>
         <button class="tab" data-tab="gleitzeit">Gleitzeit</button>
         <button class="tab" data-tab="verstoesse">Verstöße</button>
         <button class="tab" data-tab="mitarbeiter">Mitarbeiter</button>
@@ -405,6 +411,66 @@
             </table>
           </div>
           <div id="admin-statistik-total" class="statistik-total"></div>
+        </div>
+      </div>
+
+      <!-- Bestätigungen Tab -->
+      <div id="tab-bestaetigungen" class="tab-content hidden">
+        <div class="card">
+          <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom:20px;">
+            <h2 style="margin:0">Monatsbestätigungen</h2>
+            <div style="display:flex; gap:10px; align-items:center;">
+              <select id="bestaetigung-monat" style="padding:8px 12px;border:1px solid var(--border);border-radius:6px;">
+                <option value="1">Januar</option>
+                <option value="2">Februar</option>
+                <option value="3">März</option>
+                <option value="4">April</option>
+                <option value="5">Mai</option>
+                <option value="6">Juni</option>
+                <option value="7">Juli</option>
+                <option value="8">August</option>
+                <option value="9">September</option>
+                <option value="10">Oktober</option>
+                <option value="11">November</option>
+                <option value="12">Dezember</option>
+              </select>
+              <select id="bestaetigung-jahr" style="padding:8px 12px;border:1px solid var(--border);border-radius:6px;">
+              </select>
+              <button class="btn btn-primary" onclick="loadBestaetigungsUebersicht()">Aktualisieren</button>
+            </div>
+          </div>
+
+          <!-- Statistik-Karten -->
+          <div id="bestaetigung-stats" class="verstoesse-stats" style="margin-bottom:20px;">
+            <div class="stat-card stat-total">
+              <div class="stat-value" id="bestaetigung-stat-gesamt">-</div>
+              <div class="stat-label">Mitarbeiter</div>
+            </div>
+            <div class="stat-card" style="background:linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%); border-color:#a7f3d0;">
+              <div class="stat-value" id="bestaetigung-stat-bestaetigt" style="color:var(--success);">-</div>
+              <div class="stat-label">Bestätigt</div>
+            </div>
+            <div class="stat-card stat-warnung">
+              <div class="stat-value" id="bestaetigung-stat-offen">-</div>
+              <div class="stat-label">Offen</div>
+            </div>
+          </div>
+
+          <div class="table-container">
+            <table id="bestaetigungen-table">
+              <thead>
+                <tr>
+                  <th>Mitarbeiter</th>
+                  <th>Nr.</th>
+                  <th>Einträge</th>
+                  <th>Stunden</th>
+                  <th>Status</th>
+                  <th>Bestätigt am</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
         </div>
       </div>
 
