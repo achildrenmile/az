@@ -164,8 +164,9 @@
               <tr>
                 <th>Zeitraum</th>
                 <th>Tage</th>
-                <th>Stunden</th>
-                <th>Überstunden</th>
+                <th>Gesamt</th>
+                <th>Normal</th>
+                <th>+/-</th>
               </tr>
             </thead>
             <tbody></tbody>
@@ -254,6 +255,7 @@
         <button class="tab" data-tab="kunden">Kunden</button>
         <button class="tab" data-tab="baustellen">Baustellen</button>
         <button class="tab" data-tab="pausenregeln">Pausenregeln</button>
+        <button class="tab" data-tab="einstellungen">Einstellungen</button>
       </div>
 
       <!-- Zeiteinträge Tab -->
@@ -347,9 +349,10 @@
                   <th>Mitarbeiter</th>
                   <th>Nr.</th>
                   <th>Tage</th>
-                  <th>Stunden</th>
-                  <th>Soll (h)</th>
-                  <th>Überstunden</th>
+                  <th>Gesamt</th>
+                  <th>Soll</th>
+                  <th>Normal</th>
+                  <th>+/-</th>
                 </tr>
               </thead>
               <tbody></tbody>
@@ -465,6 +468,74 @@
               <tbody></tbody>
             </table>
           </div>
+        </div>
+      </div>
+
+      <!-- Einstellungen Tab -->
+      <div id="tab-einstellungen" class="tab-content hidden">
+        <div class="card">
+          <h2>Arbeitszeit-Einstellungen</h2>
+          <p style="color: var(--text-secondary); margin-bottom: 20px;">
+            Konfigurieren Sie die Soll-Arbeitszeiten für die Berechnung von Normal- und Überstunden.
+          </p>
+          <div id="einstellungen-message" class="message"></div>
+
+          <form id="einstellungen-form">
+            <div class="settings-grid">
+              <div class="settings-section">
+                <h3>Soll-Arbeitszeit</h3>
+                <div class="form-group">
+                  <label for="setting-wochenstunden">Soll-Wochenstunden</label>
+                  <div class="input-with-unit">
+                    <input type="number" id="setting-wochenstunden" min="1" max="60" step="0.5" value="40">
+                    <span class="unit">Std/Woche</span>
+                  </div>
+                  <small>Standard-Arbeitszeit pro Woche (z.B. 40h)</small>
+                </div>
+                <div class="form-group">
+                  <label for="setting-monatsstunden">Soll-Monatsstunden</label>
+                  <div class="input-with-unit">
+                    <input type="number" id="setting-monatsstunden" min="1" max="260" step="1" value="173">
+                    <span class="unit">Std/Monat</span>
+                  </div>
+                  <small>Standard-Arbeitszeit pro Monat (ca. Wochenstunden x 4,33)</small>
+                </div>
+              </div>
+
+              <div class="settings-section">
+                <h3>Maximale Arbeitszeit (AZG §9)</h3>
+                <div class="form-group">
+                  <label for="setting-max-tag">Max. Tagesstunden</label>
+                  <div class="input-with-unit">
+                    <input type="number" id="setting-max-tag" min="1" max="16" step="0.5" value="10">
+                    <span class="unit">Std/Tag</span>
+                  </div>
+                  <small>Maximale Arbeitszeit pro Tag (AZG: 10h)</small>
+                </div>
+                <div class="form-group">
+                  <label for="setting-max-woche">Max. Wochenstunden</label>
+                  <div class="input-with-unit">
+                    <input type="number" id="setting-max-woche" min="1" max="72" step="1" value="50">
+                    <span class="unit">Std/Woche</span>
+                  </div>
+                  <small>Maximale Arbeitszeit pro Woche (AZG: 50h)</small>
+                </div>
+              </div>
+            </div>
+
+            <div class="settings-info">
+              <h4>Erklärung</h4>
+              <ul>
+                <li><strong>Normalstunden:</strong> Arbeitszeit bis zur Soll-Arbeitszeit</li>
+                <li><strong>Überstunden:</strong> Arbeitszeit über der Soll-Arbeitszeit</li>
+                <li><strong>Max. Grenzen:</strong> Bei Überschreitung wird ein AZG-Verstoß gemeldet</li>
+              </ul>
+            </div>
+
+            <div style="margin-top: 20px;">
+              <button type="submit" class="btn btn-primary">Einstellungen speichern</button>
+            </div>
+          </form>
         </div>
       </div>
     </div>

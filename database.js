@@ -123,6 +123,31 @@ if (!pausenregelExists) {
   console.log('Standard-Pausenregel (AZG §11) erstellt');
 }
 
+// Einstellungen-Tabelle erstellen
+db.exec(`
+  CREATE TABLE IF NOT EXISTS einstellungen (
+    schluessel TEXT PRIMARY KEY,
+    wert TEXT NOT NULL,
+    beschreibung TEXT,
+    aktualisiert_am DATETIME DEFAULT CURRENT_TIMESTAMP
+  )
+`);
+
+// Standard-Einstellungen für Arbeitsstunden einfügen
+const defaultSettings = [
+  { key: 'standard_wochenstunden', value: '40', desc: 'Soll-Arbeitszeit pro Woche (Stunden)' },
+  { key: 'standard_monatsstunden', value: '173', desc: 'Soll-Arbeitszeit pro Monat (Stunden)' },
+  { key: 'max_tagesstunden', value: '10', desc: 'Maximale Arbeitszeit pro Tag (§9 AZG)' },
+  { key: 'max_wochenstunden', value: '50', desc: 'Maximale Arbeitszeit pro Woche (§9 AZG)' }
+];
+
+defaultSettings.forEach(s => {
+  const exists = db.prepare('SELECT schluessel FROM einstellungen WHERE schluessel = ?').get(s.key);
+  if (!exists) {
+    db.prepare('INSERT INTO einstellungen (schluessel, wert, beschreibung) VALUES (?, ?, ?)').run(s.key, s.value, s.desc);
+  }
+});
+
 // Migration: Neue Spalten hinzufügen falls sie fehlen
 try {
   db.exec(`ALTER TABLE kunden ADD COLUMN ansprechpartner TEXT`);
@@ -847,5 +872,53 @@ module.exports = {
     }
 
     return verstoesse;
+  },
+
+  // ==================== EINSTELLUNGEN ====================
+
+  // Alle Einstellungen abrufen
+  getAllEinstellungen: () => {
+    return db.prepare('SELECT * FROM einstellungen ORDER BY schluessel').all();
+  },
+
+  // Einzelne Einstellung abrufen
+  getEinstellung: (schluessel) => {
+    const row = db.prepare('SELECT wert FROM einstellungen WHERE schluessel = ?').get(schluessel);
+    return row ? row.wert : null;
+  },
+
+  // Einstellung als Zahl abrufen
+  getEinstellungNumber: (schluessel, defaultValue = 0) => {
+    const wert = db.prepare('SELECT wert FROM einstellungen WHERE schluessel = ?').get(schluessel);
+    return wert ? parseFloat(wert.wert) : defaultValue;
+  },
+
+  // Einstellung setzen
+  setEinstellung: (schluessel, wert, beschreibung = null) => {
+    const exists = db.prepare('SELECT schluessel FROM einstellungen WHERE schluessel = ?').get(schluessel);
+    if (exists) {
+      return db.prepare(`
+        UPDATE einstellungen SET wert = ?, aktualisiert_am = CURRENT_TIMESTAMP WHERE schluessel = ?
+      `).run(wert, schluessel);
+    } else {
+      return db.prepare(`
+        INSERT INTO einstellungen (schluessel, wert, beschreibung) VALUES (?, ?, ?)
+      `).run(schluessel, wert, beschreibung || '');
+    }
+  },
+
+  // Arbeitsstunden-Konfiguration abrufen
+  getArbeitszeitKonfig: () => {
+    const konfig = {};
+    const einstellungen = db.prepare('SELECT schluessel, wert FROM einstellungen').all();
+    einstellungen.forEach(e => {
+      konfig[e.schluessel] = parseFloat(e.wert) || e.wert;
+    });
+    return {
+      standardWochenstunden: konfig.standard_wochenstunden || 40,
+      standardMonatsstunden: konfig.standard_monatsstunden || 173,
+      maxTagesstunden: konfig.max_tagesstunden || 10,
+      maxWochenstunden: konfig.max_wochenstunden || 50
+    };
   }
 };

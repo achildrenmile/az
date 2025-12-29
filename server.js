@@ -330,21 +330,27 @@ app.delete('/api/zeiteintraege/:id', checkSession, (req, res) => {
 
 // ==================== STATISTIK ROUTES ====================
 
-// Standard-Wochenstunden für Überstundenberechnung
-const STANDARD_WOCHENSTUNDEN = 40;
-const STANDARD_MONATSSTUNDEN = 173; // ca. 40h * 4.33 Wochen
-
 // Eigene Statistik (Mitarbeiter)
 app.get('/api/statistik/wochen', checkSession, (req, res) => {
   const jahr = parseInt(req.query.jahr) || new Date().getFullYear();
   const wochen = db.getJahresWochenstatistik(req.session.id, jahr);
+  const konfig = db.getArbeitszeitKonfig();
 
-  // Überstunden berechnen
-  const result = wochen.map(w => ({
-    ...w,
-    stunden: Math.round((w.gesamtminuten || 0) / 60 * 100) / 100,
-    ueberstunden: Math.round(((w.gesamtminuten || 0) / 60 - STANDARD_WOCHENSTUNDEN) * 100) / 100
-  }));
+  // Überstunden berechnen (konfigurierbar)
+  const result = wochen.map(w => {
+    const stunden = Math.round((w.gesamtminuten || 0) / 60 * 100) / 100;
+    const normalstunden = Math.min(stunden, konfig.standardWochenstunden);
+    const ueberstunden = Math.round((stunden - konfig.standardWochenstunden) * 100) / 100;
+
+    return {
+      ...w,
+      stunden,
+      normalstunden,
+      ueberstunden: Math.max(0, ueberstunden),
+      minderstunden: Math.max(0, -ueberstunden),
+      sollstunden: konfig.standardWochenstunden
+    };
+  });
 
   res.json(result);
 });
@@ -352,16 +358,26 @@ app.get('/api/statistik/wochen', checkSession, (req, res) => {
 app.get('/api/statistik/monate', checkSession, (req, res) => {
   const jahr = parseInt(req.query.jahr) || new Date().getFullYear();
   const monate = db.getJahresMonatsstatistik(req.session.id, jahr);
+  const konfig = db.getArbeitszeitKonfig();
 
   const monatsNamen = ['', 'Januar', 'Februar', 'März', 'April', 'Mai', 'Juni',
     'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember'];
 
-  const result = monate.map(m => ({
-    ...m,
-    monatName: monatsNamen[parseInt(m.monat)],
-    stunden: Math.round((m.gesamtminuten || 0) / 60 * 100) / 100,
-    ueberstunden: Math.round(((m.gesamtminuten || 0) / 60 - STANDARD_MONATSSTUNDEN) * 100) / 100
-  }));
+  const result = monate.map(m => {
+    const stunden = Math.round((m.gesamtminuten || 0) / 60 * 100) / 100;
+    const normalstunden = Math.min(stunden, konfig.standardMonatsstunden);
+    const ueberstunden = Math.round((stunden - konfig.standardMonatsstunden) * 100) / 100;
+
+    return {
+      ...m,
+      monatName: monatsNamen[parseInt(m.monat)],
+      stunden,
+      normalstunden,
+      ueberstunden: Math.max(0, ueberstunden),
+      minderstunden: Math.max(0, -ueberstunden),
+      sollstunden: konfig.standardMonatsstunden
+    };
+  });
 
   res.json(result);
 });
@@ -370,14 +386,24 @@ app.get('/api/statistik/monate', checkSession, (req, res) => {
 app.get('/api/admin/statistik/uebersicht', checkSession, checkAdmin, (req, res) => {
   const jahr = parseInt(req.query.jahr) || new Date().getFullYear();
   const monat = parseInt(req.query.monat) || new Date().getMonth() + 1;
+  const konfig = db.getArbeitszeitKonfig();
 
   const statistik = db.getAlleMitarbeiterStatistik(jahr, monat);
 
-  const result = statistik.map(s => ({
-    ...s,
-    stunden: Math.round((s.gesamtminuten || 0) / 60 * 100) / 100,
-    ueberstunden: Math.round(((s.gesamtminuten || 0) / 60 - STANDARD_MONATSSTUNDEN) * 100) / 100
-  }));
+  const result = statistik.map(s => {
+    const stunden = Math.round((s.gesamtminuten || 0) / 60 * 100) / 100;
+    const normalstunden = Math.min(stunden, konfig.standardMonatsstunden);
+    const ueberstunden = Math.round((stunden - konfig.standardMonatsstunden) * 100) / 100;
+
+    return {
+      ...s,
+      stunden,
+      normalstunden,
+      ueberstunden: Math.max(0, ueberstunden),
+      minderstunden: Math.max(0, -ueberstunden),
+      sollstunden: konfig.standardMonatsstunden
+    };
+  });
 
   res.json(result);
 });
@@ -386,25 +412,44 @@ app.get('/api/admin/statistik/mitarbeiter/:id', checkSession, checkAdmin, (req, 
   const mitarbeiterId = parseInt(req.params.id);
   const jahr = parseInt(req.query.jahr) || new Date().getFullYear();
   const typ = req.query.typ || 'monate'; // 'wochen' oder 'monate'
+  const konfig = db.getArbeitszeitKonfig();
 
   if (typ === 'wochen') {
     const wochen = db.getJahresWochenstatistik(mitarbeiterId, jahr);
-    const result = wochen.map(w => ({
-      ...w,
-      stunden: Math.round((w.gesamtminuten || 0) / 60 * 100) / 100,
-      ueberstunden: Math.round(((w.gesamtminuten || 0) / 60 - STANDARD_WOCHENSTUNDEN) * 100) / 100
-    }));
+    const result = wochen.map(w => {
+      const stunden = Math.round((w.gesamtminuten || 0) / 60 * 100) / 100;
+      const normalstunden = Math.min(stunden, konfig.standardWochenstunden);
+      const ueberstunden = Math.round((stunden - konfig.standardWochenstunden) * 100) / 100;
+
+      return {
+        ...w,
+        stunden,
+        normalstunden,
+        ueberstunden: Math.max(0, ueberstunden),
+        minderstunden: Math.max(0, -ueberstunden),
+        sollstunden: konfig.standardWochenstunden
+      };
+    });
     res.json(result);
   } else {
     const monate = db.getJahresMonatsstatistik(mitarbeiterId, jahr);
     const monatsNamen = ['', 'Januar', 'Februar', 'März', 'April', 'Mai', 'Juni',
       'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember'];
-    const result = monate.map(m => ({
-      ...m,
-      monatName: monatsNamen[parseInt(m.monat)],
-      stunden: Math.round((m.gesamtminuten || 0) / 60 * 100) / 100,
-      ueberstunden: Math.round(((m.gesamtminuten || 0) / 60 - STANDARD_MONATSSTUNDEN) * 100) / 100
-    }));
+    const result = monate.map(m => {
+      const stunden = Math.round((m.gesamtminuten || 0) / 60 * 100) / 100;
+      const normalstunden = Math.min(stunden, konfig.standardMonatsstunden);
+      const ueberstunden = Math.round((stunden - konfig.standardMonatsstunden) * 100) / 100;
+
+      return {
+        ...m,
+        monatName: monatsNamen[parseInt(m.monat)],
+        stunden,
+        normalstunden,
+        ueberstunden: Math.max(0, ueberstunden),
+        minderstunden: Math.max(0, -ueberstunden),
+        sollstunden: konfig.standardMonatsstunden
+      };
+    });
     res.json(result);
   }
 });
@@ -773,6 +818,79 @@ app.post('/api/check-pause', checkSession, (req, res) => {
   });
 });
 
+// ==================== EINSTELLUNGEN ROUTES ====================
+
+// Alle Einstellungen abrufen (Admin)
+app.get('/api/admin/einstellungen', checkSession, checkAdmin, (req, res) => {
+  const einstellungen = db.getAlleEinstellungen();
+  res.json(einstellungen);
+});
+
+// Arbeitszeitkonfiguration abrufen (für Frontend)
+app.get('/api/einstellungen/arbeitszeit', checkSession, (req, res) => {
+  const konfig = db.getArbeitszeitKonfig();
+  res.json(konfig);
+});
+
+// Einstellung aktualisieren (Admin)
+app.put('/api/admin/einstellungen/:schluessel', checkSession, checkAdmin, (req, res) => {
+  const { schluessel } = req.params;
+  const { wert } = req.body;
+
+  if (wert === undefined || wert === null) {
+    return res.status(400).json({ error: 'Wert erforderlich' });
+  }
+
+  // Validierung für numerische Werte
+  const numValue = parseFloat(wert);
+  if (isNaN(numValue) || numValue < 0) {
+    return res.status(400).json({ error: 'Wert muss eine positive Zahl sein' });
+  }
+
+  // Spezifische Validierungen
+  if (schluessel === 'standard_wochenstunden' && (numValue < 1 || numValue > 60)) {
+    return res.status(400).json({ error: 'Wochenstunden müssen zwischen 1 und 60 liegen' });
+  }
+  if (schluessel === 'standard_monatsstunden' && (numValue < 1 || numValue > 260)) {
+    return res.status(400).json({ error: 'Monatsstunden müssen zwischen 1 und 260 liegen' });
+  }
+  if (schluessel === 'max_tagesstunden' && (numValue < 1 || numValue > 16)) {
+    return res.status(400).json({ error: 'Max. Tagesstunden müssen zwischen 1 und 16 liegen' });
+  }
+  if (schluessel === 'max_wochenstunden' && (numValue < 1 || numValue > 72)) {
+    return res.status(400).json({ error: 'Max. Wochenstunden müssen zwischen 1 und 72 liegen' });
+  }
+
+  try {
+    db.updateEinstellung(schluessel, wert.toString());
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Einstellung aktualisieren fehlgeschlagen:', error);
+    res.status(500).json({ error: 'Fehler beim Aktualisieren' });
+  }
+});
+
+// Mehrere Einstellungen auf einmal aktualisieren (Admin)
+app.put('/api/admin/einstellungen', checkSession, checkAdmin, (req, res) => {
+  const einstellungen = req.body;
+
+  if (!einstellungen || typeof einstellungen !== 'object') {
+    return res.status(400).json({ error: 'Einstellungen-Objekt erforderlich' });
+  }
+
+  try {
+    for (const [schluessel, wert] of Object.entries(einstellungen)) {
+      if (wert !== undefined && wert !== null) {
+        db.updateEinstellung(schluessel, wert.toString());
+      }
+    }
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Einstellungen aktualisieren fehlgeschlagen:', error);
+    res.status(500).json({ error: 'Fehler beim Aktualisieren' });
+  }
+});
+
 // Helper: Datum formatieren (österreichisches Format DD.MM.YYYY)
 function formatDateAT(dateStr) {
   if (!dateStr) return '';
@@ -798,17 +916,22 @@ app.get('/api/admin/export/csv', checkSession, checkAdmin, (req, res) => {
   const eintraege = db.getExportDaten(mitarbeiter || null, von, bis);
   const wochenTotals = db.getWochenTotals(mitarbeiter || null, von, bis);
   const verstoesse = db.getAZGVerstoesse(mitarbeiter || null, von, bis);
+  const konfig = db.getArbeitszeitKonfig();
 
   let csv = '';
 
   // Abschnitt 1: Tägliche Aufzeichnungen
   csv += '=== TÄGLICHE AUFZEICHNUNGEN ===\n';
-  csv += 'Datum;Mitarbeiter-Nr;Name;Beginn;Ende;Pause (Min);Netto (Std);Baustelle;Kunde;Anfahrt;Notizen\n';
+  csv += 'Datum;Mitarbeiter-Nr;Name;Beginn;Ende;Pause (Min);Netto (Std);Normalstd;Überstd;Baustelle;Kunde;Anfahrt;Notizen\n';
 
   eintraege.forEach(e => {
     const beginnMin = parseInt(e.arbeitsbeginn.split(':')[0]) * 60 + parseInt(e.arbeitsbeginn.split(':')[1]);
     const endeMin = parseInt(e.arbeitsende.split(':')[0]) * 60 + parseInt(e.arbeitsende.split(':')[1]);
     const nettoMinuten = endeMin - beginnMin - e.pause_minuten;
+    const nettoStunden = nettoMinuten / 60;
+    // Tägliche Normalstunden = max. maxTagesstunden pro Tag
+    const tagesNormal = Math.min(nettoStunden, konfig.maxTagesstunden);
+    const tagesUeber = Math.max(0, nettoStunden - konfig.maxTagesstunden);
 
     csv += [
       formatDateAT(e.datum),
@@ -818,6 +941,8 @@ app.get('/api/admin/export/csv', checkSession, checkAdmin, (req, res) => {
       e.arbeitsende,
       e.pause_minuten,
       formatStunden(nettoMinuten),
+      tagesNormal.toFixed(2).replace('.', ','),
+      tagesUeber.toFixed(2).replace('.', ','),
       `"${e.baustelle || ''}"`,
       `"${e.kunde || ''}"`,
       `"${e.anfahrt || ''}"`,
@@ -827,11 +952,12 @@ app.get('/api/admin/export/csv', checkSession, checkAdmin, (req, res) => {
 
   // Abschnitt 2: Wochen-Totals
   csv += '\n=== WOCHEN-TOTALS ===\n';
-  csv += 'Mitarbeiter-Nr;Name;Jahr;KW;Von;Bis;Arbeitstage;Netto (Std);Pause gesamt (Min);Überstunden (Std)\n';
+  csv += 'Mitarbeiter-Nr;Name;Jahr;KW;Von;Bis;Arbeitstage;Netto (Std);Soll (Std);Normalstd;Überstunden (Std);Pause gesamt (Min)\n';
 
   wochenTotals.forEach(w => {
     const nettoStunden = w.netto_minuten / 60;
-    const ueberstunden = nettoStunden - STANDARD_WOCHENSTUNDEN;
+    const normalstunden = Math.min(nettoStunden, konfig.standardWochenstunden);
+    const ueberstunden = Math.max(0, nettoStunden - konfig.standardWochenstunden);
 
     csv += [
       w.mitarbeiter_nr,
@@ -842,8 +968,10 @@ app.get('/api/admin/export/csv', checkSession, checkAdmin, (req, res) => {
       formatDateAT(w.woche_ende),
       w.arbeitstage,
       formatStunden(w.netto_minuten),
-      w.gesamt_pause,
-      ueberstunden.toFixed(2).replace('.', ',')
+      konfig.standardWochenstunden,
+      normalstunden.toFixed(2).replace('.', ','),
+      ueberstunden.toFixed(2).replace('.', ','),
+      w.gesamt_pause
     ].join(';') + '\n';
   });
 
@@ -890,6 +1018,7 @@ app.get('/api/admin/export/pdf', checkSession, checkAdmin, (req, res) => {
   const eintraege = db.getExportDaten(mitarbeiter || null, von, bis);
   const wochenTotals = db.getWochenTotals(mitarbeiter || null, von, bis);
   const verstoesse = db.getAZGVerstoesse(mitarbeiter || null, von, bis);
+  const konfig = db.getArbeitszeitKonfig();
 
   // PDF erstellen
   const doc = new PDFDocument({ margin: 40, size: 'A4' });
@@ -958,7 +1087,8 @@ app.get('/api/admin/export/pdf', checkSession, checkAdmin, (req, res) => {
       }
 
       const nettoStunden = w.netto_minuten / 60;
-      const ueberstunden = nettoStunden - STANDARD_WOCHENSTUNDEN;
+      const normalstunden = Math.min(nettoStunden, konfig.standardWochenstunden);
+      const ueberstunden = nettoStunden - konfig.standardWochenstunden;
 
       x = 40;
       doc.text(w.mitarbeiter_nr, x, y, { width: colWidths[0] }); x += colWidths[0];
@@ -969,7 +1099,7 @@ app.get('/api/admin/export/pdf', checkSession, checkAdmin, (req, res) => {
       doc.text(formatStunden(w.netto_minuten).replace(',', '.'), x, y, { width: colWidths[5] }); x += colWidths[5];
 
       // Überstunden farbig
-      const ueberText = ueberstunden.toFixed(1);
+      const ueberText = ueberstunden > 0 ? ueberstunden.toFixed(1) : ueberstunden.toFixed(1);
       if (ueberstunden > 0) {
         doc.fillColor('#060').text(`+${ueberText}`, x, y, { width: colWidths[6] });
       } else if (ueberstunden < 0) {

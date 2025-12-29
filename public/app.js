@@ -1467,7 +1467,7 @@ async function loadUserStatistik() {
     const tbody = document.querySelector('#statistik-table tbody');
 
     if (!data || data.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;padding:40px;color:var(--text-secondary)">Keine Daten für diesen Zeitraum</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:40px;color:var(--text-secondary)">Keine Daten für diesen Zeitraum</td></tr>';
       document.getElementById('statistik-total').innerHTML = '';
       return;
     }
@@ -1476,15 +1476,29 @@ async function loadUserStatistik() {
       const zeitraum = currentStatistikType === 'wochen'
         ? `KW ${row.kalenderwoche}`
         : row.monatName;
-      const ueberstundenClass = row.ueberstunden >= 0 ? 'ueberstunden-positiv' : 'ueberstunden-negativ';
-      const ueberstundenPrefix = row.ueberstunden >= 0 ? '+' : '';
+
+      // Überstunden/Minderstunden Anzeige
+      let diffHtml = '';
+      if (row.ueberstunden > 0) {
+        diffHtml = `<span class="stunden-ueber">+${row.ueberstunden.toFixed(2)} h</span>`;
+      } else if (row.minderstunden > 0) {
+        diffHtml = `<span class="stunden-minder">-${row.minderstunden.toFixed(2)} h</span>`;
+      } else {
+        diffHtml = `<span class="stunden-detail">±0 h</span>`;
+      }
 
       return `
         <tr>
           <td>${zeitraum}</td>
           <td>${row.tage}</td>
-          <td>${row.stunden.toFixed(2)} h</td>
-          <td class="${ueberstundenClass}">${ueberstundenPrefix}${row.ueberstunden.toFixed(2)} h</td>
+          <td>
+            <div class="stunden-cell">
+              <span class="stunden-normal">${row.stunden.toFixed(2)} h</span>
+              <span class="stunden-detail">Soll: ${row.sollstunden} h</span>
+            </div>
+          </td>
+          <td>${(row.normalstunden || 0).toFixed(2)} h</td>
+          <td>${diffHtml}</td>
         </tr>
       `;
     }).join('');
@@ -1492,9 +1506,15 @@ async function loadUserStatistik() {
     // Totals berechnen
     const totalTage = data.reduce((sum, r) => sum + (r.tage || 0), 0);
     const totalStunden = data.reduce((sum, r) => sum + (r.stunden || 0), 0);
+    const totalNormalstunden = data.reduce((sum, r) => sum + (r.normalstunden || 0), 0);
     const totalUeberstunden = data.reduce((sum, r) => sum + (r.ueberstunden || 0), 0);
-    const ueberstundenClass = totalUeberstunden >= 0 ? 'positive' : 'negative';
-    const ueberstundenPrefix = totalUeberstunden >= 0 ? '+' : '';
+    const totalMinderstunden = data.reduce((sum, r) => sum + (r.minderstunden || 0), 0);
+    const totalSoll = data.reduce((sum, r) => sum + (r.sollstunden || 0), 0);
+
+    // Netto Über-/Minderstunden
+    const nettoDiff = totalUeberstunden - totalMinderstunden;
+    const diffClass = nettoDiff >= 0 ? 'positive' : 'negative';
+    const diffPrefix = nettoDiff >= 0 ? '+' : '';
 
     document.getElementById('statistik-total').innerHTML = `
       <div class="statistik-total-item">
@@ -1506,8 +1526,16 @@ async function loadUserStatistik() {
         <span class="statistik-total-value">${totalStunden.toFixed(2)} h</span>
       </div>
       <div class="statistik-total-item">
-        <span class="statistik-total-label">Überstunden</span>
-        <span class="statistik-total-value ${ueberstundenClass}">${ueberstundenPrefix}${totalUeberstunden.toFixed(2)} h</span>
+        <span class="statistik-total-label">Soll-Stunden</span>
+        <span class="statistik-total-value">${totalSoll.toFixed(0)} h</span>
+      </div>
+      <div class="statistik-total-item">
+        <span class="statistik-total-label">Normalstunden</span>
+        <span class="statistik-total-value">${totalNormalstunden.toFixed(2)} h</span>
+      </div>
+      <div class="statistik-total-item">
+        <span class="statistik-total-label">Bilanz</span>
+        <span class="statistik-total-value ${diffClass}">${diffPrefix}${nettoDiff.toFixed(2)} h</span>
       </div>
     `;
   } catch (error) {
@@ -1525,16 +1553,21 @@ async function loadAdminStatistik() {
     const tbody = document.querySelector('#admin-statistik-table tbody');
 
     if (!data || data.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:40px;color:var(--text-secondary)">Keine Daten für diesen Zeitraum</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:40px;color:var(--text-secondary)">Keine Daten für diesen Zeitraum</td></tr>';
       document.getElementById('admin-statistik-total').innerHTML = '';
       return;
     }
 
-    const SOLL_STUNDEN = 173; // Monatssoll
-
     tbody.innerHTML = data.map(row => {
-      const ueberstundenClass = row.ueberstunden >= 0 ? 'ueberstunden-positiv' : 'ueberstunden-negativ';
-      const ueberstundenPrefix = row.ueberstunden >= 0 ? '+' : '';
+      // Überstunden/Minderstunden Anzeige
+      let diffHtml = '';
+      if (row.ueberstunden > 0) {
+        diffHtml = `<span class="stunden-ueber">+${row.ueberstunden.toFixed(2)} h</span>`;
+      } else if (row.minderstunden > 0) {
+        diffHtml = `<span class="stunden-minder">-${row.minderstunden.toFixed(2)} h</span>`;
+      } else {
+        diffHtml = `<span class="stunden-detail">±0 h</span>`;
+      }
 
       return `
         <tr>
@@ -1542,8 +1575,9 @@ async function loadAdminStatistik() {
           <td>${row.mitarbeiter_nr}</td>
           <td>${row.tage}</td>
           <td>${row.stunden.toFixed(2)} h</td>
-          <td>${SOLL_STUNDEN} h</td>
-          <td class="${ueberstundenClass}">${ueberstundenPrefix}${row.ueberstunden.toFixed(2)} h</td>
+          <td>${row.sollstunden || 173} h</td>
+          <td>${(row.normalstunden || 0).toFixed(2)} h</td>
+          <td>${diffHtml}</td>
         </tr>
       `;
     }).join('');
@@ -1551,9 +1585,15 @@ async function loadAdminStatistik() {
     // Totals
     const totalTage = data.reduce((sum, r) => sum + (r.tage || 0), 0);
     const totalStunden = data.reduce((sum, r) => sum + (r.stunden || 0), 0);
+    const totalNormalstunden = data.reduce((sum, r) => sum + (r.normalstunden || 0), 0);
     const totalUeberstunden = data.reduce((sum, r) => sum + (r.ueberstunden || 0), 0);
-    const ueberstundenClass = totalUeberstunden >= 0 ? 'positive' : 'negative';
-    const ueberstundenPrefix = totalUeberstunden >= 0 ? '+' : '';
+    const totalMinderstunden = data.reduce((sum, r) => sum + (r.minderstunden || 0), 0);
+    const totalSoll = data.reduce((sum, r) => sum + (r.sollstunden || 173), 0);
+
+    // Netto Über-/Minderstunden
+    const nettoDiff = totalUeberstunden - totalMinderstunden;
+    const diffClass = nettoDiff >= 0 ? 'positive' : 'negative';
+    const diffPrefix = nettoDiff >= 0 ? '+' : '';
 
     document.getElementById('admin-statistik-total').innerHTML = `
       <div class="statistik-total-item">
@@ -1569,8 +1609,16 @@ async function loadAdminStatistik() {
         <span class="statistik-total-value">${totalStunden.toFixed(2)} h</span>
       </div>
       <div class="statistik-total-item">
-        <span class="statistik-total-label">Überstunden gesamt</span>
-        <span class="statistik-total-value ${ueberstundenClass}">${ueberstundenPrefix}${totalUeberstunden.toFixed(2)} h</span>
+        <span class="statistik-total-label">Soll gesamt</span>
+        <span class="statistik-total-value">${totalSoll.toFixed(0)} h</span>
+      </div>
+      <div class="statistik-total-item">
+        <span class="statistik-total-label">Normalstunden</span>
+        <span class="statistik-total-value">${totalNormalstunden.toFixed(2)} h</span>
+      </div>
+      <div class="statistik-total-item">
+        <span class="statistik-total-label">Bilanz</span>
+        <span class="statistik-total-value ${diffClass}">${diffPrefix}${nettoDiff.toFixed(2)} h</span>
       </div>
     `;
   } catch (error) {
@@ -1941,12 +1989,82 @@ async function deletePausenregel(id) {
   }
 }
 
-// Tab-Wechsel: Pausenregeln laden
+// ==================== EINSTELLUNGEN FUNKTIONEN ====================
+
+async function loadEinstellungen() {
+  try {
+    const konfig = await api('/einstellungen/arbeitszeit');
+
+    document.getElementById('setting-wochenstunden').value = konfig.standardWochenstunden || 40;
+    document.getElementById('setting-monatsstunden').value = konfig.standardMonatsstunden || 173;
+    document.getElementById('setting-max-tag').value = konfig.maxTagesstunden || 10;
+    document.getElementById('setting-max-woche').value = konfig.maxWochenstunden || 50;
+  } catch (error) {
+    console.error('Einstellungen laden fehlgeschlagen:', error);
+    showMessage('einstellungen-message', 'Einstellungen konnten nicht geladen werden', 'error');
+  }
+}
+
+async function saveEinstellungen(event) {
+  event.preventDefault();
+
+  const wochenstunden = parseFloat(document.getElementById('setting-wochenstunden').value);
+  const monatsstunden = parseFloat(document.getElementById('setting-monatsstunden').value);
+  const maxTag = parseFloat(document.getElementById('setting-max-tag').value);
+  const maxWoche = parseFloat(document.getElementById('setting-max-woche').value);
+
+  // Validierung
+  if (wochenstunden < 1 || wochenstunden > 60) {
+    showMessage('einstellungen-message', 'Wochenstunden müssen zwischen 1 und 60 liegen', 'error');
+    return;
+  }
+  if (monatsstunden < 1 || monatsstunden > 260) {
+    showMessage('einstellungen-message', 'Monatsstunden müssen zwischen 1 und 260 liegen', 'error');
+    return;
+  }
+  if (maxTag < 1 || maxTag > 16) {
+    showMessage('einstellungen-message', 'Max. Tagesstunden müssen zwischen 1 und 16 liegen', 'error');
+    return;
+  }
+  if (maxWoche < 1 || maxWoche > 72) {
+    showMessage('einstellungen-message', 'Max. Wochenstunden müssen zwischen 1 und 72 liegen', 'error');
+    return;
+  }
+
+  try {
+    await api('/admin/einstellungen', {
+      method: 'PUT',
+      body: JSON.stringify({
+        standard_wochenstunden: wochenstunden.toString(),
+        standard_monatsstunden: monatsstunden.toString(),
+        max_tagesstunden: maxTag.toString(),
+        max_wochenstunden: maxWoche.toString()
+      })
+    });
+
+    showMessage('einstellungen-message', 'Einstellungen gespeichert', 'success');
+  } catch (error) {
+    showMessage('einstellungen-message', 'Fehler beim Speichern: ' + error.message, 'error');
+  }
+}
+
+// Einstellungen-Form Event-Listener
+document.addEventListener('DOMContentLoaded', () => {
+  const einstellungenForm = document.getElementById('einstellungen-form');
+  if (einstellungenForm) {
+    einstellungenForm.addEventListener('submit', saveEinstellungen);
+  }
+});
+
+// Tab-Wechsel: Pausenregeln und Einstellungen laden
 document.addEventListener('DOMContentLoaded', () => {
   document.querySelectorAll('.tab').forEach(tab => {
     tab.addEventListener('click', () => {
       if (tab.dataset.tab === 'pausenregeln') {
         loadPausenregeln();
+      }
+      if (tab.dataset.tab === 'einstellungen') {
+        loadEinstellungen();
       }
     });
   });

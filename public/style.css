@@ -857,3 +857,103 @@ td[title] {
 #verstoesse-modal td {
   padding: 10px 12px;
 }
+
+/* Einstellungen-Seite */
+.settings-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 30px;
+  margin-bottom: 24px;
+}
+
+.settings-section {
+  background: var(--bg-secondary);
+  padding: 20px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+}
+
+.settings-section h3 {
+  margin: 0 0 20px 0;
+  font-size: 1.05rem;
+  color: var(--text-primary);
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.input-with-unit {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.input-with-unit input {
+  flex: 1;
+  max-width: 120px;
+}
+
+.input-with-unit .unit {
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  white-space: nowrap;
+}
+
+.settings-section small {
+  display: block;
+  margin-top: 6px;
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+}
+
+.settings-info {
+  background: var(--bg-secondary);
+  padding: 16px 20px;
+  border-radius: 8px;
+  border-left: 4px solid var(--primary);
+}
+
+.settings-info h4 {
+  margin: 0 0 12px 0;
+  font-size: 0.95rem;
+  color: var(--text-primary);
+}
+
+.settings-info ul {
+  margin: 0;
+  padding-left: 20px;
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+}
+
+.settings-info li {
+  margin-bottom: 6px;
+}
+
+/* Statistik Stunden-Anzeige */
+.stunden-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.stunden-normal {
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.stunden-ueber {
+  color: var(--success);
+  font-weight: 600;
+  font-size: 0.85em;
+}
+
+.stunden-minder {
+  color: var(--danger);
+  font-weight: 500;
+  font-size: 0.85em;
+}
+
+.stunden-detail {
+  font-size: 0.8em;
+  color: var(--text-secondary);
+}
