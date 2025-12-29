@@ -123,8 +123,11 @@ function initErfassungView() {
   document.getElementById('user-name').textContent = `Hallo, ${userName}`;
   document.getElementById('show-admin-btn').classList.toggle('hidden', !isAdmin);
 
-  // Datum auf heute setzen (österreichisches Format)
-  document.getElementById('datum').value = getTodayAT();
+  // Datum auf heute setzen via Flatpickr
+  const datumPicker = document.getElementById('datum')._flatpickr;
+  if (datumPicker) {
+    datumPicker.setDate('today');
+  }
 }
 
 document.getElementById('zeit-form').addEventListener('submit', async (e) => {
@@ -411,6 +414,27 @@ window.toggleAktiv = async (id, currentStatus) => {
 
 // ==================== INIT ====================
 
+// Flatpickr Konfiguration (österreichisches Format)
+const flatpickrConfig = {
+  locale: 'de',
+  dateFormat: 'd.m.Y',
+  allowInput: true,
+  disableMobile: false
+};
+
+// Datepicker initialisieren
+function initDatepickers() {
+  // Hauptformular Datum
+  flatpickr('#datum', {
+    ...flatpickrConfig,
+    defaultDate: 'today'
+  });
+
+  // Admin Filter
+  flatpickr('#filter-von', flatpickrConfig);
+  flatpickr('#filter-bis', flatpickrConfig);
+}
+
 // Beim Laden prüfen ob bereits eingeloggt
 if (sessionId && userName) {
   initErfassungView();
@@ -418,3 +442,6 @@ if (sessionId && userName) {
 } else {
   showView('login');
 }
+
+// Datepickers initialisieren wenn DOM bereit
+initDatepickers();

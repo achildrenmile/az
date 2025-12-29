@@ -5,6 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Arbeitszeit-Tracker</title>
   <link rel="stylesheet" href="style.css">
+  <!-- Flatpickr Datepicker -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+  <script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/de.js"></script>
 </head>
 <body>
   <!-- LOGIN -->
@@ -43,8 +47,8 @@
         <form id="zeit-form">
           <div class="form-row">
             <div class="form-group">
-              <label for="datum">Datum * (TT.MM.JJJJ)</label>
-              <input type="text" id="datum" placeholder="29.12.2025" pattern="\d{2}\.\d{2}\.\d{4}" required>
+              <label for="datum">Datum *</label>
+              <input type="text" id="datum" class="datepicker" placeholder="TT.MM.JJJJ" required readonly>
             </div>
           </div>
 
@@ -119,12 +123,12 @@
           <h2>Alle Zeiteinträge</h2>
           <div class="filter-row">
             <div class="form-group">
-              <label for="filter-von">Von (TT.MM.JJJJ)</label>
-              <input type="text" id="filter-von" placeholder="01.12.2025" pattern="\d{2}\.\d{2}\.\d{4}">
+              <label for="filter-von">Von</label>
+              <input type="text" id="filter-von" class="datepicker" placeholder="TT.MM.JJJJ">
             </div>
             <div class="form-group">
-              <label for="filter-bis">Bis (TT.MM.JJJJ)</label>
-              <input type="text" id="filter-bis" placeholder="31.12.2025" pattern="\d{2}\.\d{2}\.\d{4}">
+              <label for="filter-bis">Bis</label>
+              <input type="text" id="filter-bis" class="datepicker" placeholder="TT.MM.JJJJ">
             </div>
             <button id="filter-btn" class="btn btn-primary">Filtern</button>
             <button id="export-btn" class="btn btn-secondary">CSV Export</button>
