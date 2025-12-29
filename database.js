@@ -137,8 +137,15 @@ module.exports = {
     return db.prepare('SELECT * FROM mitarbeiter WHERE mitarbeiter_nr = ? AND aktiv = 1').get(nr);
   },
 
-  getAllMitarbeiter: () => {
-    return db.prepare('SELECT id, mitarbeiter_nr, name, ist_admin, aktiv, erstellt_am FROM mitarbeiter ORDER BY name').all();
+  getAllMitarbeiter: (page = 1, limit = 10) => {
+    const offset = (page - 1) * limit;
+    const data = db.prepare(`
+      SELECT id, mitarbeiter_nr, name, ist_admin, aktiv, erstellt_am
+      FROM mitarbeiter ORDER BY name
+      LIMIT ? OFFSET ?
+    `).all(limit, offset);
+    const total = db.prepare('SELECT COUNT(*) as count FROM mitarbeiter').get().count;
+    return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
   },
 
   createMitarbeiter: (nr, name, pin) => {
@@ -385,11 +392,12 @@ module.exports = {
   },
 
   // Kunden-Funktionen
-  getAllKunden: (nurAktive = true) => {
-    if (nurAktive) {
-      return db.prepare('SELECT * FROM kunden WHERE aktiv = 1 ORDER BY name').all();
-    }
-    return db.prepare('SELECT * FROM kunden ORDER BY name').all();
+  getAllKunden: (nurAktive = true, page = 1, limit = 10) => {
+    const offset = (page - 1) * limit;
+    const whereClause = nurAktive ? 'WHERE aktiv = 1' : '';
+    const data = db.prepare(`SELECT * FROM kunden ${whereClause} ORDER BY name LIMIT ? OFFSET ?`).all(limit, offset);
+    const total = db.prepare(`SELECT COUNT(*) as count FROM kunden ${whereClause}`).get().count;
+    return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
   },
 
   getKundeById: (id) => {
@@ -437,11 +445,12 @@ module.exports = {
   },
 
   // Baustellen-Funktionen
-  getAllBaustellen: (nurAktive = true) => {
-    if (nurAktive) {
-      return db.prepare('SELECT * FROM baustellen WHERE aktiv = 1 ORDER BY name').all();
-    }
-    return db.prepare('SELECT * FROM baustellen ORDER BY name').all();
+  getAllBaustellen: (nurAktive = true, page = 1, limit = 10) => {
+    const offset = (page - 1) * limit;
+    const whereClause = nurAktive ? 'WHERE aktiv = 1' : '';
+    const data = db.prepare(`SELECT * FROM baustellen ${whereClause} ORDER BY name LIMIT ? OFFSET ?`).all(limit, offset);
+    const total = db.prepare(`SELECT COUNT(*) as count FROM baustellen ${whereClause}`).get().count;
+    return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
   },
 
   getBaustelleById: (id) => {

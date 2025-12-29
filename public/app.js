@@ -54,6 +54,9 @@ let isAdmin = localStorage.getItem('isAdmin') === 'true';
 // Paging State
 let historyPage = 1;
 let adminPage = 1;
+let mitarbeiterPage = 1;
+let kundenPage = 1;
+let baustellenPage = 1;
 const PAGE_LIMIT = 10;
 
 // Pagination rendern
@@ -598,10 +601,18 @@ window.goToAdminPage = function(page) {
   loadEintraege(page);
 };
 
-async function loadMitarbeiter() {
+async function loadMitarbeiter(page = 1) {
   try {
-    const mitarbeiter = await api('/admin/mitarbeiter');
+    mitarbeiterPage = page;
+    const result = await api(`/admin/mitarbeiter?page=${page}&limit=${PAGE_LIMIT}`);
+    const { data: mitarbeiter, total, totalPages } = result;
     const tbody = document.querySelector('#mitarbeiter-table tbody');
+
+    if (total === 0) {
+      tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:40px;color:var(--text-secondary)">Keine Mitarbeiter gefunden</td></tr>';
+      renderPagination('mitarbeiter-pagination', 1, 1, 0, 'goToMitarbeiterPage');
+      return;
+    }
 
     tbody.innerHTML = mitarbeiter.map(m => `
       <tr>
@@ -615,18 +626,27 @@ async function loadMitarbeiter() {
         </td>
       </tr>
     `).join('');
+
+    renderPagination('mitarbeiter-pagination', page, totalPages, total, 'goToMitarbeiterPage');
   } catch (error) {
     console.error(error);
   }
 }
 
-async function loadKunden() {
+window.goToMitarbeiterPage = function(page) {
+  loadMitarbeiter(page);
+};
+
+async function loadKunden(page = 1) {
   try {
-    const kunden = await api('/admin/kunden');
+    kundenPage = page;
+    const result = await api(`/admin/kunden?page=${page}&limit=${PAGE_LIMIT}`);
+    const { data: kunden, total, totalPages } = result;
     const tbody = document.querySelector('#kunden-table tbody');
 
-    if (kunden.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="6" style="text-align:center">Noch keine Kunden angelegt.</td></tr>';
+    if (total === 0) {
+      tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:40px;color:var(--text-secondary)">Noch keine Kunden angelegt.</td></tr>';
+      renderPagination('kunden-pagination', 1, 1, 0, 'goToKundenPage');
       return;
     }
 
@@ -643,18 +663,27 @@ async function loadKunden() {
         </td>
       </tr>
     `).join('');
+
+    renderPagination('kunden-pagination', page, totalPages, total, 'goToKundenPage');
   } catch (error) {
     console.error(error);
   }
 }
 
-async function loadBaustellen() {
+window.goToKundenPage = function(page) {
+  loadKunden(page);
+};
+
+async function loadBaustellen(page = 1) {
   try {
-    const baustellen = await api('/admin/baustellen');
+    baustellenPage = page;
+    const result = await api(`/admin/baustellen?page=${page}&limit=${PAGE_LIMIT}`);
+    const { data: baustellen, total, totalPages } = result;
     const tbody = document.querySelector('#baustellen-table tbody');
 
-    if (baustellen.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="5" style="text-align:center">Noch keine Baustellen angelegt.</td></tr>';
+    if (total === 0) {
+      tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:40px;color:var(--text-secondary)">Noch keine Baustellen angelegt.</td></tr>';
+      renderPagination('baustellen-pagination', 1, 1, 0, 'goToBaustellenPage');
       return;
     }
 
@@ -670,10 +699,16 @@ async function loadBaustellen() {
         </td>
       </tr>
     `).join('');
+
+    renderPagination('baustellen-pagination', page, totalPages, total, 'goToBaustellenPage');
   } catch (error) {
     console.error(error);
   }
 }
+
+window.goToBaustellenPage = function(page) {
+  loadBaustellen(page);
+};
 
 // Filter
 document.getElementById('filter-btn').addEventListener('click', loadEintraege);

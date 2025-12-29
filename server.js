@@ -339,8 +339,10 @@ app.delete('/api/admin/zeiteintraege/:id', checkSession, checkAdmin, (req, res) 
 
 // Alle Mitarbeiter (Admin)
 app.get('/api/admin/mitarbeiter', checkSession, checkAdmin, (req, res) => {
-  const mitarbeiter = db.getAllMitarbeiter();
-  res.json(mitarbeiter);
+  const page = parseInt(req.query.page) || 1;
+  const limit = parseInt(req.query.limit) || 10;
+  const result = db.getAllMitarbeiter(page, limit);
+  res.json(result);
 });
 
 // Neuen Mitarbeiter anlegen (Admin)
@@ -412,8 +414,10 @@ app.get('/api/kunden', checkSession, (req, res) => {
 
 // Alle Kunden abrufen (Admin - inkl. inaktive)
 app.get('/api/admin/kunden', checkSession, checkAdmin, (req, res) => {
-  const kunden = db.getAllKunden(false);
-  res.json(kunden);
+  const page = parseInt(req.query.page) || 1;
+  const limit = parseInt(req.query.limit) || 10;
+  const result = db.getAllKunden(false, page, limit);
+  res.json(result);
 });
 
 // Einzelnen Kunden abrufen (Admin)
@@ -502,8 +506,10 @@ app.get('/api/baustellen', checkSession, (req, res) => {
 
 // Alle Baustellen abrufen (Admin - inkl. inaktive)
 app.get('/api/admin/baustellen', checkSession, checkAdmin, (req, res) => {
-  const baustellen = db.getAllBaustellen(false);
-  res.json(baustellen);
+  const page = parseInt(req.query.page) || 1;
+  const limit = parseInt(req.query.limit) || 10;
+  const result = db.getAllBaustellen(false, page, limit);
+  res.json(result);
 });
 
 // Einzelne Baustelle abrufen (Admin)
