@@ -93,7 +93,10 @@
 
       <!-- Meine Einträge als Tabelle -->
       <div id="history-section" class="card hidden">
-        <h2>Meine Einträge</h2>
+        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom:16px;">
+          <h2 style="margin:0">Meine Einträge</h2>
+          <button id="print-user-btn" class="btn btn-secondary">Zeitnachweis drucken</button>
+        </div>
         <div class="table-container">
           <table id="user-eintraege-table">
             <thead>
@@ -199,6 +202,7 @@
             </div>
             <button id="filter-btn" class="btn btn-primary">Filtern</button>
             <button id="export-btn" class="btn btn-secondary">CSV Export</button>
+            <button id="print-btn" class="btn btn-secondary">Drucken</button>
           </div>
           <div class="table-container">
             <table id="eintraege-table">

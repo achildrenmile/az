@@ -488,6 +488,237 @@ document.getElementById('export-btn').addEventListener('click', () => {
     });
 });
 
+// Zeitnachweis drucken (Admin)
+document.getElementById('print-btn').addEventListener('click', async () => {
+  const vonAT = document.getElementById('filter-von').value;
+  const bisAT = document.getElementById('filter-bis').value;
+  const von = parseATDate(vonAT);
+  const bis = parseATDate(bisAT);
+
+  let url = '/admin/zeiteintraege';
+  const params = [];
+  if (von) params.push(`von=${von}`);
+  if (bis) params.push(`bis=${bis}`);
+  if (params.length) url += '?' + params.join('&');
+
+  try {
+    const eintraege = await api(url);
+    printZeitnachweis(eintraege, vonAT, bisAT, null);
+  } catch (error) {
+    alert('Fehler beim Laden: ' + error.message);
+  }
+});
+
+// Zeitnachweis drucken (User)
+document.getElementById('print-user-btn').addEventListener('click', async () => {
+  try {
+    const eintraege = await api('/zeiteintraege');
+    printZeitnachweis(eintraege, null, null, userName);
+  } catch (error) {
+    alert('Fehler beim Laden: ' + error.message);
+  }
+});
+
+// Druckfunktion
+function printZeitnachweis(eintraege, vonAT, bisAT, mitarbeiterName) {
+  if (eintraege.length === 0) {
+    alert('Keine Einträge zum Drucken vorhanden.');
+    return;
+  }
+
+  // Zeitraum bestimmen
+  let zeitraum = '';
+  if (vonAT && bisAT) {
+    zeitraum = `${vonAT} - ${bisAT}`;
+  } else if (vonAT) {
+    zeitraum = `ab ${vonAT}`;
+  } else if (bisAT) {
+    zeitraum = `bis ${bisAT}`;
+  } else {
+    // Automatisch aus Daten ermitteln
+    const daten = eintraege.map(e => e.datum).sort();
+    zeitraum = `${formatDate(daten[0])} - ${formatDate(daten[daten.length - 1])}`;
+  }
+
+  // Gesamtstunden berechnen
+  let gesamtMinuten = 0;
+  eintraege.forEach(e => {
+    const [bH, bM] = e.arbeitsbeginn.split(':').map(Number);
+    const [eH, eM] = e.arbeitsende.split(':').map(Number);
+    gesamtMinuten += (eH * 60 + eM) - (bH * 60 + bM) - e.pause_minuten;
+  });
+  const gesamtStunden = (gesamtMinuten / 60).toFixed(2).replace('.', ',');
+
+  // Tabellenzeilen erstellen
+  const zeilen = eintraege.map(e => {
+    const netto = calculateNetto(e.arbeitsbeginn, e.arbeitsende, e.pause_minuten);
+    return `
+      <tr>
+        <td>${formatDate(e.datum)}</td>
+        ${!mitarbeiterName ? `<td>${e.mitarbeiter_name || ''}</td>` : ''}
+        <td>${e.arbeitsbeginn}</td>
+        <td>${e.arbeitsende}</td>
+        <td style="text-align:center">${e.pause_minuten}</td>
+        <td style="text-align:right">${netto}</td>
+        <td>${e.baustelle || ''}</td>
+        <td>${e.kunde || ''}</td>
+      </tr>
+    `;
+  }).join('');
+
+  // HTML für Druckansicht
+  const html = `
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <title>Zeitnachweis</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: Arial, sans-serif;
+      font-size: 11pt;
+      line-height: 1.4;
+      padding: 20mm;
+      color: #333;
+    }
+    .header {
+      text-align: center;
+      margin-bottom: 20px;
+      padding-bottom: 15px;
+      border-bottom: 2px solid #333;
+    }
+    .header h1 {
+      font-size: 18pt;
+      margin-bottom: 5px;
+    }
+    .header .zeitraum {
+      font-size: 12pt;
+      color: #666;
+    }
+    .info {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 15px;
+      font-size: 10pt;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 20px;
+    }
+    th, td {
+      border: 1px solid #ccc;
+      padding: 6px 8px;
+      text-align: left;
+      font-size: 9pt;
+    }
+    th {
+      background: #f0f0f0;
+      font-weight: bold;
+    }
+    tr:nth-child(even) {
+      background: #fafafa;
+    }
+    .summary {
+      margin-top: 20px;
+      padding: 15px;
+      background: #f5f5f5;
+      border: 1px solid #ddd;
+    }
+    .summary-row {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 5px;
+    }
+    .summary-row:last-child {
+      margin-bottom: 0;
+      font-weight: bold;
+      font-size: 12pt;
+    }
+    .footer {
+      margin-top: 40px;
+      padding-top: 20px;
+      border-top: 1px solid #ccc;
+    }
+    .signature {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 50px;
+    }
+    .signature-line {
+      width: 200px;
+      border-top: 1px solid #333;
+      padding-top: 5px;
+      text-align: center;
+      font-size: 9pt;
+    }
+    @media print {
+      body { padding: 10mm; }
+      @page { margin: 15mm; }
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>Zeitnachweis</h1>
+    <div class="zeitraum">${zeitraum}</div>
+  </div>
+
+  ${mitarbeiterName ? `<div class="info"><strong>Mitarbeiter:</strong> ${mitarbeiterName}</div>` : ''}
+
+  <table>
+    <thead>
+      <tr>
+        <th>Datum</th>
+        ${!mitarbeiterName ? '<th>Mitarbeiter</th>' : ''}
+        <th>Beginn</th>
+        <th>Ende</th>
+        <th>Pause (Min)</th>
+        <th>Netto</th>
+        <th>Baustelle</th>
+        <th>Kunde</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${zeilen}
+    </tbody>
+  </table>
+
+  <div class="summary">
+    <div class="summary-row">
+      <span>Anzahl Einträge:</span>
+      <span>${eintraege.length}</span>
+    </div>
+    <div class="summary-row">
+      <span>Gesamtstunden:</span>
+      <span>${gesamtStunden} Std.</span>
+    </div>
+  </div>
+
+  <div class="footer">
+    <div class="signature">
+      <div class="signature-line">Datum</div>
+      <div class="signature-line">Unterschrift Mitarbeiter</div>
+      <div class="signature-line">Unterschrift Arbeitgeber</div>
+    </div>
+  </div>
+
+  <script>
+    window.onload = function() {
+      window.print();
+    };
+  </script>
+</body>
+</html>
+  `;
+
+  // Neues Fenster öffnen und drucken
+  const printWindow = window.open('', '_blank');
+  printWindow.document.write(html);
+  printWindow.document.close();
+}
+
 // Neuer Mitarbeiter
 document.getElementById('new-mitarbeiter-form').addEventListener('submit', async (e) => {
   e.preventDefault();
