@@ -109,6 +109,28 @@ db.exec(`
     aktiv INTEGER DEFAULT 1,
     erstellt_am DATETIME DEFAULT CURRENT_TIMESTAMP
   );
+
+  -- Gleitzeit-Saldo-Tabelle (Periodenbasierte Salden)
+  CREATE TABLE IF NOT EXISTS gleitzeit_saldo (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    mitarbeiter_id INTEGER NOT NULL,
+    periode_start DATE NOT NULL,
+    periode_ende DATE NOT NULL,
+    soll_minuten INTEGER DEFAULT 0,
+    ist_minuten INTEGER DEFAULT 0,
+    saldo_minuten INTEGER DEFAULT 0,
+    uebertrag_vorperiode INTEGER DEFAULT 0,
+    uebertrag_naechste INTEGER DEFAULT 0,
+    verfallen_minuten INTEGER DEFAULT 0,
+    abgeschlossen INTEGER DEFAULT 0,
+    erstellt_am DATETIME DEFAULT CURRENT_TIMESTAMP,
+    aktualisiert_am DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (mitarbeiter_id) REFERENCES mitarbeiter(id),
+    UNIQUE(mitarbeiter_id, periode_start)
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_gleitzeit_mitarbeiter ON gleitzeit_saldo(mitarbeiter_id);
+  CREATE INDEX IF NOT EXISTS idx_gleitzeit_periode ON gleitzeit_saldo(periode_start, periode_ende);
 `);
 
 // Standard-Pausenregeln einfügen falls nicht vorhanden (AZG §11)
@@ -141,7 +163,14 @@ const defaultSettings = [
   { key: 'standard_wochenstunden', value: '40', desc: 'Soll-Arbeitszeit pro Woche (Stunden)' },
   { key: 'standard_monatsstunden', value: '173', desc: 'Soll-Arbeitszeit pro Monat (Stunden)' },
   { key: 'max_tagesstunden', value: '10', desc: 'Maximale Arbeitszeit pro Tag (§9 AZG)' },
-  { key: 'max_wochenstunden', value: '50', desc: 'Maximale Arbeitszeit pro Woche (§9 AZG)' }
+  { key: 'max_wochenstunden', value: '50', desc: 'Maximale Arbeitszeit pro Woche (§9 AZG)' },
+  // Gleitzeit-Einstellungen
+  { key: 'gleitzeit_aktiv', value: '0', desc: 'Gleitzeit aktiviert (1=ja, 0=nein)' },
+  { key: 'gleitzeit_durchrechnungszeitraum', value: '1', desc: 'Durchrechnungszeitraum in Monaten (1, 3, 6, 12)' },
+  { key: 'gleitzeit_max_plus', value: '40', desc: 'Maximales Plus-Saldo (Stunden)' },
+  { key: 'gleitzeit_max_minus', value: '20', desc: 'Maximales Minus-Saldo (Stunden)' },
+  { key: 'gleitzeit_uebertrag_max', value: '20', desc: 'Maximaler Übertrag am Periodenende (Stunden)' },
+  { key: 'gleitzeit_verfall_monate', value: '0', desc: 'Verfall nach X Monaten (0=kein Verfall)' }
 ];
 
 defaultSettings.forEach(s => {
@@ -1475,5 +1504,276 @@ module.exports = {
       );
     }
     return null;
+  },
+
+  // ==================== GLEITZEIT FUNKTIONEN ====================
+
+  // Gleitzeit-Konfiguration abrufen
+  getGleitzeitKonfig: () => {
+    const konfig = {};
+    const keys = [
+      'gleitzeit_aktiv',
+      'gleitzeit_durchrechnungszeitraum',
+      'gleitzeit_max_plus',
+      'gleitzeit_max_minus',
+      'gleitzeit_uebertrag_max',
+      'gleitzeit_verfall_monate',
+      'standard_monatsstunden'
+    ];
+    keys.forEach(key => {
+      const row = db.prepare('SELECT wert FROM einstellungen WHERE schluessel = ?').get(key);
+      konfig[key] = row ? parseFloat(row.wert) : 0;
+    });
+    return {
+      aktiv: konfig.gleitzeit_aktiv === 1,
+      durchrechnungszeitraum: konfig.gleitzeit_durchrechnungszeitraum || 1,
+      maxPlus: konfig.gleitzeit_max_plus || 40,
+      maxMinus: konfig.gleitzeit_max_minus || 20,
+      uebertragMax: konfig.gleitzeit_uebertrag_max || 20,
+      verfallMonate: konfig.gleitzeit_verfall_monate || 0,
+      sollMonatsstunden: konfig.standard_monatsstunden || 173
+    };
+  },
+
+  // Periodenstart berechnen basierend auf Durchrechnungszeitraum
+  berechnePeriode: (jahr, monat, durchrechnungszeitraum) => {
+    // Periode basiert auf Durchrechnungszeitraum (1, 3, 6, 12 Monate)
+    const periodenProJahr = 12 / durchrechnungszeitraum;
+    const periodenIndex = Math.floor((monat - 1) / durchrechnungszeitraum);
+    const startMonat = periodenIndex * durchrechnungszeitraum + 1;
+    const endeMonat = startMonat + durchrechnungszeitraum - 1;
+
+    const periodeStart = `${jahr}-${String(startMonat).padStart(2, '0')}-01`;
+
+    // Ende-Datum berechnen (letzter Tag des Endmonats)
+    let endeJahr = jahr;
+    let endeM = endeMonat;
+    if (endeMonat > 12) {
+      endeM = endeMonat - 12;
+      endeJahr = jahr + 1;
+    }
+    const letzterTag = new Date(endeJahr, endeM, 0).getDate();
+    const periodeEnde = `${endeJahr}-${String(endeM).padStart(2, '0')}-${String(letzterTag).padStart(2, '0')}`;
+
+    return { periodeStart, periodeEnde, startMonat, endeMonat: endeM, jahr, endeJahr };
+  },
+
+  // Ist-Stunden für einen Zeitraum berechnen
+  berechneIstMinuten: (mitarbeiterId, von, bis) => {
+    const result = db.prepare(`
+      SELECT COALESCE(SUM(
+        (strftime('%H', arbeitsende) * 60 + strftime('%M', arbeitsende)) -
+        (strftime('%H', arbeitsbeginn) * 60 + strftime('%M', arbeitsbeginn)) -
+        pause_minuten
+      ), 0) as total
+      FROM zeiteintraege
+      WHERE mitarbeiter_id = ? AND datum BETWEEN ? AND ?
+    `).get(mitarbeiterId, von, bis);
+    return result?.total || 0;
+  },
+
+  // Soll-Stunden für einen Zeitraum berechnen (basierend auf Arbeitstagen)
+  berechneSollMinuten: (von, bis, sollMonatsstunden) => {
+    // Vereinfachte Berechnung: Monatsstunden * Anzahl Monate
+    const start = new Date(von);
+    const end = new Date(bis);
+    const monate = (end.getFullYear() - start.getFullYear()) * 12 + (end.getMonth() - start.getMonth()) + 1;
+    return Math.round(sollMonatsstunden * 60 * monate);
+  },
+
+  // Gleitzeit-Saldo für einen Mitarbeiter berechnen (aktuelle Periode)
+  getGleitzeitSaldo: (mitarbeiterId, jahr = null, monat = null) => {
+    const konfig = module.exports.getGleitzeitKonfig();
+
+    if (!konfig.aktiv) {
+      return { aktiv: false, message: 'Gleitzeit ist nicht aktiviert' };
+    }
+
+    const heute = new Date();
+    const aktJahr = jahr || heute.getFullYear();
+    const aktMonat = monat || (heute.getMonth() + 1);
+
+    const periode = module.exports.berechnePeriode(aktJahr, aktMonat, konfig.durchrechnungszeitraum);
+
+    // Prüfe ob bereits gespeicherter Saldo existiert
+    let saldo = db.prepare(`
+      SELECT * FROM gleitzeit_saldo
+      WHERE mitarbeiter_id = ? AND periode_start = ?
+    `).get(mitarbeiterId, periode.periodeStart);
+
+    // Ist-Minuten neu berechnen
+    const istMinuten = module.exports.berechneIstMinuten(mitarbeiterId, periode.periodeStart, periode.periodeEnde);
+
+    // Soll-Minuten berechnen
+    const sollMinuten = module.exports.berechneSollMinuten(periode.periodeStart, periode.periodeEnde, konfig.sollMonatsstunden);
+
+    // Übertrag aus Vorperiode holen
+    let uebertragVorperiode = 0;
+    const vorperiode = module.exports.berechnePeriode(
+      aktMonat <= konfig.durchrechnungszeitraum ? aktJahr - 1 : aktJahr,
+      aktMonat <= konfig.durchrechnungszeitraum ? 12 - konfig.durchrechnungszeitraum + aktMonat : aktMonat - konfig.durchrechnungszeitraum,
+      konfig.durchrechnungszeitraum
+    );
+
+    const vorperiodeSaldo = db.prepare(`
+      SELECT uebertrag_naechste FROM gleitzeit_saldo
+      WHERE mitarbeiter_id = ? AND periode_start = ? AND abgeschlossen = 1
+    `).get(mitarbeiterId, vorperiode.periodeStart);
+
+    if (vorperiodeSaldo) {
+      uebertragVorperiode = vorperiodeSaldo.uebertrag_naechste;
+    }
+
+    // Saldo berechnen
+    const saldoMinuten = istMinuten - sollMinuten + uebertragVorperiode;
+    const saldoStunden = saldoMinuten / 60;
+
+    // Kappung prüfen
+    let gekapptePlus = 0;
+    let gekapptesMinus = 0;
+    let effektiverSaldo = saldoMinuten;
+
+    if (saldoStunden > konfig.maxPlus) {
+      gekapptePlus = (saldoStunden - konfig.maxPlus) * 60;
+      effektiverSaldo = konfig.maxPlus * 60;
+    } else if (saldoStunden < -konfig.maxMinus) {
+      gekapptesMinus = (-konfig.maxMinus - saldoStunden) * 60;
+      effektiverSaldo = -konfig.maxMinus * 60;
+    }
+
+    // Saldo speichern/aktualisieren
+    if (saldo) {
+      db.prepare(`
+        UPDATE gleitzeit_saldo
+        SET ist_minuten = ?, soll_minuten = ?, saldo_minuten = ?,
+            uebertrag_vorperiode = ?, aktualisiert_am = CURRENT_TIMESTAMP
+        WHERE id = ?
+      `).run(istMinuten, sollMinuten, effektiverSaldo, uebertragVorperiode, saldo.id);
+    } else {
+      db.prepare(`
+        INSERT INTO gleitzeit_saldo (mitarbeiter_id, periode_start, periode_ende, soll_minuten, ist_minuten, saldo_minuten, uebertrag_vorperiode)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `).run(mitarbeiterId, periode.periodeStart, periode.periodeEnde, sollMinuten, istMinuten, effektiverSaldo, uebertragVorperiode);
+    }
+
+    return {
+      aktiv: true,
+      periode: {
+        start: periode.periodeStart,
+        ende: periode.periodeEnde,
+        durchrechnungszeitraum: konfig.durchrechnungszeitraum
+      },
+      sollMinuten,
+      sollStunden: (sollMinuten / 60).toFixed(2),
+      istMinuten,
+      istStunden: (istMinuten / 60).toFixed(2),
+      uebertragVorperiode,
+      uebertragStunden: (uebertragVorperiode / 60).toFixed(2),
+      saldoMinuten: effektiverSaldo,
+      saldoStunden: (effektiverSaldo / 60).toFixed(2),
+      gekapptePlus: (gekapptePlus / 60).toFixed(2),
+      gekapptesMinus: (gekapptesMinus / 60).toFixed(2),
+      limits: {
+        maxPlus: konfig.maxPlus,
+        maxMinus: konfig.maxMinus,
+        uebertragMax: konfig.uebertragMax
+      }
+    };
+  },
+
+  // Periode abschließen (mit Übertrag-Berechnung)
+  schliesseGleitzeitPeriode: (mitarbeiterId, periodeStart) => {
+    const konfig = module.exports.getGleitzeitKonfig();
+
+    const saldo = db.prepare(`
+      SELECT * FROM gleitzeit_saldo
+      WHERE mitarbeiter_id = ? AND periode_start = ?
+    `).get(mitarbeiterId, periodeStart);
+
+    if (!saldo) {
+      return { success: false, error: 'Periode nicht gefunden' };
+    }
+
+    if (saldo.abgeschlossen) {
+      return { success: false, error: 'Periode bereits abgeschlossen' };
+    }
+
+    // Übertrag für nächste Periode berechnen (mit Kappung)
+    let uebertragNaechste = saldo.saldo_minuten;
+    let verfallenMinuten = 0;
+
+    // Positiver Saldo: Maximal uebertragMax übertragen
+    if (uebertragNaechste > 0) {
+      const maxUebertrag = konfig.uebertragMax * 60;
+      if (uebertragNaechste > maxUebertrag) {
+        verfallenMinuten = uebertragNaechste - maxUebertrag;
+        uebertragNaechste = maxUebertrag;
+      }
+    }
+    // Negativer Saldo wird komplett übertragen (Schulden verfallen nicht)
+
+    db.prepare(`
+      UPDATE gleitzeit_saldo
+      SET abgeschlossen = 1, uebertrag_naechste = ?, verfallen_minuten = ?, aktualisiert_am = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `).run(uebertragNaechste, verfallenMinuten, saldo.id);
+
+    return {
+      success: true,
+      saldoMinuten: saldo.saldo_minuten,
+      uebertragNaechste,
+      verfallenMinuten,
+      verfallenStunden: (verfallenMinuten / 60).toFixed(2)
+    };
+  },
+
+  // Gleitzeit-Historie für einen Mitarbeiter
+  getGleitzeitHistorie: (mitarbeiterId, limit = 12) => {
+    return db.prepare(`
+      SELECT * FROM gleitzeit_saldo
+      WHERE mitarbeiter_id = ?
+      ORDER BY periode_start DESC
+      LIMIT ?
+    `).all(mitarbeiterId, limit);
+  },
+
+  // Gleitzeit-Übersicht für alle Mitarbeiter (Admin)
+  getGleitzeitUebersicht: (jahr = null, monat = null) => {
+    const konfig = module.exports.getGleitzeitKonfig();
+
+    if (!konfig.aktiv) {
+      return { aktiv: false, mitarbeiter: [] };
+    }
+
+    const heute = new Date();
+    const aktJahr = jahr || heute.getFullYear();
+    const aktMonat = monat || (heute.getMonth() + 1);
+    const periode = module.exports.berechnePeriode(aktJahr, aktMonat, konfig.durchrechnungszeitraum);
+
+    // Alle aktiven Mitarbeiter holen
+    const mitarbeiter = db.prepare(`
+      SELECT id, mitarbeiter_nr, name FROM mitarbeiter WHERE aktiv = 1 ORDER BY name
+    `).all();
+
+    const uebersicht = mitarbeiter.map(m => {
+      const saldo = module.exports.getGleitzeitSaldo(m.id, aktJahr, aktMonat);
+      return {
+        mitarbeiter_id: m.id,
+        mitarbeiter_nr: m.mitarbeiter_nr,
+        name: m.name,
+        ...saldo
+      };
+    });
+
+    return {
+      aktiv: true,
+      periode: {
+        start: periode.periodeStart,
+        ende: periode.periodeEnde,
+        durchrechnungszeitraum: konfig.durchrechnungszeitraum
+      },
+      konfig,
+      mitarbeiter: uebersicht
+    };
   }
 };

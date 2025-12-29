@@ -1207,3 +1207,123 @@ td[title] {
     font-size: 2rem;
   }
 }
+
+/* ==================== GLEITZEIT ==================== */
+
+.gleitzeit-status {
+  display: flex;
+  gap: 20px;
+  margin-bottom: 20px;
+}
+
+.gleitzeit-status .stat-card {
+  flex: 1;
+  background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%);
+  border: 1px solid #a7f3d0;
+  padding: 15px;
+  border-radius: 8px;
+  text-align: center;
+}
+
+.gleitzeit-status .stat-label {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  margin-bottom: 5px;
+}
+
+.gleitzeit-status .stat-value {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--primary-dark);
+}
+
+/* Status Badges für Gleitzeit */
+.status-badge {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-size: 0.7rem;
+  font-weight: 600;
+}
+
+.status-badge.ok {
+  background: #d1fae5;
+  color: #059669;
+}
+
+.status-badge.info {
+  background: #dbeafe;
+  color: #2563eb;
+}
+
+.status-badge.warning {
+  background: #fef3c7;
+  color: #b45309;
+}
+
+.status-badge.danger {
+  background: #fee2e2;
+  color: #dc2626;
+}
+
+/* Saldo-Farben */
+.positive {
+  color: var(--success) !important;
+}
+
+.negative {
+  color: var(--danger) !important;
+}
+
+/* Gleitzeit-Tabelle */
+#gleitzeit-table td,
+#gleitzeit-table th {
+  padding: 10px 12px;
+}
+
+#gleitzeit-table tbody tr:hover {
+  background: var(--bg-light);
+}
+
+/* Gleitzeit-Saldo in Monatsabrechnung */
+.gleitzeit-info {
+  background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
+  border: 1px solid #86efac;
+  border-radius: 8px;
+  padding: 15px 20px;
+  margin: 15px 0;
+}
+
+.gleitzeit-info h4 {
+  margin: 0 0 10px;
+  color: var(--primary-dark);
+  font-size: 0.95rem;
+}
+
+.gleitzeit-info-grid {
+  display: flex;
+  gap: 30px;
+  flex-wrap: wrap;
+}
+
+.gleitzeit-info-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.gleitzeit-info-item .label {
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+}
+
+.gleitzeit-info-item .value {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+@media (max-width: 768px) {
+  .gleitzeit-status {
+    flex-direction: column;
+  }
+}

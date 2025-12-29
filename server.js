@@ -550,6 +550,9 @@ app.get('/api/monatsabrechnung', checkSession, (req, res) => {
   const sollStunden = abrechnung.soll.monatStunden;
   const differenz = Math.round((istStunden - sollStunden) * 100) / 100;
 
+  // Gleitzeit-Saldo abrufen (falls aktiviert)
+  const gleitzeitSaldo = db.getGleitzeitSaldo(req.session.id, jahr, monat);
+
   res.json({
     ...abrechnung,
     berechnung: {
@@ -558,7 +561,8 @@ app.get('/api/monatsabrechnung', checkSession, (req, res) => {
       differenz,
       ueberstunden: Math.max(0, differenz),
       minderstunden: Math.max(0, -differenz)
-    }
+    },
+    gleitzeit: gleitzeitSaldo
   });
 });
 
@@ -1127,6 +1131,142 @@ app.put('/api/admin/einstellungen', checkSession, checkAdmin, (req, res) => {
     console.error('Einstellungen aktualisieren fehlgeschlagen:', error);
     res.status(500).json({ error: 'Fehler beim Aktualisieren' });
   }
+});
+
+// ==================== GLEITZEIT ROUTES ====================
+
+// Gleitzeit-Konfiguration abrufen (Admin)
+app.get('/api/admin/gleitzeit/konfig', checkSession, checkAdmin, (req, res) => {
+  const konfig = db.getGleitzeitKonfig();
+  res.json(konfig);
+});
+
+// Gleitzeit-Konfiguration aktualisieren (Admin)
+app.put('/api/admin/gleitzeit/konfig', checkSession, checkAdmin, (req, res) => {
+  const {
+    gleitzeit_aktiv,
+    gleitzeit_durchrechnungszeitraum,
+    gleitzeit_max_plus,
+    gleitzeit_max_minus,
+    gleitzeit_uebertrag_max,
+    gleitzeit_verfall_monate
+  } = req.body;
+
+  // Validierung Durchrechnungszeitraum
+  const validePerioden = [1, 3, 6, 12];
+  if (gleitzeit_durchrechnungszeitraum !== undefined &&
+      !validePerioden.includes(parseInt(gleitzeit_durchrechnungszeitraum))) {
+    return res.status(400).json({ error: 'Durchrechnungszeitraum muss 1, 3, 6 oder 12 Monate sein' });
+  }
+
+  try {
+    if (gleitzeit_aktiv !== undefined) {
+      db.setEinstellung('gleitzeit_aktiv', gleitzeit_aktiv ? '1' : '0');
+    }
+    if (gleitzeit_durchrechnungszeitraum !== undefined) {
+      db.setEinstellung('gleitzeit_durchrechnungszeitraum', gleitzeit_durchrechnungszeitraum.toString());
+    }
+    if (gleitzeit_max_plus !== undefined) {
+      db.setEinstellung('gleitzeit_max_plus', gleitzeit_max_plus.toString());
+    }
+    if (gleitzeit_max_minus !== undefined) {
+      db.setEinstellung('gleitzeit_max_minus', gleitzeit_max_minus.toString());
+    }
+    if (gleitzeit_uebertrag_max !== undefined) {
+      db.setEinstellung('gleitzeit_uebertrag_max', gleitzeit_uebertrag_max.toString());
+    }
+    if (gleitzeit_verfall_monate !== undefined) {
+      db.setEinstellung('gleitzeit_verfall_monate', gleitzeit_verfall_monate.toString());
+    }
+
+    res.json({ success: true, konfig: db.getGleitzeitKonfig() });
+  } catch (error) {
+    console.error('Gleitzeit-Konfig aktualisieren fehlgeschlagen:', error);
+    res.status(500).json({ error: 'Fehler beim Aktualisieren' });
+  }
+});
+
+// Eigener Gleitzeit-Saldo (Mitarbeiter)
+app.get('/api/gleitzeit/saldo', checkSession, (req, res) => {
+  const jahr = req.query.jahr ? parseInt(req.query.jahr) : null;
+  const monat = req.query.monat ? parseInt(req.query.monat) : null;
+
+  const saldo = db.getGleitzeitSaldo(req.session.id, jahr, monat);
+  res.json(saldo);
+});
+
+// Eigene Gleitzeit-Historie (Mitarbeiter)
+app.get('/api/gleitzeit/historie', checkSession, (req, res) => {
+  const limit = parseInt(req.query.limit) || 12;
+  const historie = db.getGleitzeitHistorie(req.session.id, limit);
+
+  // Stunden formatieren
+  const formatiert = historie.map(h => ({
+    ...h,
+    sollStunden: (h.soll_minuten / 60).toFixed(2),
+    istStunden: (h.ist_minuten / 60).toFixed(2),
+    saldoStunden: (h.saldo_minuten / 60).toFixed(2),
+    uebertragVorperiodeStunden: (h.uebertrag_vorperiode / 60).toFixed(2),
+    uebertragNaechsteStunden: (h.uebertrag_naechste / 60).toFixed(2),
+    verfallenStunden: (h.verfallen_minuten / 60).toFixed(2)
+  }));
+
+  res.json(formatiert);
+});
+
+// Gleitzeit-Saldo für beliebigen Mitarbeiter (Admin)
+app.get('/api/admin/gleitzeit/saldo/:mitarbeiterId', checkSession, checkAdmin, (req, res) => {
+  const mitarbeiterId = parseInt(req.params.mitarbeiterId);
+  const jahr = req.query.jahr ? parseInt(req.query.jahr) : null;
+  const monat = req.query.monat ? parseInt(req.query.monat) : null;
+
+  const saldo = db.getGleitzeitSaldo(mitarbeiterId, jahr, monat);
+  res.json(saldo);
+});
+
+// Gleitzeit-Historie für beliebigen Mitarbeiter (Admin)
+app.get('/api/admin/gleitzeit/historie/:mitarbeiterId', checkSession, checkAdmin, (req, res) => {
+  const mitarbeiterId = parseInt(req.params.mitarbeiterId);
+  const limit = parseInt(req.query.limit) || 12;
+  const historie = db.getGleitzeitHistorie(mitarbeiterId, limit);
+
+  const formatiert = historie.map(h => ({
+    ...h,
+    sollStunden: (h.soll_minuten / 60).toFixed(2),
+    istStunden: (h.ist_minuten / 60).toFixed(2),
+    saldoStunden: (h.saldo_minuten / 60).toFixed(2),
+    uebertragVorperiodeStunden: (h.uebertrag_vorperiode / 60).toFixed(2),
+    uebertragNaechsteStunden: (h.uebertrag_naechste / 60).toFixed(2),
+    verfallenStunden: (h.verfallen_minuten / 60).toFixed(2)
+  }));
+
+  res.json(formatiert);
+});
+
+// Gleitzeit-Übersicht alle Mitarbeiter (Admin)
+app.get('/api/admin/gleitzeit/uebersicht', checkSession, checkAdmin, (req, res) => {
+  const jahr = req.query.jahr ? parseInt(req.query.jahr) : null;
+  const monat = req.query.monat ? parseInt(req.query.monat) : null;
+
+  const uebersicht = db.getGleitzeitUebersicht(jahr, monat);
+  res.json(uebersicht);
+});
+
+// Gleitzeit-Periode abschließen (Admin)
+app.post('/api/admin/gleitzeit/abschliessen', checkSession, checkAdmin, (req, res) => {
+  const { mitarbeiter_id, periode_start } = req.body;
+
+  if (!mitarbeiter_id || !periode_start) {
+    return res.status(400).json({ error: 'Mitarbeiter-ID und Periodenstart erforderlich' });
+  }
+
+  const result = db.schliesseGleitzeitPeriode(parseInt(mitarbeiter_id), periode_start);
+
+  if (!result.success) {
+    return res.status(400).json({ error: result.error });
+  }
+
+  res.json(result);
 });
 
 // Helper: Datum formatieren (österreichisches Format DD.MM.YYYY)

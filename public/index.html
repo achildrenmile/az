@@ -294,6 +294,7 @@
       <div class="tabs">
         <button class="tab active" data-tab="eintraege">Zeiteinträge</button>
         <button class="tab" data-tab="statistik">Statistik</button>
+        <button class="tab" data-tab="gleitzeit">Gleitzeit</button>
         <button class="tab" data-tab="verstoesse">Verstöße</button>
         <button class="tab" data-tab="mitarbeiter">Mitarbeiter</button>
         <button class="tab" data-tab="kunden">Kunden</button>
@@ -404,6 +405,105 @@
             </table>
           </div>
           <div id="admin-statistik-total" class="statistik-total"></div>
+        </div>
+      </div>
+
+      <!-- Gleitzeit Tab -->
+      <div id="tab-gleitzeit" class="tab-content hidden">
+        <div class="card">
+          <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom:20px;">
+            <h2 style="margin:0">Gleitzeit-Verwaltung</h2>
+            <div style="display:flex; gap:10px; align-items:center;">
+              <select id="gleitzeit-monat" style="padding:8px 12px;border:1px solid var(--border);border-radius:6px;">
+                <option value="1">Januar</option>
+                <option value="2">Februar</option>
+                <option value="3">März</option>
+                <option value="4">April</option>
+                <option value="5">Mai</option>
+                <option value="6">Juni</option>
+                <option value="7">Juli</option>
+                <option value="8">August</option>
+                <option value="9">September</option>
+                <option value="10">Oktober</option>
+                <option value="11">November</option>
+                <option value="12">Dezember</option>
+              </select>
+              <select id="gleitzeit-jahr" style="padding:8px 12px;border:1px solid var(--border);border-radius:6px;">
+              </select>
+              <button class="btn btn-primary" onclick="loadGleitzeitUebersicht()">Aktualisieren</button>
+            </div>
+          </div>
+
+          <!-- Gleitzeit-Konfiguration -->
+          <div class="settings-section" style="margin-bottom:30px; padding:20px; background:var(--bg-light); border-radius:8px;">
+            <h3 style="margin-top:0;">Gleitzeit-Einstellungen</h3>
+            <form id="gleitzeit-konfig-form">
+              <div class="form-row" style="gap:20px; flex-wrap:wrap;">
+                <div class="form-group">
+                  <label>
+                    <input type="checkbox" id="gleitzeit-aktiv"> Gleitzeit aktivieren
+                  </label>
+                </div>
+                <div class="form-group" style="flex:0 0 180px;">
+                  <label for="gleitzeit-durchrechnung">Durchrechnungszeitraum</label>
+                  <select id="gleitzeit-durchrechnung" style="width:100%;padding:8px;">
+                    <option value="1">1 Monat</option>
+                    <option value="3">3 Monate (Quartal)</option>
+                    <option value="6">6 Monate (Halbjahr)</option>
+                    <option value="12">12 Monate (Jahr)</option>
+                  </select>
+                </div>
+                <div class="form-group" style="flex:0 0 130px;">
+                  <label for="gleitzeit-max-plus">Max. Plus (Std)</label>
+                  <input type="number" id="gleitzeit-max-plus" min="0" max="200" value="40" style="width:100%;">
+                </div>
+                <div class="form-group" style="flex:0 0 130px;">
+                  <label for="gleitzeit-max-minus">Max. Minus (Std)</label>
+                  <input type="number" id="gleitzeit-max-minus" min="0" max="100" value="20" style="width:100%;">
+                </div>
+                <div class="form-group" style="flex:0 0 150px;">
+                  <label for="gleitzeit-uebertrag">Max. Übertrag (Std)</label>
+                  <input type="number" id="gleitzeit-uebertrag" min="0" max="100" value="20" style="width:100%;">
+                </div>
+              </div>
+              <button type="submit" class="btn btn-primary" style="margin-top:15px;">Einstellungen speichern</button>
+              <div id="gleitzeit-konfig-message" class="message"></div>
+            </form>
+          </div>
+
+          <!-- Gleitzeit-Status -->
+          <div id="gleitzeit-status" class="gleitzeit-status" style="display:none;">
+            <div class="stat-card">
+              <div class="stat-label">Aktuelle Periode</div>
+              <div class="stat-value" id="gleitzeit-periode">-</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">Durchrechnungszeitraum</div>
+              <div class="stat-value" id="gleitzeit-zeitraum">-</div>
+            </div>
+          </div>
+
+          <!-- Mitarbeiter-Übersicht -->
+          <h3 style="margin-top:30px;">Mitarbeiter-Salden</h3>
+          <div id="gleitzeit-inactive-msg" class="empty-state" style="display:none;">
+            <p>Gleitzeit ist nicht aktiviert. Aktivieren Sie die Gleitzeit in den Einstellungen oben.</p>
+          </div>
+          <div class="table-container" id="gleitzeit-table-container">
+            <table id="gleitzeit-table">
+              <thead>
+                <tr>
+                  <th>Mitarbeiter</th>
+                  <th>Nr.</th>
+                  <th>Soll (Std)</th>
+                  <th>Ist (Std)</th>
+                  <th>Übertrag</th>
+                  <th>Saldo</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
         </div>
       </div>
 

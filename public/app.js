@@ -2497,7 +2497,37 @@ async function loadMonatsabrechnung() {
           <div class="stat-value" style="font-size:1.8rem; color:var(--${differenzClass});">${differenzPrefix}${data.berechnung.differenz.toFixed(1).replace('.', ',')}h</div>
           <div class="stat-label">${data.berechnung.differenz >= 0 ? 'Überstunden' : 'Minderstunden'}</div>
         </div>
-      </div>
+      </div>`;
+
+    // Gleitzeit-Saldo anzeigen (wenn aktiviert)
+    if (data.gleitzeit && data.gleitzeit.aktiv) {
+      const saldo = parseFloat(data.gleitzeit.saldoStunden || 0);
+      const saldoClass = saldo >= 0 ? 'success' : 'danger';
+      const saldoPrefix = saldo >= 0 ? '+' : '';
+      const uebertrag = parseFloat(data.gleitzeit.uebertragStunden || 0);
+      const uebertragPrefix = uebertrag >= 0 ? '+' : '';
+
+      html += `
+      <div class="gleitzeit-info">
+        <h4>Gleitzeit-Saldo (Periode: ${formatDatum(data.gleitzeit.periode.start)} - ${formatDatum(data.gleitzeit.periode.ende)})</h4>
+        <div class="gleitzeit-info-grid">
+          <div class="gleitzeit-info-item">
+            <span class="label">Übertrag Vorperiode:</span>
+            <span class="value">${uebertragPrefix}${uebertrag.toFixed(2).replace('.', ',')}h</span>
+          </div>
+          <div class="gleitzeit-info-item">
+            <span class="label">Aktueller Saldo:</span>
+            <span class="value" style="color:var(--${saldoClass}); font-size:1.1em;">${saldoPrefix}${saldo.toFixed(2).replace('.', ',')}h</span>
+          </div>
+          <div class="gleitzeit-info-item">
+            <span class="label">Limit:</span>
+            <span class="value">+${data.gleitzeit.limits.maxPlus}h / -${data.gleitzeit.limits.maxMinus}h</span>
+          </div>
+        </div>
+      </div>`;
+    }
+
+    html += `
 
       <h3 style="margin:20px 0 10px;">Tagesübersicht</h3>
       <div class="table-container">
@@ -2728,4 +2758,166 @@ function printMonatsabrechnung() {
 // Event Listener für Monatsabrechnung Button
 document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('monatsabrechnung-btn')?.addEventListener('click', openMonatsabrechnungModal);
+});
+
+// ==================== GLEITZEIT FUNKTIONEN ====================
+
+let gleitzeitKonfig = null;
+
+// Gleitzeit-Jahre-Dropdown initialisieren
+function initGleitzeitJahre() {
+  const select = document.getElementById('gleitzeit-jahr');
+  if (!select) return;
+
+  const currentYear = new Date().getFullYear();
+  select.innerHTML = '';
+  for (let y = currentYear; y >= currentYear - 3; y--) {
+    const opt = document.createElement('option');
+    opt.value = y;
+    opt.textContent = y;
+    select.appendChild(opt);
+  }
+
+  // Aktuellen Monat vorauswählen
+  const monatSelect = document.getElementById('gleitzeit-monat');
+  if (monatSelect) {
+    monatSelect.value = new Date().getMonth() + 1;
+  }
+}
+
+// Gleitzeit-Konfiguration laden
+async function loadGleitzeitKonfig() {
+  try {
+    gleitzeitKonfig = await api('/admin/gleitzeit/konfig');
+
+    document.getElementById('gleitzeit-aktiv').checked = gleitzeitKonfig.aktiv;
+    document.getElementById('gleitzeit-durchrechnung').value = gleitzeitKonfig.durchrechnungszeitraum;
+    document.getElementById('gleitzeit-max-plus').value = gleitzeitKonfig.maxPlus;
+    document.getElementById('gleitzeit-max-minus').value = gleitzeitKonfig.maxMinus;
+    document.getElementById('gleitzeit-uebertrag').value = gleitzeitKonfig.uebertragMax;
+
+    return gleitzeitKonfig;
+  } catch (error) {
+    console.error('Gleitzeit-Konfiguration laden fehlgeschlagen:', error);
+  }
+}
+
+// Gleitzeit-Konfiguration speichern
+async function saveGleitzeitKonfig(event) {
+  event.preventDefault();
+  const messageEl = document.getElementById('gleitzeit-konfig-message');
+
+  try {
+    await api('/admin/gleitzeit/konfig', 'PUT', {
+      gleitzeit_aktiv: document.getElementById('gleitzeit-aktiv').checked,
+      gleitzeit_durchrechnungszeitraum: parseInt(document.getElementById('gleitzeit-durchrechnung').value),
+      gleitzeit_max_plus: parseFloat(document.getElementById('gleitzeit-max-plus').value),
+      gleitzeit_max_minus: parseFloat(document.getElementById('gleitzeit-max-minus').value),
+      gleitzeit_uebertrag_max: parseFloat(document.getElementById('gleitzeit-uebertrag').value)
+    });
+
+    showMessage('gleitzeit-konfig-message', 'Einstellungen gespeichert', 'success');
+    loadGleitzeitUebersicht();
+  } catch (error) {
+    showMessage('gleitzeit-konfig-message', 'Fehler: ' + error.message, 'error');
+  }
+}
+
+// Gleitzeit-Übersicht laden
+async function loadGleitzeitUebersicht() {
+  const jahr = document.getElementById('gleitzeit-jahr')?.value || new Date().getFullYear();
+  const monat = document.getElementById('gleitzeit-monat')?.value || (new Date().getMonth() + 1);
+
+  try {
+    const data = await api(`/admin/gleitzeit/uebersicht?jahr=${jahr}&monat=${monat}`);
+
+    const tbody = document.querySelector('#gleitzeit-table tbody');
+    const statusEl = document.getElementById('gleitzeit-status');
+    const inactiveMsg = document.getElementById('gleitzeit-inactive-msg');
+    const tableContainer = document.getElementById('gleitzeit-table-container');
+
+    if (!data.aktiv) {
+      statusEl.style.display = 'none';
+      tableContainer.style.display = 'none';
+      inactiveMsg.style.display = 'block';
+      return;
+    }
+
+    inactiveMsg.style.display = 'none';
+    tableContainer.style.display = 'block';
+    statusEl.style.display = 'flex';
+
+    // Status-Karten aktualisieren
+    document.getElementById('gleitzeit-periode').textContent =
+      `${formatDatum(data.periode.start)} - ${formatDatum(data.periode.ende)}`;
+
+    const zeitraumText = {
+      1: '1 Monat',
+      3: '3 Monate (Quartal)',
+      6: '6 Monate (Halbjahr)',
+      12: '12 Monate (Jahr)'
+    };
+    document.getElementById('gleitzeit-zeitraum').textContent =
+      zeitraumText[data.periode.durchrechnungszeitraum] || data.periode.durchrechnungszeitraum + ' Monate';
+
+    // Tabelle befüllen
+    if (!data.mitarbeiter || data.mitarbeiter.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:40px;color:var(--text-secondary)">Keine Mitarbeiter gefunden</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = data.mitarbeiter.map(m => {
+      const saldo = parseFloat(m.saldoStunden || 0);
+      const saldoClass = saldo >= 0 ? 'positive' : 'negative';
+      const saldoPrefix = saldo >= 0 ? '+' : '';
+
+      // Status ermitteln
+      let statusHtml = '<span class="status-badge ok">OK</span>';
+      if (saldo >= m.limits?.maxPlus) {
+        statusHtml = '<span class="status-badge warning">Max. erreicht</span>';
+      } else if (saldo <= -m.limits?.maxMinus) {
+        statusHtml = '<span class="status-badge danger">Limit überschritten</span>';
+      } else if (saldo >= m.limits?.maxPlus * 0.8) {
+        statusHtml = '<span class="status-badge info">Fast voll</span>';
+      }
+
+      const uebertrag = parseFloat(m.uebertragStunden || 0);
+      const uebertragPrefix = uebertrag >= 0 ? '+' : '';
+
+      return `
+        <tr>
+          <td>${m.name}</td>
+          <td>${m.mitarbeiter_nr}</td>
+          <td style="text-align:right">${m.sollStunden?.replace('.', ',') || '0,00'}h</td>
+          <td style="text-align:right">${m.istStunden?.replace('.', ',') || '0,00'}h</td>
+          <td style="text-align:right; color:var(--text-secondary)">${uebertragPrefix}${uebertrag.toFixed(2).replace('.', ',')}h</td>
+          <td style="text-align:right; font-weight:600;" class="${saldoClass}">
+            ${saldoPrefix}${saldo.toFixed(2).replace('.', ',')}h
+          </td>
+          <td>${statusHtml}</td>
+        </tr>
+      `;
+    }).join('');
+
+  } catch (error) {
+    console.error('Gleitzeit-Übersicht laden fehlgeschlagen:', error);
+  }
+}
+
+// Gleitzeit Tab-Wechsel Handler
+document.addEventListener('DOMContentLoaded', () => {
+  initGleitzeitJahre();
+
+  // Tab-Wechsel
+  document.querySelectorAll('.tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      if (tab.dataset.tab === 'gleitzeit') {
+        loadGleitzeitKonfig();
+        loadGleitzeitUebersicht();
+      }
+    });
+  });
+
+  // Konfig-Formular
+  document.getElementById('gleitzeit-konfig-form')?.addEventListener('submit', saveGleitzeitKonfig);
 });
