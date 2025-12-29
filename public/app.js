@@ -433,13 +433,21 @@ async function loadKunden() {
     const kunden = await api('/admin/kunden');
     const tbody = document.querySelector('#kunden-table tbody');
 
+    if (kunden.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="6" style="text-align:center">Noch keine Kunden angelegt.</td></tr>';
+      return;
+    }
+
     tbody.innerHTML = kunden.map(k => `
       <tr>
         <td>${k.name}</td>
+        <td>${k.ansprechpartner || '-'}</td>
+        <td>${k.ort || '-'}</td>
+        <td>${k.telefon || '-'}</td>
         <td>${k.aktiv ? 'Aktiv' : 'Inaktiv'}</td>
-        <td>
-          <button class="btn btn-small" onclick="editKunde(${k.id}, '${k.name.replace(/'/g, "\\'")}')">Bearbeiten</button>
-          <button class="btn btn-small" onclick="toggleKundeAktiv(${k.id}, ${k.aktiv})">${k.aktiv ? 'Deaktivieren' : 'Aktivieren'}</button>
+        <td class="action-btns">
+          <button class="btn btn-small btn-icon" onclick="openKundeModal(${k.id})" title="Bearbeiten">✎</button>
+          <button class="btn btn-small btn-icon" onclick="toggleKundeAktiv(${k.id}, ${k.aktiv})" title="${k.aktiv ? 'Deaktivieren' : 'Aktivieren'}">${k.aktiv ? '⏸' : '▶'}</button>
         </td>
       </tr>
     `).join('');
@@ -508,23 +516,74 @@ document.getElementById('new-mitarbeiter-form').addEventListener('submit', async
   }
 });
 
-// Neuer Kunde
-document.getElementById('new-kunde-form').addEventListener('submit', async (e) => {
+// Kunde Modal öffnen
+window.openKundeModal = async (id = null) => {
+  const modal = document.getElementById('kunde-modal');
+  const title = document.getElementById('kunde-modal-title');
+  const form = document.getElementById('kunde-form');
+
+  // Formular zurücksetzen
+  form.reset();
+  document.getElementById('kunde-id').value = '';
+  document.getElementById('kunde-form-message').textContent = '';
+
+  if (id) {
+    // Bearbeiten - Daten laden
+    title.textContent = 'Kunde bearbeiten';
+    try {
+      const kunde = await api(`/admin/kunden/${id}`);
+      document.getElementById('kunde-id').value = kunde.id;
+      document.getElementById('kunde-name').value = kunde.name || '';
+      document.getElementById('kunde-ansprechpartner').value = kunde.ansprechpartner || '';
+      document.getElementById('kunde-strasse').value = kunde.strasse || '';
+      document.getElementById('kunde-plz').value = kunde.plz || '';
+      document.getElementById('kunde-ort').value = kunde.ort || '';
+      document.getElementById('kunde-telefon').value = kunde.telefon || '';
+      document.getElementById('kunde-email').value = kunde.email || '';
+      document.getElementById('kunde-notizen').value = kunde.notizen || '';
+    } catch (error) {
+      alert('Fehler beim Laden: ' + error.message);
+      return;
+    }
+  } else {
+    title.textContent = 'Neuer Kunde';
+  }
+
+  modal.classList.remove('hidden');
+};
+
+window.closeKundeModal = () => {
+  document.getElementById('kunde-modal').classList.add('hidden');
+};
+
+// Kunde Formular absenden
+document.getElementById('kunde-form').addEventListener('submit', async (e) => {
   e.preventDefault();
-  const messageEl = document.getElementById('new-kunde-message');
+  const messageEl = document.getElementById('kunde-form-message');
   messageEl.textContent = '';
 
-  const name = document.getElementById('new-kunde-name').value;
+  const id = document.getElementById('kunde-id').value;
+  const data = {
+    name: document.getElementById('kunde-name').value,
+    ansprechpartner: document.getElementById('kunde-ansprechpartner').value,
+    strasse: document.getElementById('kunde-strasse').value,
+    plz: document.getElementById('kunde-plz').value,
+    ort: document.getElementById('kunde-ort').value,
+    telefon: document.getElementById('kunde-telefon').value,
+    email: document.getElementById('kunde-email').value,
+    notizen: document.getElementById('kunde-notizen').value,
+    aktiv: true
+  };
 
   try {
-    await api('/admin/kunden', 'POST', { name });
-    messageEl.textContent = 'Kunde angelegt!';
-    messageEl.className = 'message success';
-
-    document.getElementById('new-kunde-name').value = '';
-
+    if (id) {
+      await api(`/admin/kunden/${id}`, 'PUT', data);
+    } else {
+      await api('/admin/kunden', 'POST', data);
+    }
+    closeKundeModal();
     loadKunden();
-    loadKundenListe(); // Dropdown aktualisieren
+    loadKundenListe();
   } catch (error) {
     messageEl.textContent = error.message;
     messageEl.className = 'message error';
@@ -564,27 +623,15 @@ window.toggleAktiv = async (id, currentStatus) => {
   }
 };
 
-window.editKunde = async (id, currentName) => {
-  const newName = prompt('Kundenname:', currentName);
-  if (!newName || newName === currentName) return;
-
-  try {
-    await api(`/admin/kunden/${id}`, 'PUT', { name: newName, aktiv: true });
-    loadKunden();
-    loadKundenListe();
-  } catch (error) {
-    alert(error.message);
-  }
-};
-
 window.toggleKundeAktiv = async (id, currentStatus) => {
   try {
-    // We need to get the current name first
-    const kunden = await api('/admin/kunden');
-    const kunde = kunden.find(k => k.id === id);
+    const kunde = await api(`/admin/kunden/${id}`);
     if (!kunde) return;
 
-    await api(`/admin/kunden/${id}`, 'PUT', { name: kunde.name, aktiv: !currentStatus });
+    await api(`/admin/kunden/${id}`, 'PUT', {
+      ...kunde,
+      aktiv: !currentStatus
+    });
     loadKunden();
     loadKundenListe();
   } catch (error) {

@@ -254,17 +254,17 @@
       <div id="tab-kunden" class="tab-content hidden">
         <div class="card">
           <h2>Kunden verwalten</h2>
-          <form id="new-kunde-form" class="inline-form">
-            <input type="text" id="new-kunde-name" placeholder="Kundenname" required>
-            <button type="submit" class="btn btn-primary">Hinzufügen</button>
-          </form>
-          <div id="new-kunde-message" class="message"></div>
+          <button class="btn btn-primary" onclick="openKundeModal()">+ Neuer Kunde</button>
+          <div id="kunde-message" class="message"></div>
 
           <div class="table-container">
             <table id="kunden-table">
               <thead>
                 <tr>
-                  <th>Name</th>
+                  <th>Firma</th>
+                  <th>Ansprechpartner</th>
+                  <th>Ort</th>
+                  <th>Telefon</th>
                   <th>Status</th>
                   <th>Aktionen</th>
                 </tr>
@@ -274,6 +274,58 @@
           </div>
         </div>
       </div>
+    </div>
+  </div>
+
+  <!-- KUNDE MODAL -->
+  <div id="kunde-modal" class="modal hidden">
+    <div class="modal-backdrop" onclick="closeKundeModal()"></div>
+    <div class="modal-content card">
+      <h2 id="kunde-modal-title">Neuer Kunde</h2>
+      <form id="kunde-form">
+        <input type="hidden" id="kunde-id">
+        <div class="form-group">
+          <label for="kunde-name">Firma / Name *</label>
+          <input type="text" id="kunde-name" required>
+        </div>
+        <div class="form-group">
+          <label for="kunde-ansprechpartner">Ansprechpartner</label>
+          <input type="text" id="kunde-ansprechpartner">
+        </div>
+        <div class="form-group">
+          <label for="kunde-strasse">Straße</label>
+          <input type="text" id="kunde-strasse">
+        </div>
+        <div class="form-row">
+          <div class="form-group" style="flex:0 0 100px">
+            <label for="kunde-plz">PLZ</label>
+            <input type="text" id="kunde-plz">
+          </div>
+          <div class="form-group">
+            <label for="kunde-ort">Ort</label>
+            <input type="text" id="kunde-ort">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="kunde-telefon">Telefon</label>
+            <input type="text" id="kunde-telefon">
+          </div>
+          <div class="form-group">
+            <label for="kunde-email">E-Mail</label>
+            <input type="email" id="kunde-email">
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="kunde-notizen">Notizen</label>
+          <textarea id="kunde-notizen" rows="2"></textarea>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-secondary" onclick="closeKundeModal()">Abbrechen</button>
+          <button type="submit" class="btn btn-primary">Speichern</button>
+        </div>
+        <div id="kunde-form-message" class="message"></div>
+      </form>
     </div>
   </div>
 

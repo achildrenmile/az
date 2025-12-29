@@ -70,12 +70,42 @@ db.exec(`
   CREATE TABLE IF NOT EXISTS kunden (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT UNIQUE NOT NULL,
+    ansprechpartner TEXT,
+    strasse TEXT,
+    plz TEXT,
+    ort TEXT,
+    telefon TEXT,
+    email TEXT,
+    notizen TEXT,
     aktiv INTEGER DEFAULT 1,
     erstellt_am DATETIME DEFAULT CURRENT_TIMESTAMP
   );
 
   CREATE INDEX IF NOT EXISTS idx_kunden_name ON kunden(name);
 `);
+
+// Migration: Neue Spalten hinzufügen falls sie fehlen
+try {
+  db.exec(`ALTER TABLE kunden ADD COLUMN ansprechpartner TEXT`);
+} catch (e) {}
+try {
+  db.exec(`ALTER TABLE kunden ADD COLUMN strasse TEXT`);
+} catch (e) {}
+try {
+  db.exec(`ALTER TABLE kunden ADD COLUMN plz TEXT`);
+} catch (e) {}
+try {
+  db.exec(`ALTER TABLE kunden ADD COLUMN ort TEXT`);
+} catch (e) {}
+try {
+  db.exec(`ALTER TABLE kunden ADD COLUMN telefon TEXT`);
+} catch (e) {}
+try {
+  db.exec(`ALTER TABLE kunden ADD COLUMN email TEXT`);
+} catch (e) {}
+try {
+  db.exec(`ALTER TABLE kunden ADD COLUMN notizen TEXT`);
+} catch (e) {}
 
 // Standard-Admin erstellen falls nicht vorhanden
 const adminExists = db.prepare('SELECT id FROM mitarbeiter WHERE mitarbeiter_nr = ?').get('admin');
@@ -288,12 +318,44 @@ module.exports = {
     return db.prepare('SELECT * FROM kunden ORDER BY name').all();
   },
 
-  createKunde: (name) => {
-    return db.prepare('INSERT INTO kunden (name) VALUES (?)').run(name);
+  getKundeById: (id) => {
+    return db.prepare('SELECT * FROM kunden WHERE id = ?').get(id);
   },
 
-  updateKunde: (id, name, aktiv) => {
-    return db.prepare('UPDATE kunden SET name = ?, aktiv = ? WHERE id = ?').run(name, aktiv ? 1 : 0, id);
+  createKunde: (data) => {
+    return db.prepare(`
+      INSERT INTO kunden (name, ansprechpartner, strasse, plz, ort, telefon, email, notizen)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      data.name,
+      data.ansprechpartner || '',
+      data.strasse || '',
+      data.plz || '',
+      data.ort || '',
+      data.telefon || '',
+      data.email || '',
+      data.notizen || ''
+    );
+  },
+
+  updateKunde: (id, data) => {
+    return db.prepare(`
+      UPDATE kunden
+      SET name = ?, ansprechpartner = ?, strasse = ?, plz = ?, ort = ?,
+          telefon = ?, email = ?, notizen = ?, aktiv = ?
+      WHERE id = ?
+    `).run(
+      data.name,
+      data.ansprechpartner || '',
+      data.strasse || '',
+      data.plz || '',
+      data.ort || '',
+      data.telefon || '',
+      data.email || '',
+      data.notizen || '',
+      data.aktiv !== false ? 1 : 0,
+      id
+    );
   },
 
   deleteKunde: (id) => {

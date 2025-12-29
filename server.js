@@ -381,16 +381,34 @@ app.get('/api/admin/kunden', checkSession, checkAdmin, (req, res) => {
   res.json(kunden);
 });
 
+// Einzelnen Kunden abrufen (Admin)
+app.get('/api/admin/kunden/:id', checkSession, checkAdmin, (req, res) => {
+  const kunde = db.getKundeById(req.params.id);
+  if (!kunde) {
+    return res.status(404).json({ error: 'Kunde nicht gefunden' });
+  }
+  res.json(kunde);
+});
+
 // Neuen Kunden anlegen (Admin)
 app.post('/api/admin/kunden', checkSession, checkAdmin, (req, res) => {
-  const { name } = req.body;
+  const { name, ansprechpartner, strasse, plz, ort, telefon, email, notizen } = req.body;
 
   if (!name || !name.trim()) {
-    return res.status(400).json({ error: 'Kundenname erforderlich' });
+    return res.status(400).json({ error: 'Firmenname erforderlich' });
   }
 
   try {
-    db.createKunde(name.trim());
+    db.createKunde({
+      name: name.trim(),
+      ansprechpartner,
+      strasse,
+      plz,
+      ort,
+      telefon,
+      email,
+      notizen
+    });
     res.json({ success: true });
   } catch (error) {
     if (error.message.includes('UNIQUE')) {
@@ -402,14 +420,24 @@ app.post('/api/admin/kunden', checkSession, checkAdmin, (req, res) => {
 
 // Kunden bearbeiten (Admin)
 app.put('/api/admin/kunden/:id', checkSession, checkAdmin, (req, res) => {
-  const { name, aktiv } = req.body;
+  const { name, ansprechpartner, strasse, plz, ort, telefon, email, notizen, aktiv } = req.body;
 
   if (!name || !name.trim()) {
-    return res.status(400).json({ error: 'Kundenname erforderlich' });
+    return res.status(400).json({ error: 'Firmenname erforderlich' });
   }
 
   try {
-    db.updateKunde(req.params.id, name.trim(), aktiv !== false);
+    db.updateKunde(req.params.id, {
+      name: name.trim(),
+      ansprechpartner,
+      strasse,
+      plz,
+      ort,
+      telefon,
+      email,
+      notizen,
+      aktiv
+    });
     res.json({ success: true });
   } catch (error) {
     if (error.message.includes('UNIQUE')) {
