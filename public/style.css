@@ -101,6 +101,26 @@ body {
   opacity: 0.8;
 }
 
+/* Mandant Badge */
+.mandant-badge {
+  display: inline-block;
+  background: var(--accent);
+  color: white;
+  font-size: 0.65rem;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-top: 2px;
+}
+
+.mandant-badge-login {
+  margin: 12px auto 0;
+  font-size: 0.75rem;
+  padding: 4px 12px;
+}
+
 /* Navbar */
 .navbar {
   background: var(--bg-dark);

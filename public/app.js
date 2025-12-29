@@ -1,3 +1,34 @@
+// Config laden und Mandant anzeigen
+let appConfig = { mandant: '' };
+
+async function loadConfig() {
+  try {
+    const response = await fetch('/config.json');
+    appConfig = await response.json();
+
+    // Mandant in allen Badges anzeigen
+    document.querySelectorAll('.mandant-badge').forEach(el => {
+      el.textContent = appConfig.mandant;
+    });
+
+    // Optional: Theme-Farben anwenden
+    if (appConfig.theme) {
+      const root = document.documentElement;
+      if (appConfig.theme.primaryColor) {
+        root.style.setProperty('--primary', appConfig.theme.primaryColor);
+      }
+      if (appConfig.theme.accentColor) {
+        root.style.setProperty('--accent', appConfig.theme.accentColor);
+      }
+    }
+  } catch (error) {
+    console.error('Config laden fehlgeschlagen:', error);
+  }
+}
+
+// Config sofort laden
+loadConfig();
+
 // State
 let sessionId = localStorage.getItem('sessionId');
 let userName = localStorage.getItem('userName');
