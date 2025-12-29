@@ -72,7 +72,8 @@
 
           <div class="form-group">
             <label for="kunde">Kunde</label>
-            <input type="text" id="kunde" placeholder="z.B. Firma Mustermann GmbH">
+            <input type="text" id="kunde" list="kunden-liste" placeholder="Auswählen oder eingeben">
+            <datalist id="kunden-liste"></datalist>
           </div>
 
           <div class="form-group">
@@ -146,7 +147,7 @@
         </div>
         <div class="form-group">
           <label for="edit-kunde">Kunde</label>
-          <input type="text" id="edit-kunde">
+          <input type="text" id="edit-kunde" list="kunden-liste">
         </div>
         <div class="form-group">
           <label for="edit-anfahrt">Anfahrt</label>
@@ -180,6 +181,7 @@
       <div class="tabs">
         <button class="tab active" data-tab="eintraege">Zeiteinträge</button>
         <button class="tab" data-tab="mitarbeiter">Mitarbeiter</button>
+        <button class="tab" data-tab="kunden">Kunden</button>
       </div>
 
       <!-- Zeiteinträge Tab -->
@@ -238,6 +240,31 @@
                   <th>Nr.</th>
                   <th>Name</th>
                   <th>Admin</th>
+                  <th>Status</th>
+                  <th>Aktionen</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Kunden Tab -->
+      <div id="tab-kunden" class="tab-content hidden">
+        <div class="card">
+          <h2>Kunden verwalten</h2>
+          <form id="new-kunde-form" class="inline-form">
+            <input type="text" id="new-kunde-name" placeholder="Kundenname" required>
+            <button type="submit" class="btn btn-primary">Hinzufügen</button>
+          </form>
+          <div id="new-kunde-message" class="message"></div>
+
+          <div class="table-container">
+            <table id="kunden-table">
+              <thead>
+                <tr>
+                  <th>Name</th>
                   <th>Status</th>
                   <th>Aktionen</th>
                 </tr>

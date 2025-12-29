@@ -367,6 +367,68 @@ app.get('/api/admin/audit', checkSession, checkAdmin, (req, res) => {
   res.json(logs);
 });
 
+// ==================== KUNDEN ROUTES ====================
+
+// Alle aktiven Kunden abrufen (für Dropdown - alle Benutzer)
+app.get('/api/kunden', checkSession, (req, res) => {
+  const kunden = db.getAllKunden(true);
+  res.json(kunden);
+});
+
+// Alle Kunden abrufen (Admin - inkl. inaktive)
+app.get('/api/admin/kunden', checkSession, checkAdmin, (req, res) => {
+  const kunden = db.getAllKunden(false);
+  res.json(kunden);
+});
+
+// Neuen Kunden anlegen (Admin)
+app.post('/api/admin/kunden', checkSession, checkAdmin, (req, res) => {
+  const { name } = req.body;
+
+  if (!name || !name.trim()) {
+    return res.status(400).json({ error: 'Kundenname erforderlich' });
+  }
+
+  try {
+    db.createKunde(name.trim());
+    res.json({ success: true });
+  } catch (error) {
+    if (error.message.includes('UNIQUE')) {
+      return res.status(400).json({ error: 'Kunde existiert bereits' });
+    }
+    res.status(500).json({ error: 'Fehler beim Erstellen' });
+  }
+});
+
+// Kunden bearbeiten (Admin)
+app.put('/api/admin/kunden/:id', checkSession, checkAdmin, (req, res) => {
+  const { name, aktiv } = req.body;
+
+  if (!name || !name.trim()) {
+    return res.status(400).json({ error: 'Kundenname erforderlich' });
+  }
+
+  try {
+    db.updateKunde(req.params.id, name.trim(), aktiv !== false);
+    res.json({ success: true });
+  } catch (error) {
+    if (error.message.includes('UNIQUE')) {
+      return res.status(400).json({ error: 'Kundenname existiert bereits' });
+    }
+    res.status(500).json({ error: 'Fehler beim Aktualisieren' });
+  }
+});
+
+// Kunden löschen (Admin)
+app.delete('/api/admin/kunden/:id', checkSession, checkAdmin, (req, res) => {
+  try {
+    db.deleteKunde(req.params.id);
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: 'Fehler beim Löschen' });
+  }
+});
+
 // Helper: Datum formatieren (österreichisches Format DD.MM.YYYY)
 function formatDateAT(dateStr) {
   const [year, month, day] = dateStr.split('-');

@@ -65,6 +65,16 @@ db.exec(`
 
   CREATE INDEX IF NOT EXISTS idx_audit_zeitpunkt ON audit_log(zeitpunkt);
   CREATE INDEX IF NOT EXISTS idx_audit_datensatz ON audit_log(tabelle, datensatz_id);
+
+  -- Kunden-Tabelle
+  CREATE TABLE IF NOT EXISTS kunden (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT UNIQUE NOT NULL,
+    aktiv INTEGER DEFAULT 1,
+    erstellt_am DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_kunden_name ON kunden(name);
 `);
 
 // Standard-Admin erstellen falls nicht vorhanden
@@ -268,5 +278,25 @@ module.exports = {
       ORDER BY a.zeitpunkt DESC
       LIMIT ?
     `).all(limit);
+  },
+
+  // Kunden-Funktionen
+  getAllKunden: (nurAktive = true) => {
+    if (nurAktive) {
+      return db.prepare('SELECT * FROM kunden WHERE aktiv = 1 ORDER BY name').all();
+    }
+    return db.prepare('SELECT * FROM kunden ORDER BY name').all();
+  },
+
+  createKunde: (name) => {
+    return db.prepare('INSERT INTO kunden (name) VALUES (?)').run(name);
+  },
+
+  updateKunde: (id, name, aktiv) => {
+    return db.prepare('UPDATE kunden SET name = ?, aktiv = ? WHERE id = ?').run(name, aktiv ? 1 : 0, id);
+  },
+
+  deleteKunde: (id) => {
+    return db.prepare('DELETE FROM kunden WHERE id = ?').run(id);
   }
 };

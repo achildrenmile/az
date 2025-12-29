@@ -134,6 +134,17 @@ document.getElementById('login-form').addEventListener('submit', async (e) => {
 
 // ==================== ERFASSUNG ====================
 
+// Kundenliste für Dropdown laden
+async function loadKundenListe() {
+  try {
+    const kunden = await api('/kunden');
+    const datalist = document.getElementById('kunden-liste');
+    datalist.innerHTML = kunden.map(k => `<option value="${k.name}">`).join('');
+  } catch (error) {
+    console.error('Kunden laden fehlgeschlagen:', error);
+  }
+}
+
 function initErfassungView() {
   document.getElementById('user-name').textContent = `Hallo, ${userName}`;
   document.getElementById('show-admin-btn').classList.toggle('hidden', !isAdmin);
@@ -144,6 +155,9 @@ function initErfassungView() {
   } else {
     document.getElementById('datum').value = getTodayAT();
   }
+
+  // Kundenliste laden
+  loadKundenListe();
 }
 
 document.getElementById('zeit-form').addEventListener('submit', async (e) => {
@@ -355,7 +369,7 @@ document.getElementById('back-to-erfassung-btn').addEventListener('click', () =>
 });
 
 async function loadAdminData() {
-  await Promise.all([loadEintraege(), loadMitarbeiter()]);
+  await Promise.all([loadEintraege(), loadMitarbeiter(), loadKunden()]);
 }
 
 async function loadEintraege() {
@@ -406,6 +420,26 @@ async function loadMitarbeiter() {
         <td>
           <button class="btn btn-small" onclick="resetPin(${m.id}, '${m.name}')">PIN ändern</button>
           ${!m.ist_admin ? `<button class="btn btn-small" onclick="toggleAktiv(${m.id}, ${m.aktiv})">${m.aktiv ? 'Deaktivieren' : 'Aktivieren'}</button>` : ''}
+        </td>
+      </tr>
+    `).join('');
+  } catch (error) {
+    console.error(error);
+  }
+}
+
+async function loadKunden() {
+  try {
+    const kunden = await api('/admin/kunden');
+    const tbody = document.querySelector('#kunden-table tbody');
+
+    tbody.innerHTML = kunden.map(k => `
+      <tr>
+        <td>${k.name}</td>
+        <td>${k.aktiv ? 'Aktiv' : 'Inaktiv'}</td>
+        <td>
+          <button class="btn btn-small" onclick="editKunde(${k.id}, '${k.name.replace(/'/g, "\\'")}')">Bearbeiten</button>
+          <button class="btn btn-small" onclick="toggleKundeAktiv(${k.id}, ${k.aktiv})">${k.aktiv ? 'Deaktivieren' : 'Aktivieren'}</button>
         </td>
       </tr>
     `).join('');
@@ -474,6 +508,29 @@ document.getElementById('new-mitarbeiter-form').addEventListener('submit', async
   }
 });
 
+// Neuer Kunde
+document.getElementById('new-kunde-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const messageEl = document.getElementById('new-kunde-message');
+  messageEl.textContent = '';
+
+  const name = document.getElementById('new-kunde-name').value;
+
+  try {
+    await api('/admin/kunden', 'POST', { name });
+    messageEl.textContent = 'Kunde angelegt!';
+    messageEl.className = 'message success';
+
+    document.getElementById('new-kunde-name').value = '';
+
+    loadKunden();
+    loadKundenListe(); // Dropdown aktualisieren
+  } catch (error) {
+    messageEl.textContent = error.message;
+    messageEl.className = 'message error';
+  }
+});
+
 // Globale Funktionen für onclick
 window.deleteEintrag = async (id) => {
   if (!confirm('Eintrag wirklich löschen?')) return;
@@ -502,6 +559,34 @@ window.toggleAktiv = async (id, currentStatus) => {
   try {
     await api(`/admin/mitarbeiter/${id}`, 'PUT', { aktiv: !currentStatus });
     loadMitarbeiter();
+  } catch (error) {
+    alert(error.message);
+  }
+};
+
+window.editKunde = async (id, currentName) => {
+  const newName = prompt('Kundenname:', currentName);
+  if (!newName || newName === currentName) return;
+
+  try {
+    await api(`/admin/kunden/${id}`, 'PUT', { name: newName, aktiv: true });
+    loadKunden();
+    loadKundenListe();
+  } catch (error) {
+    alert(error.message);
+  }
+};
+
+window.toggleKundeAktiv = async (id, currentStatus) => {
+  try {
+    // We need to get the current name first
+    const kunden = await api('/admin/kunden');
+    const kunde = kunden.find(k => k.id === id);
+    if (!kunde) return;
+
+    await api(`/admin/kunden/${id}`, 'PUT', { name: kunde.name, aktiv: !currentStatus });
+    loadKunden();
+    loadKundenListe();
   } catch (error) {
     alert(error.message);
   }
