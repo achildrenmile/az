@@ -158,10 +158,10 @@ document.getElementById('login-form').addEventListener('submit', async (e) => {
   errorEl.textContent = '';
 
   const mitarbeiter_nr = document.getElementById('mitarbeiter_nr').value;
-  const pin = document.getElementById('pin').value;
+  const password = document.getElementById('password').value;
 
   try {
-    const result = await api('/login', 'POST', { mitarbeiter_nr, pin });
+    const result = await api('/login', 'POST', { mitarbeiter_nr, password });
     sessionId = result.sessionId;
     userName = result.name;
     isAdmin = result.ist_admin;
@@ -401,7 +401,7 @@ async function logout() {
   localStorage.removeItem('isAdmin');
 
   document.getElementById('mitarbeiter_nr').value = '';
-  document.getElementById('pin').value = '';
+  document.getElementById('password').value = '';
   showView('login');
 }
 
@@ -519,7 +519,7 @@ async function loadMitarbeiter() {
         <td>${m.ist_admin ? 'Ja' : 'Nein'}</td>
         <td>${m.aktiv ? 'Aktiv' : 'Inaktiv'}</td>
         <td>
-          <button class="btn btn-small" onclick="resetPin(${m.id}, '${m.name}')">PIN ändern</button>
+          <button class="btn btn-small" onclick="resetPassword(${m.id}, '${m.name}')">Passwort ändern</button>
           ${!m.ist_admin ? `<button class="btn btn-small" onclick="toggleAktiv(${m.id}, ${m.aktiv})">${m.aktiv ? 'Deaktivieren' : 'Aktivieren'}</button>` : ''}
         </td>
       </tr>
@@ -1050,7 +1050,7 @@ document.getElementById('new-mitarbeiter-form').addEventListener('submit', async
   const data = {
     mitarbeiter_nr: document.getElementById('new-ma-nr').value,
     name: document.getElementById('new-ma-name').value,
-    pin: document.getElementById('new-ma-pin').value
+    password: document.getElementById('new-ma-password').value
   };
 
   try {
@@ -1060,7 +1060,7 @@ document.getElementById('new-mitarbeiter-form').addEventListener('submit', async
 
     document.getElementById('new-ma-nr').value = '';
     document.getElementById('new-ma-name').value = '';
-    document.getElementById('new-ma-pin').value = '';
+    document.getElementById('new-ma-password').value = '';
 
     loadMitarbeiter();
   } catch (error) {
@@ -1155,13 +1155,13 @@ window.deleteEintrag = async (id) => {
   }
 };
 
-window.resetPin = async (id, name) => {
-  const newPin = prompt(`Neuer PIN für ${name} (min. 4 Zeichen):`);
-  if (!newPin) return;
+window.resetPassword = async (id, name) => {
+  const newPassword = prompt(`Neues Passwort für ${name}:\n\nAnforderungen:\n• Mindestens 8 Zeichen\n• Groß- und Kleinbuchstaben\n• Mindestens eine Zahl\n• Mindestens ein Sonderzeichen`);
+  if (!newPassword) return;
 
   try {
-    await api(`/admin/mitarbeiter/${id}`, 'PUT', { pin: newPin });
-    alert('PIN geändert!');
+    await api(`/admin/mitarbeiter/${id}`, 'PUT', { password: newPassword });
+    alert('Passwort geändert!');
   } catch (error) {
     alert(error.message);
   }

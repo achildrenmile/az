@@ -72,14 +72,41 @@ setInterval(() => {
   db.cleanupExpiredSessions();
 }, 15 * 60 * 1000);
 
+// Passwort-Validierung (moderne Standards)
+function validatePassword(password) {
+  const errors = [];
+
+  if (!password || password.length < 8) {
+    errors.push('Mindestens 8 Zeichen');
+  }
+  if (!/[A-Z]/.test(password)) {
+    errors.push('Mindestens ein Großbuchstabe');
+  }
+  if (!/[a-z]/.test(password)) {
+    errors.push('Mindestens ein Kleinbuchstabe');
+  }
+  if (!/[0-9]/.test(password)) {
+    errors.push('Mindestens eine Zahl');
+  }
+  if (!/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password)) {
+    errors.push('Mindestens ein Sonderzeichen (!@#$%^&*...)');
+  }
+
+  return {
+    valid: errors.length === 0,
+    errors: errors
+  };
+}
+
 // ==================== AUTH ROUTES ====================
 
 // Login
 app.post('/api/login', (req, res) => {
-  const { mitarbeiter_nr, pin } = req.body;
+  const { mitarbeiter_nr, pin, password } = req.body;
+  const pwd = password || pin; // Abwärtskompatibilität
 
-  if (!mitarbeiter_nr || !pin) {
-    return res.status(400).json({ error: 'Mitarbeiternummer und PIN erforderlich' });
+  if (!mitarbeiter_nr || !pwd) {
+    return res.status(400).json({ error: 'Mitarbeiternummer und Passwort erforderlich' });
   }
 
   const mitarbeiter = db.getMitarbeiterByNr(mitarbeiter_nr);
@@ -87,7 +114,7 @@ app.post('/api/login', (req, res) => {
     return res.status(401).json({ error: 'Ungültige Anmeldedaten' });
   }
 
-  if (!db.verifyPin(mitarbeiter, pin)) {
+  if (!db.verifyPassword(mitarbeiter, pwd)) {
     return res.status(401).json({ error: 'Ungültige Anmeldedaten' });
   }
 
@@ -314,18 +341,20 @@ app.get('/api/admin/mitarbeiter', checkSession, checkAdmin, (req, res) => {
 
 // Neuen Mitarbeiter anlegen (Admin)
 app.post('/api/admin/mitarbeiter', checkSession, checkAdmin, (req, res) => {
-  const { mitarbeiter_nr, name, pin } = req.body;
+  const { mitarbeiter_nr, name, pin, password } = req.body;
+  const pwd = password || pin; // Abwärtskompatibilität
 
-  if (!mitarbeiter_nr || !name || !pin) {
+  if (!mitarbeiter_nr || !name || !pwd) {
     return res.status(400).json({ error: 'Alle Felder sind erforderlich' });
   }
 
-  if (pin.length < 4) {
-    return res.status(400).json({ error: 'PIN muss mindestens 4 Zeichen haben' });
+  const validation = validatePassword(pwd);
+  if (!validation.valid) {
+    return res.status(400).json({ error: 'Passwort unsicher: ' + validation.errors.join(', ') });
   }
 
   try {
-    db.createMitarbeiter(mitarbeiter_nr, name, pin);
+    db.createMitarbeiter(mitarbeiter_nr, name, pwd);
     res.json({ success: true });
   } catch (error) {
     if (error.message.includes('UNIQUE')) {
@@ -337,17 +366,19 @@ app.post('/api/admin/mitarbeiter', checkSession, checkAdmin, (req, res) => {
 
 // Mitarbeiter bearbeiten (Admin)
 app.put('/api/admin/mitarbeiter/:id', checkSession, checkAdmin, (req, res) => {
-  const { name, aktiv, pin } = req.body;
+  const { name, aktiv, pin, password } = req.body;
+  const pwd = password || pin; // Abwärtskompatibilität
 
   if (name !== undefined) {
     db.updateMitarbeiter(req.params.id, name, aktiv !== false);
   }
 
-  if (pin) {
-    if (pin.length < 4) {
-      return res.status(400).json({ error: 'PIN muss mindestens 4 Zeichen haben' });
+  if (pwd) {
+    const validation = validatePassword(pwd);
+    if (!validation.valid) {
+      return res.status(400).json({ error: 'Passwort unsicher: ' + validation.errors.join(', ') });
     }
-    db.updateMitarbeiterPin(req.params.id, pin);
+    db.updateMitarbeiterPassword(req.params.id, pwd);
   }
 
   res.json({ success: true });

@@ -155,8 +155,19 @@ module.exports = {
     return db.prepare('UPDATE mitarbeiter SET pin_hash = ? WHERE id = ?').run(pinHash, id);
   },
 
+  // Alias für Passwort-Update (moderner Name)
+  updateMitarbeiterPassword: (id, password) => {
+    const hash = bcrypt.hashSync(password, 12); // Höhere Runden für bessere Sicherheit
+    return db.prepare('UPDATE mitarbeiter SET pin_hash = ? WHERE id = ?').run(hash, id);
+  },
+
   verifyPin: (mitarbeiter, pin) => {
     return bcrypt.compareSync(pin, mitarbeiter.pin_hash);
+  },
+
+  // Alias für Passwort-Verifikation (moderner Name)
+  verifyPassword: (mitarbeiter, password) => {
+    return bcrypt.compareSync(password, mitarbeiter.pin_hash);
   },
 
   // Zeiteintrag-Funktionen
