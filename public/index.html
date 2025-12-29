@@ -121,7 +121,10 @@
       <div id="history-section" class="card">
         <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom:16px;">
           <h2 style="margin:0">Meine Einträge</h2>
-          <button id="print-user-btn" class="btn btn-secondary">Zeitnachweis drucken</button>
+          <div style="display:flex; gap:10px;">
+            <button id="monatsabrechnung-btn" class="btn btn-primary">Monatsabrechnung</button>
+            <button id="print-user-btn" class="btn btn-secondary">Zeitnachweis drucken</button>
+          </div>
         </div>
         <div id="history-empty" class="empty-state hidden">
           <p>Du hast noch keine Einträge erfasst.</p>
@@ -226,6 +229,46 @@
         </div>
         <div id="edit-message" class="message"></div>
       </form>
+    </div>
+  </div>
+
+  <!-- MONATSABRECHNUNG MODAL -->
+  <div id="monatsabrechnung-modal" class="modal hidden">
+    <div class="modal-backdrop" onclick="closeMonatsabrechnungModal()"></div>
+    <div class="modal-content card" style="max-width:900px;max-height:90vh;overflow:auto;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+        <h2 style="margin:0">Monatsabrechnung</h2>
+        <div style="display:flex; gap:10px; align-items:center;">
+          <select id="ma-monat" style="padding:8px 12px;border:1px solid var(--border);border-radius:6px;">
+            <option value="1">Januar</option>
+            <option value="2">Februar</option>
+            <option value="3">März</option>
+            <option value="4">April</option>
+            <option value="5">Mai</option>
+            <option value="6">Juni</option>
+            <option value="7">Juli</option>
+            <option value="8">August</option>
+            <option value="9">September</option>
+            <option value="10">Oktober</option>
+            <option value="11">November</option>
+            <option value="12">Dezember</option>
+          </select>
+          <select id="ma-jahr" style="padding:8px 12px;border:1px solid var(--border);border-radius:6px;">
+          </select>
+          <button class="btn btn-primary" onclick="loadMonatsabrechnung()">Laden</button>
+        </div>
+      </div>
+
+      <div id="ma-content">
+        <p style="text-align:center; color:var(--text-secondary); padding:40px;">
+          Bitte wähle Monat und Jahr aus.
+        </p>
+      </div>
+
+      <div class="modal-actions" style="margin-top:20px; border-top:1px solid var(--border); padding-top:20px;">
+        <button type="button" class="btn btn-secondary" onclick="closeMonatsabrechnungModal()">Schließen</button>
+        <button type="button" class="btn btn-primary" onclick="printMonatsabrechnung()">Drucken / PDF</button>
+      </div>
     </div>
   </div>
 

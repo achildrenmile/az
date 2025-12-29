@@ -534,6 +534,63 @@ app.get('/api/admin/statistik/mitarbeiter/:id', checkSession, checkAdmin, (req, 
   }
 });
 
+// Monatliche Zeitabrechnung (eigene - für Mitarbeiter)
+app.get('/api/monatsabrechnung', checkSession, (req, res) => {
+  const jahr = parseInt(req.query.jahr) || new Date().getFullYear();
+  const monat = parseInt(req.query.monat) || new Date().getMonth() + 1;
+
+  const abrechnung = db.getMonatsabrechnung(req.session.id, jahr, monat);
+
+  if (!abrechnung) {
+    return res.status(404).json({ error: 'Keine Daten gefunden' });
+  }
+
+  // Überstunden berechnen
+  const istStunden = parseFloat(abrechnung.summen.nettoStunden);
+  const sollStunden = abrechnung.soll.monatStunden;
+  const differenz = Math.round((istStunden - sollStunden) * 100) / 100;
+
+  res.json({
+    ...abrechnung,
+    berechnung: {
+      istStunden,
+      sollStunden,
+      differenz,
+      ueberstunden: Math.max(0, differenz),
+      minderstunden: Math.max(0, -differenz)
+    }
+  });
+});
+
+// Monatliche Zeitabrechnung (Admin - für beliebigen Mitarbeiter)
+app.get('/api/admin/monatsabrechnung/:mitarbeiterId', checkSession, checkAdmin, (req, res) => {
+  const mitarbeiterId = parseInt(req.params.mitarbeiterId);
+  const jahr = parseInt(req.query.jahr) || new Date().getFullYear();
+  const monat = parseInt(req.query.monat) || new Date().getMonth() + 1;
+
+  const abrechnung = db.getMonatsabrechnung(mitarbeiterId, jahr, monat);
+
+  if (!abrechnung) {
+    return res.status(404).json({ error: 'Keine Daten gefunden' });
+  }
+
+  // Überstunden berechnen
+  const istStunden = parseFloat(abrechnung.summen.nettoStunden);
+  const sollStunden = abrechnung.soll.monatStunden;
+  const differenz = Math.round((istStunden - sollStunden) * 100) / 100;
+
+  res.json({
+    ...abrechnung,
+    berechnung: {
+      istStunden,
+      sollStunden,
+      differenz,
+      ueberstunden: Math.max(0, differenz),
+      minderstunden: Math.max(0, -differenz)
+    }
+  });
+});
+
 // ==================== ADMIN ROUTES ====================
 
 // Alle Zeiteinträge (Admin)

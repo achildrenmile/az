@@ -447,6 +447,85 @@ module.exports = {
     `).all(mitarbeiterId, String(jahr));
   },
 
+  // Monatliche Zeitabrechnung für einen Mitarbeiter (vollständig)
+  getMonatsabrechnung: (mitarbeiterId, jahr, monat) => {
+    const von = `${jahr}-${String(monat).padStart(2, '0')}-01`;
+    const bis = `${jahr}-${String(monat).padStart(2, '0')}-31`;
+
+    // Mitarbeiter-Info
+    const mitarbeiter = db.prepare(`
+      SELECT id, mitarbeiter_nr, name FROM mitarbeiter WHERE id = ?
+    `).get(mitarbeiterId);
+
+    if (!mitarbeiter) return null;
+
+    // Alle Einträge des Monats
+    const eintraege = db.prepare(`
+      SELECT
+        id, datum, arbeitsbeginn, arbeitsende, pause_minuten,
+        baustelle, kunde, anfahrt, notizen,
+        (strftime('%H', arbeitsende) * 60 + strftime('%M', arbeitsende)) -
+        (strftime('%H', arbeitsbeginn) * 60 + strftime('%M', arbeitsbeginn)) -
+        pause_minuten as netto_minuten
+      FROM zeiteintraege
+      WHERE mitarbeiter_id = ? AND datum BETWEEN ? AND ?
+      ORDER BY datum, arbeitsbeginn
+    `).all(mitarbeiterId, von, bis);
+
+    // Wochenweise Gruppierung
+    const wochen = db.prepare(`
+      SELECT
+        strftime('%W', datum) as kalenderwoche,
+        MIN(datum) as woche_start,
+        MAX(datum) as woche_ende,
+        COUNT(*) as tage,
+        SUM(
+          (strftime('%H', arbeitsende) * 60 + strftime('%M', arbeitsende)) -
+          (strftime('%H', arbeitsbeginn) * 60 + strftime('%M', arbeitsbeginn)) -
+          pause_minuten
+        ) as netto_minuten
+      FROM zeiteintraege
+      WHERE mitarbeiter_id = ? AND datum BETWEEN ? AND ?
+      GROUP BY strftime('%W', datum)
+      ORDER BY kalenderwoche
+    `).all(mitarbeiterId, von, bis);
+
+    // Gesamtsummen
+    const summen = db.prepare(`
+      SELECT
+        COUNT(*) as arbeitstage,
+        COALESCE(SUM(
+          (strftime('%H', arbeitsende) * 60 + strftime('%M', arbeitsende)) -
+          (strftime('%H', arbeitsbeginn) * 60 + strftime('%M', arbeitsbeginn)) -
+          pause_minuten
+        ), 0) as netto_minuten,
+        COALESCE(SUM(pause_minuten), 0) as pause_minuten
+      FROM zeiteintraege
+      WHERE mitarbeiter_id = ? AND datum BETWEEN ? AND ?
+    `).get(mitarbeiterId, von, bis);
+
+    // Soll-Stunden aus Einstellungen
+    const sollWoche = db.prepare(`SELECT wert FROM einstellungen WHERE schluessel = 'standard_wochenstunden'`).get();
+    const sollMonat = db.prepare(`SELECT wert FROM einstellungen WHERE schluessel = 'standard_monatsstunden'`).get();
+
+    return {
+      mitarbeiter,
+      zeitraum: { jahr, monat, von, bis },
+      eintraege,
+      wochen,
+      summen: {
+        arbeitstage: summen?.arbeitstage || 0,
+        nettoMinuten: summen?.netto_minuten || 0,
+        nettoStunden: ((summen?.netto_minuten || 0) / 60).toFixed(2),
+        pauseMinuten: summen?.pause_minuten || 0
+      },
+      soll: {
+        wocheStunden: parseFloat(sollWoche?.wert) || 40,
+        monatStunden: parseFloat(sollMonat?.wert) || 173
+      }
+    };
+  },
+
   // Statistik-Übersicht für Admin (alle Mitarbeiter)
   getAlleMitarbeiterStatistik: (jahr, monat) => {
     const von = `${jahr}-${String(monat).padStart(2, '0')}-01`;

@@ -2420,3 +2420,312 @@ function showValidationMessages(validation) {
     container.after(summary);
   }
 }
+
+// ==================== MONATSABRECHNUNG FUNKTIONEN ====================
+
+let currentMonatsabrechnung = null;
+
+function openMonatsabrechnungModal() {
+  const modal = document.getElementById('monatsabrechnung-modal');
+  const jahrSelect = document.getElementById('ma-jahr');
+  const monatSelect = document.getElementById('ma-monat');
+
+  // Jahre befüllen
+  const currentYear = new Date().getFullYear();
+  jahrSelect.innerHTML = '';
+  for (let y = currentYear; y >= currentYear - 3; y--) {
+    const opt = document.createElement('option');
+    opt.value = y;
+    opt.textContent = y;
+    jahrSelect.appendChild(opt);
+  }
+
+  // Aktuellen Monat vorauswählen
+  monatSelect.value = new Date().getMonth() + 1;
+
+  modal.classList.remove('hidden');
+  loadMonatsabrechnung();
+}
+
+function closeMonatsabrechnungModal() {
+  document.getElementById('monatsabrechnung-modal').classList.add('hidden');
+  currentMonatsabrechnung = null;
+}
+
+async function loadMonatsabrechnung() {
+  const jahr = document.getElementById('ma-jahr').value;
+  const monat = document.getElementById('ma-monat').value;
+  const contentEl = document.getElementById('ma-content');
+
+  contentEl.innerHTML = '<p style="text-align:center; padding:40px;">Lade...</p>';
+
+  try {
+    const data = await api(`/monatsabrechnung?jahr=${jahr}&monat=${monat}`);
+    currentMonatsabrechnung = data;
+
+    const monatsNamen = ['', 'Januar', 'Februar', 'März', 'April', 'Mai', 'Juni',
+      'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember'];
+
+    if (!data.eintraege || data.eintraege.length === 0) {
+      contentEl.innerHTML = `
+        <p style="text-align:center; color:var(--text-secondary); padding:40px;">
+          Keine Einträge für ${monatsNamen[parseInt(monat)]} ${jahr} vorhanden.
+        </p>
+      `;
+      return;
+    }
+
+    // Übersicht
+    const differenzClass = data.berechnung.differenz >= 0 ? 'success' : 'danger';
+    const differenzPrefix = data.berechnung.differenz >= 0 ? '+' : '';
+
+    let html = `
+      <div class="ma-summary" style="display:grid; grid-template-columns:repeat(4, 1fr); gap:15px; margin-bottom:25px;">
+        <div class="stat-card">
+          <div class="stat-value" style="font-size:1.8rem; color:var(--primary);">${data.summen.arbeitstage}</div>
+          <div class="stat-label">Arbeitstage</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value" style="font-size:1.8rem; color:var(--primary);">${data.summen.nettoStunden.replace('.', ',')}h</div>
+          <div class="stat-label">Ist-Stunden</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value" style="font-size:1.8rem; color:var(--text-secondary);">${data.soll.monatStunden}h</div>
+          <div class="stat-label">Soll-Stunden</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value" style="font-size:1.8rem; color:var(--${differenzClass});">${differenzPrefix}${data.berechnung.differenz.toFixed(1).replace('.', ',')}h</div>
+          <div class="stat-label">${data.berechnung.differenz >= 0 ? 'Überstunden' : 'Minderstunden'}</div>
+        </div>
+      </div>
+
+      <h3 style="margin:20px 0 10px;">Tagesübersicht</h3>
+      <div class="table-container">
+        <table class="ma-table">
+          <thead>
+            <tr>
+              <th>Datum</th>
+              <th>Beginn</th>
+              <th>Ende</th>
+              <th>Pause</th>
+              <th>Netto</th>
+              <th>Baustelle/Kunde</th>
+            </tr>
+          </thead>
+          <tbody>
+    `;
+
+    data.eintraege.forEach(e => {
+      const nettoStd = (e.netto_minuten / 60).toFixed(2).replace('.', ',');
+      const ort = [e.baustelle, e.kunde].filter(Boolean).join(' / ') || '-';
+      html += `
+        <tr>
+          <td>${formatDatum(e.datum)}</td>
+          <td>${e.arbeitsbeginn}</td>
+          <td>${e.arbeitsende}</td>
+          <td style="text-align:center">${e.pause_minuten} min</td>
+          <td style="text-align:right"><strong>${nettoStd}h</strong></td>
+          <td style="font-size:0.85em; color:var(--text-secondary)">${ort}</td>
+        </tr>
+      `;
+    });
+
+    html += `
+          </tbody>
+          <tfoot>
+            <tr style="font-weight:600; background:var(--bg-light);">
+              <td colspan="4">Gesamt</td>
+              <td style="text-align:right">${data.summen.nettoStunden.replace('.', ',')}h</td>
+              <td></td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    `;
+
+    // Wochenübersicht
+    if (data.wochen && data.wochen.length > 0) {
+      html += `<h3 style="margin:25px 0 10px;">Wochenübersicht</h3>
+        <div class="table-container">
+          <table class="ma-table">
+            <thead>
+              <tr>
+                <th>KW</th>
+                <th>Zeitraum</th>
+                <th>Tage</th>
+                <th>Stunden</th>
+              </tr>
+            </thead>
+            <tbody>
+      `;
+
+      data.wochen.forEach(w => {
+        const std = (w.netto_minuten / 60).toFixed(2).replace('.', ',');
+        html += `
+          <tr>
+            <td>KW ${w.kalenderwoche}</td>
+            <td>${formatDatum(w.woche_start)} - ${formatDatum(w.woche_ende)}</td>
+            <td style="text-align:center">${w.tage}</td>
+            <td style="text-align:right"><strong>${std}h</strong></td>
+          </tr>
+        `;
+      });
+
+      html += `</tbody></table></div>`;
+    }
+
+    contentEl.innerHTML = html;
+
+  } catch (error) {
+    contentEl.innerHTML = `<p style="text-align:center; color:var(--danger); padding:40px;">Fehler: ${error.message}</p>`;
+  }
+}
+
+function printMonatsabrechnung() {
+  if (!currentMonatsabrechnung) {
+    alert('Bitte zuerst eine Monatsabrechnung laden.');
+    return;
+  }
+
+  const data = currentMonatsabrechnung;
+  const monatsNamen = ['', 'Januar', 'Februar', 'März', 'April', 'Mai', 'Juni',
+    'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember'];
+
+  const differenzPrefix = data.berechnung.differenz >= 0 ? '+' : '';
+  const differenzText = data.berechnung.differenz >= 0 ? 'Überstunden' : 'Minderstunden';
+
+  let html = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="UTF-8">
+      <title>Monatsabrechnung ${monatsNamen[data.zeitraum.monat]} ${data.zeitraum.jahr}</title>
+      <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: Arial, sans-serif; font-size: 11pt; line-height: 1.4; padding: 20mm; }
+        h1 { font-size: 18pt; margin-bottom: 5mm; color: #059669; }
+        h2 { font-size: 12pt; margin: 8mm 0 3mm; border-bottom: 1px solid #ccc; padding-bottom: 2mm; }
+        .header { display: flex; justify-content: space-between; margin-bottom: 10mm; }
+        .header-left { }
+        .header-right { text-align: right; font-size: 10pt; color: #666; }
+        .summary { display: flex; gap: 10mm; margin: 8mm 0; padding: 5mm; background: #f5f5f5; border-radius: 3mm; }
+        .summary-item { flex: 1; text-align: center; }
+        .summary-value { font-size: 16pt; font-weight: bold; color: #059669; }
+        .summary-label { font-size: 9pt; color: #666; margin-top: 1mm; }
+        table { width: 100%; border-collapse: collapse; font-size: 10pt; }
+        th, td { border: 1px solid #ddd; padding: 2mm 3mm; }
+        th { background: #f0f0f0; font-weight: 600; text-align: left; }
+        td.right, th.right { text-align: right; }
+        td.center, th.center { text-align: center; }
+        tfoot td { font-weight: 600; background: #f5f5f5; }
+        .footer { margin-top: 15mm; padding-top: 5mm; border-top: 1px solid #ccc; }
+        .signatures { display: flex; justify-content: space-between; margin-top: 20mm; }
+        .signature { width: 45%; text-align: center; }
+        .signature-line { border-top: 1px solid #333; margin-top: 15mm; padding-top: 2mm; font-size: 9pt; }
+        @media print {
+          body { padding: 10mm; }
+          @page { margin: 15mm; }
+        }
+      </style>
+    </head>
+    <body>
+      <div class="header">
+        <div class="header-left">
+          <h1>Monatsabrechnung</h1>
+          <p><strong>${data.mitarbeiter.name}</strong> (${data.mitarbeiter.mitarbeiter_nr})</p>
+        </div>
+        <div class="header-right">
+          <p><strong>${monatsNamen[data.zeitraum.monat]} ${data.zeitraum.jahr}</strong></p>
+          <p>Erstellt: ${new Date().toLocaleDateString('de-AT')}</p>
+        </div>
+      </div>
+
+      <div class="summary">
+        <div class="summary-item">
+          <div class="summary-value">${data.summen.arbeitstage}</div>
+          <div class="summary-label">Arbeitstage</div>
+        </div>
+        <div class="summary-item">
+          <div class="summary-value">${data.summen.nettoStunden.replace('.', ',')}h</div>
+          <div class="summary-label">Ist-Stunden</div>
+        </div>
+        <div class="summary-item">
+          <div class="summary-value">${data.soll.monatStunden}h</div>
+          <div class="summary-label">Soll-Stunden</div>
+        </div>
+        <div class="summary-item">
+          <div class="summary-value" style="color: ${data.berechnung.differenz >= 0 ? '#059669' : '#dc2626'}">${differenzPrefix}${data.berechnung.differenz.toFixed(1).replace('.', ',')}h</div>
+          <div class="summary-label">${differenzText}</div>
+        </div>
+      </div>
+
+      <h2>Tagesübersicht</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Datum</th>
+            <th>Beginn</th>
+            <th>Ende</th>
+            <th class="center">Pause</th>
+            <th class="right">Netto</th>
+            <th>Baustelle/Kunde</th>
+          </tr>
+        </thead>
+        <tbody>
+  `;
+
+  data.eintraege.forEach(e => {
+    const nettoStd = (e.netto_minuten / 60).toFixed(2).replace('.', ',');
+    const ort = [e.baustelle, e.kunde].filter(Boolean).join(' / ') || '-';
+    html += `
+      <tr>
+        <td>${formatDatum(e.datum)}</td>
+        <td>${e.arbeitsbeginn}</td>
+        <td>${e.arbeitsende}</td>
+        <td class="center">${e.pause_minuten} min</td>
+        <td class="right">${nettoStd}h</td>
+        <td>${ort}</td>
+      </tr>
+    `;
+  });
+
+  html += `
+        </tbody>
+        <tfoot>
+          <tr>
+            <td colspan="4">Gesamt</td>
+            <td class="right">${data.summen.nettoStunden.replace('.', ',')}h</td>
+            <td></td>
+          </tr>
+        </tfoot>
+      </table>
+
+      <div class="footer">
+        <p style="font-size: 9pt; color: #666;">
+          Diese Monatsabrechnung wurde automatisch aus den erfassten Arbeitszeiten erstellt.
+        </p>
+      </div>
+
+      <div class="signatures">
+        <div class="signature">
+          <div class="signature-line">Mitarbeiter/in</div>
+        </div>
+        <div class="signature">
+          <div class="signature-line">Arbeitgeber</div>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+
+  const printWindow = window.open('', '_blank');
+  printWindow.document.write(html);
+  printWindow.document.close();
+  printWindow.focus();
+  setTimeout(() => printWindow.print(), 300);
+}
+
+// Event Listener für Monatsabrechnung Button
+document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('monatsabrechnung-btn')?.addEventListener('click', openMonatsabrechnungModal);
+});
