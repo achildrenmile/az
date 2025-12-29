@@ -29,6 +29,23 @@ async function loadConfig() {
 // Config sofort laden
 loadConfig();
 
+// Loading Spinner
+const loadingOverlay = document.getElementById('loading-overlay');
+let loadingCount = 0;
+
+function showLoading() {
+  loadingCount++;
+  loadingOverlay.classList.add('active');
+}
+
+function hideLoading() {
+  loadingCount--;
+  if (loadingCount <= 0) {
+    loadingCount = 0;
+    loadingOverlay.classList.remove('active');
+  }
+}
+
 // State
 let sessionId = localStorage.getItem('sessionId');
 let userName = localStorage.getItem('userName');
@@ -56,34 +73,40 @@ const views = {
 };
 
 // Helper: API-Aufruf
-async function api(endpoint, method = 'GET', body = null) {
-  const options = {
-    method,
-    headers: {
-      'Content-Type': 'application/json'
+async function api(endpoint, method = 'GET', body = null, showSpinner = true) {
+  if (showSpinner) showLoading();
+
+  try {
+    const options = {
+      method,
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    };
+
+    if (sessionId) {
+      options.headers['X-Session-ID'] = sessionId;
     }
-  };
 
-  if (sessionId) {
-    options.headers['X-Session-ID'] = sessionId;
-  }
-
-  if (body) {
-    options.body = JSON.stringify(body);
-  }
-
-  const response = await fetch('/api' + endpoint, options);
-  const data = await response.json();
-
-  if (!response.ok) {
-    // Bei Session-Ablauf automatisch ausloggen
-    if (response.status === 401) {
-      handleSessionExpired();
+    if (body) {
+      options.body = JSON.stringify(body);
     }
-    throw new Error(data.error || 'Fehler');
-  }
 
-  return data;
+    const response = await fetch('/api' + endpoint, options);
+    const data = await response.json();
+
+    if (!response.ok) {
+      // Bei Session-Ablauf automatisch ausloggen
+      if (response.status === 401) {
+        handleSessionExpired();
+      }
+      throw new Error(data.error || 'Fehler');
+    }
+
+    return data;
+  } finally {
+    if (showSpinner) hideLoading();
+  }
 }
 
 // Session abgelaufen - zum Login weiterleiten
