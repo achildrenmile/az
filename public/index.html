@@ -251,6 +251,7 @@
       <div class="tabs">
         <button class="tab active" data-tab="eintraege">Zeiteinträge</button>
         <button class="tab" data-tab="statistik">Statistik</button>
+        <button class="tab" data-tab="verstoesse">Verstöße</button>
         <button class="tab" data-tab="mitarbeiter">Mitarbeiter</button>
         <button class="tab" data-tab="kunden">Kunden</button>
         <button class="tab" data-tab="baustellen">Baustellen</button>
@@ -360,6 +361,59 @@
             </table>
           </div>
           <div id="admin-statistik-total" class="statistik-total"></div>
+        </div>
+      </div>
+
+      <!-- Verstöße Tab -->
+      <div id="tab-verstoesse" class="tab-content hidden">
+        <div class="card">
+          <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom:20px;">
+            <h2 style="margin:0">AZG-Verstöße & Warnungen</h2>
+            <div style="display:flex; gap:10px; align-items:center;">
+              <input type="text" id="verstoesse-von" class="datepicker" placeholder="Von" style="width:110px;padding:8px;">
+              <input type="text" id="verstoesse-bis" class="datepicker" placeholder="Bis" style="width:110px;padding:8px;">
+              <select id="verstoesse-mitarbeiter" style="padding:8px 12px;border:1px solid var(--border);border-radius:6px;">
+                <option value="">Alle Mitarbeiter</option>
+              </select>
+              <button class="btn btn-primary" onclick="loadVerstoesse()">Aktualisieren</button>
+            </div>
+          </div>
+
+          <!-- Statistik-Karten -->
+          <div id="verstoesse-stats" class="verstoesse-stats">
+            <div class="stat-card stat-total">
+              <div class="stat-value" id="stat-total">-</div>
+              <div class="stat-label">Gesamt</div>
+            </div>
+            <div class="stat-card stat-kritisch">
+              <div class="stat-value" id="stat-kritisch">-</div>
+              <div class="stat-label">Kritisch</div>
+            </div>
+            <div class="stat-card stat-warnung">
+              <div class="stat-value" id="stat-warnung">-</div>
+              <div class="stat-label">Warnungen</div>
+            </div>
+          </div>
+
+          <div class="table-container" style="margin-top:20px;">
+            <table id="verstoesse-table">
+              <thead>
+                <tr>
+                  <th>Schweregrad</th>
+                  <th>Typ</th>
+                  <th>Mitarbeiter</th>
+                  <th>Datum</th>
+                  <th>Wert</th>
+                  <th>Grenzwert</th>
+                  <th>Beschreibung</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+          <p id="verstoesse-empty" class="empty-message hidden" style="text-align:center; color:var(--success); padding:40px;">
+            Keine AZG-Verstöße im gewählten Zeitraum gefunden.
+          </p>
         </div>
       </div>
 

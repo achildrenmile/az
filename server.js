@@ -190,6 +190,19 @@ app.post('/api/zeiteintraege', checkSession, (req, res) => {
     );
   }
 
+  // AZG-Validierung (tägliche/wöchentliche Limits)
+  const clientIp = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+  const validation = db.validateZeiteintrag(
+    req.session.id,
+    datum,
+    arbeitsbeginn,
+    arbeitsende,
+    pause_minuten || 0
+  );
+
+  // Warnungen aus AZG-Validierung hinzufügen
+  validation.warnings.forEach(w => warnungen.push(w.nachricht));
+
   try {
     const neueWerte = {
       mitarbeiter_id: req.session.id,
@@ -206,7 +219,6 @@ app.post('/api/zeiteintraege', checkSession, (req, res) => {
     const result = db.createZeiteintrag(neueWerte);
 
     // Audit-Log für CREATE
-    const clientIp = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
     db.logAudit(
       req.session.id,
       'CREATE',
@@ -217,10 +229,22 @@ app.post('/api/zeiteintraege', checkSession, (req, res) => {
       clientIp
     );
 
+    // Validierungsereignisse loggen (für Audit-Trail)
+    if (validation.violations.length > 0 || validation.warnings.length > 0) {
+      db.logValidation(req.session.id, result.lastInsertRowid, validation, clientIp);
+    }
+
     res.json({
       success: true,
       warnung: warnungen.length > 0 ? warnungen[0] : null,
-      warnungen: warnungen.length > 0 ? warnungen : undefined
+      warnungen: warnungen.length > 0 ? warnungen : undefined,
+      validation: {
+        valid: validation.valid,
+        violations: validation.violations,
+        warnings: validation.warnings,
+        tagesStunden: (validation.tagesMinuten / 60).toFixed(1),
+        wochenStunden: (validation.wochenMinuten / 60).toFixed(1)
+      }
     });
   } catch (error) {
     res.status(500).json({ error: 'Fehler beim Speichern' });
@@ -276,6 +300,29 @@ app.put('/api/zeiteintraege/:id', checkSession, (req, res) => {
     return res.status(400).json({ error: 'Arbeitsende muss nach Arbeitsbeginn liegen' });
   }
 
+  // AZG-Validierung (tägliche/wöchentliche Limits)
+  const clientIp = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+  const validation = db.validateZeiteintrag(
+    alterEintrag.mitarbeiter_id,
+    datum,
+    arbeitsbeginn,
+    arbeitsende,
+    pause_minuten || 0,
+    parseInt(req.params.id) // excludeId - diesen Eintrag beim Summieren ausschließen
+  );
+
+  // Pausenregeln prüfen
+  const beginnMinuten = parseInt(arbeitsbeginn.split(':')[0]) * 60 + parseInt(arbeitsbeginn.split(':')[1]);
+  const endeMinuten = parseInt(arbeitsende.split(':')[0]) * 60 + parseInt(arbeitsende.split(':')[1]);
+  const arbeitsMinuten = endeMinuten - beginnMinuten;
+  const pausenVerstoesse = db.checkPausenverstoesse(arbeitsMinuten, pause_minuten || 0);
+  let warnungen = pausenVerstoesse.map(v => v.warnung ||
+    `Bei mehr als ${Math.floor(v.min_arbeitszeit / 60)} Stunden Arbeitszeit sind mindestens ${v.min_pause} Minuten Pause vorgeschrieben.`
+  );
+
+  // Warnungen aus AZG-Validierung hinzufügen
+  validation.warnings.forEach(w => warnungen.push(w.nachricht));
+
   const neueWerte = {
     datum,
     arbeitsbeginn,
@@ -292,7 +339,6 @@ app.put('/api/zeiteintraege/:id', checkSession, (req, res) => {
     db.updateZeiteintrag(req.params.id, neueWerte);
 
     // Audit-Log erstellen (mit IP-Adresse)
-    const clientIp = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
     db.logAudit(
       req.session.id,
       'UPDATE',
@@ -303,7 +349,23 @@ app.put('/api/zeiteintraege/:id', checkSession, (req, res) => {
       clientIp
     );
 
-    res.json({ success: true });
+    // Validierungsereignisse loggen (für Audit-Trail)
+    if (validation.violations.length > 0 || validation.warnings.length > 0) {
+      db.logValidation(req.session.id, parseInt(req.params.id), validation, clientIp);
+    }
+
+    res.json({
+      success: true,
+      warnung: warnungen.length > 0 ? warnungen[0] : null,
+      warnungen: warnungen.length > 0 ? warnungen : undefined,
+      validation: {
+        valid: validation.valid,
+        violations: validation.violations,
+        warnings: validation.warnings,
+        tagesStunden: (validation.tagesMinuten / 60).toFixed(1),
+        wochenStunden: (validation.wochenMinuten / 60).toFixed(1)
+      }
+    });
   } catch (error) {
     console.error('Update fehlgeschlagen:', error);
     res.status(500).json({ error: 'Fehler beim Aktualisieren' });
@@ -614,6 +676,47 @@ app.get('/api/admin/audit/export', checkSession, checkAdmin, (req, res) => {
   res.setHeader('Content-Type', 'text/csv; charset=utf-8');
   res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
   res.send('\ufeff' + csv);
+});
+
+// ==================== AZG-VERSTÖSSE ROUTES ====================
+
+// AZG-Verstöße abrufen (Admin) - erweitert mit Warnungen und Verletzungen
+app.get('/api/admin/verstoesse', checkSession, checkAdmin, (req, res) => {
+  const { von, bis, mitarbeiter_id } = req.query;
+
+  // Standard: letzte 30 Tage
+  const bisDate = bis || new Date().toISOString().split('T')[0];
+  const vonDate = von || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+
+  const verstoesse = db.getAZGVerstoesseErweitert(
+    mitarbeiter_id ? parseInt(mitarbeiter_id) : null,
+    vonDate,
+    bisDate
+  );
+
+  // Auch Pausenverstöße hinzufügen
+  const pausenVerstoesse = db.getAZGVerstoesse(
+    mitarbeiter_id ? parseInt(mitarbeiter_id) : null,
+    vonDate,
+    bisDate
+  ).filter(v => v.typ === 'PAUSENZEIT');
+
+  pausenVerstoesse.forEach(v => {
+    verstoesse.push({
+      ...v,
+      schweregrad: 'WARNUNG'
+    });
+  });
+
+  // Statistik
+  const stats = {
+    total: verstoesse.length,
+    kritisch: verstoesse.filter(v => v.schweregrad === 'KRITISCH').length,
+    warnung: verstoesse.filter(v => v.schweregrad === 'WARNUNG').length,
+    zeitraum: { von: vonDate, bis: bisDate }
+  };
+
+  res.json({ verstoesse, stats });
 });
 
 // ==================== KUNDEN ROUTES ====================

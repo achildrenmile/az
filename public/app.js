@@ -329,6 +329,11 @@ document.getElementById('zeit-form').addEventListener('submit', async (e) => {
       messageEl.className = 'message warning';
     }
 
+    // AZG-Validierungsmeldungen anzeigen
+    if (result.validation) {
+      showValidationMessages(result.validation);
+    }
+
     // Formular zurücksetzen (außer Datum)
     document.getElementById('arbeitsbeginn').value = '';
     document.getElementById('arbeitsende').value = '';
@@ -2069,6 +2074,9 @@ document.addEventListener('DOMContentLoaded', () => {
       if (tab.dataset.tab === 'audit') {
         loadAuditLog();
       }
+      if (tab.dataset.tab === 'verstoesse') {
+        loadVerstoesse();
+      }
     });
   });
 });
@@ -2247,3 +2255,168 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('audit-verify-btn')?.addEventListener('click', verifyAuditIntegrity);
   document.getElementById('audit-export-btn')?.addEventListener('click', exportAuditLog);
 });
+
+// ==================== VERSTÖSSE FUNKTIONEN ====================
+
+async function loadVerstoesse() {
+  const vonInput = document.getElementById('verstoesse-von');
+  const bisInput = document.getElementById('verstoesse-bis');
+  const mitarbeiterSelect = document.getElementById('verstoesse-mitarbeiter');
+
+  // Standard: letzte 30 Tage
+  const heute = new Date();
+  const vor30Tagen = new Date(heute.getTime() - 30 * 24 * 60 * 60 * 1000);
+
+  let von = vonInput?.value;
+  let bis = bisInput?.value;
+
+  // Datum konvertieren (TT.MM.JJJJ -> JJJJ-MM-TT)
+  if (von && von.includes('.')) {
+    const [d, m, y] = von.split('.');
+    von = `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
+  } else if (!von) {
+    von = vor30Tagen.toISOString().split('T')[0];
+  }
+
+  if (bis && bis.includes('.')) {
+    const [d, m, y] = bis.split('.');
+    bis = `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
+  } else if (!bis) {
+    bis = heute.toISOString().split('T')[0];
+  }
+
+  const mitarbeiterId = mitarbeiterSelect?.value || '';
+
+  try {
+    let url = `/admin/verstoesse?von=${von}&bis=${bis}`;
+    if (mitarbeiterId) url += `&mitarbeiter_id=${mitarbeiterId}`;
+
+    const result = await api(url);
+
+    // Statistik aktualisieren
+    document.getElementById('stat-total').textContent = result.stats?.total || 0;
+    document.getElementById('stat-kritisch').textContent = result.stats?.kritisch || 0;
+    document.getElementById('stat-warnung').textContent = result.stats?.warnung || 0;
+
+    const tbody = document.querySelector('#verstoesse-table tbody');
+    const emptyMsg = document.getElementById('verstoesse-empty');
+
+    if (!result.verstoesse || result.verstoesse.length === 0) {
+      tbody.innerHTML = '';
+      emptyMsg?.classList.remove('hidden');
+      return;
+    }
+
+    emptyMsg?.classList.add('hidden');
+
+    tbody.innerHTML = result.verstoesse.map(v => {
+      const severityClass = v.schweregrad?.toLowerCase() || 'warnung';
+      const severityLabel = v.schweregrad === 'KRITISCH' ? 'Kritisch' : 'Warnung';
+
+      let typClass = 'taeglich';
+      let typLabel = v.typ;
+      if (v.typ?.includes('WOECHENTLICH')) {
+        typClass = 'woechentlich';
+        typLabel = 'Wöchentlich';
+      } else if (v.typ?.includes('TAEGLICH')) {
+        typClass = 'taeglich';
+        typLabel = 'Täglich';
+      } else if (v.typ?.includes('PAUSE')) {
+        typClass = 'pause';
+        typLabel = 'Pause';
+      }
+
+      const datumFormatiert = v.datum ? formatDatum(v.datum) : '-';
+      const kwInfo = v.kalenderwoche ? ` (${v.kalenderwoche})` : '';
+
+      return `
+        <tr>
+          <td><span class="severity-badge ${severityClass}">${severityLabel}</span></td>
+          <td><span class="typ-badge ${typClass}">${typLabel}</span></td>
+          <td>${v.mitarbeiter || '-'}<br><small style="color:var(--text-secondary)">${v.mitarbeiter_nr || ''}</small></td>
+          <td>${datumFormatiert}${kwInfo}</td>
+          <td><strong>${v.wert} ${v.einheit || 'h'}</strong></td>
+          <td>${v.grenzwert} ${v.einheit || 'h'}</td>
+          <td style="font-size:0.85em">${v.beschreibung || '-'}</td>
+        </tr>
+      `;
+    }).join('');
+
+  } catch (error) {
+    console.error('Verstöße laden fehlgeschlagen:', error);
+  }
+}
+
+// Mitarbeiter-Dropdown für Verstöße-Filter befüllen
+async function loadVerstoesseMitarbeiter() {
+  const select = document.getElementById('verstoesse-mitarbeiter');
+  if (!select) return;
+
+  try {
+    const result = await api('/admin/mitarbeiter?limit=100');
+    if (result.data) {
+      result.data.forEach(m => {
+        const option = document.createElement('option');
+        option.value = m.id;
+        option.textContent = `${m.name} (${m.mitarbeiter_nr})`;
+        select.appendChild(option);
+      });
+    }
+  } catch (e) {
+    console.error('Mitarbeiter laden fehlgeschlagen:', e);
+  }
+}
+
+// Datum formatieren (JJJJ-MM-TT -> TT.MM.JJJJ)
+function formatDatum(dateStr) {
+  if (!dateStr) return '-';
+  const [y, m, d] = dateStr.split('-');
+  return `${d}.${m}.${y}`;
+}
+
+// Verstöße Tab initialisieren
+document.addEventListener('DOMContentLoaded', () => {
+  loadVerstoesseMitarbeiter();
+});
+
+// Validierungsmeldungen nach Zeiteintrag-Speicherung anzeigen
+function showValidationMessages(validation) {
+  // Entferne alte Meldungen
+  document.querySelectorAll('.validation-message').forEach(el => el.remove());
+
+  if (!validation) return;
+
+  const container = document.getElementById('erfassungs-message') || document.getElementById('zeit-message');
+  if (!container) return;
+
+  // Verletzungen anzeigen (kritisch)
+  if (validation.violations && validation.violations.length > 0) {
+    validation.violations.forEach(v => {
+      const div = document.createElement('div');
+      div.className = 'validation-message violation';
+      div.innerHTML = `<strong>AZG-Verletzung:</strong> ${v.nachricht}`;
+      container.after(div);
+    });
+  }
+
+  // Warnungen anzeigen
+  if (validation.warnings && validation.warnings.length > 0) {
+    validation.warnings.forEach(w => {
+      const div = document.createElement('div');
+      div.className = 'validation-message warning';
+      div.innerHTML = `<strong>Warnung:</strong> ${w.nachricht}`;
+      container.after(div);
+    });
+  }
+
+  // Zusammenfassung anzeigen
+  if (validation.tagesStunden || validation.wochenStunden) {
+    const summary = document.createElement('div');
+    summary.className = 'validation-summary';
+    summary.innerHTML = `
+      <span>Tag: ${validation.tagesStunden}h</span>
+      <span>Woche: ${validation.wochenStunden}h</span>
+    `;
+    container.after(summary);
+  }
+}

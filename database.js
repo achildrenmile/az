@@ -1067,5 +1067,334 @@ module.exports = {
       maxTagesstunden: konfig.max_tagesstunden || 10,
       maxWochenstunden: konfig.max_wochenstunden || 50
     };
+  },
+
+  // ==================== ARBEITSZEITVALIDIERUNG (AZG §9) ====================
+
+  // Arbeitszeit-Limits (AZG-konform)
+  ARBEITSZEIT_LIMITS: {
+    TAEGLICH_WARNUNG: 600,      // 10 Stunden in Minuten
+    TAEGLICH_VERLETZUNG: 720,   // 12 Stunden in Minuten
+    WOECHENTLICH_STANDARD: 2880, // 48 Stunden in Minuten
+    WOECHENTLICH_MAX: 3600      // 60 Stunden in Minuten (absolute Obergrenze)
+  },
+
+  // Validierung für einen Zeiteintrag (vor/nach Speichern)
+  validateZeiteintrag: (mitarbeiterId, datum, arbeitsbeginn, arbeitsende, pauseMinuten, excludeId = null) => {
+    const warnings = [];
+    const violations = [];
+
+    // Brutto- und Netto-Arbeitszeit berechnen
+    const [startH, startM] = arbeitsbeginn.split(':').map(Number);
+    const [endH, endM] = arbeitsende.split(':').map(Number);
+    const bruttoMinuten = (endH * 60 + endM) - (startH * 60 + startM);
+    const nettoMinuten = bruttoMinuten - (pauseMinuten || 0);
+
+    // 1. Tägliche Arbeitszeit prüfen (nur dieser Eintrag)
+    if (nettoMinuten > 720) {
+      violations.push({
+        typ: 'TAEGLICH_VERLETZUNG',
+        code: 'AZG_§9_DAILY_MAX',
+        nachricht: `Tägliche Arbeitszeit überschreitet 12 Stunden (${(nettoMinuten / 60).toFixed(1)}h) - AZG §9 Verletzung!`,
+        wert: nettoMinuten,
+        grenzwert: 720,
+        schweregrad: 'KRITISCH'
+      });
+    } else if (nettoMinuten > 600) {
+      warnings.push({
+        typ: 'TAEGLICH_WARNUNG',
+        code: 'AZG_§9_DAILY_WARN',
+        nachricht: `Tägliche Arbeitszeit überschreitet 10 Stunden (${(nettoMinuten / 60).toFixed(1)}h) - AZG §9 Warnung`,
+        wert: nettoMinuten,
+        grenzwert: 600,
+        schweregrad: 'WARNUNG'
+      });
+    }
+
+    // 2. Gesamte Tagesarbeitszeit prüfen (alle Einträge des Tages)
+    let excludeClause = '';
+    const params = [mitarbeiterId, datum];
+    if (excludeId) {
+      excludeClause = ' AND id != ?';
+      params.push(excludeId);
+    }
+
+    const tagesTotal = db.prepare(`
+      SELECT COALESCE(SUM(
+        (strftime('%H', arbeitsende) * 60 + strftime('%M', arbeitsende)) -
+        (strftime('%H', arbeitsbeginn) * 60 + strftime('%M', arbeitsbeginn)) -
+        pause_minuten
+      ), 0) as total
+      FROM zeiteintraege
+      WHERE mitarbeiter_id = ? AND datum = ?${excludeClause}
+    `).get(...params);
+
+    const gesamtTagMinuten = (tagesTotal?.total || 0) + nettoMinuten;
+
+    if (gesamtTagMinuten > 720) {
+      violations.push({
+        typ: 'TAEGLICH_GESAMT_VERLETZUNG',
+        code: 'AZG_§9_DAILY_TOTAL_MAX',
+        nachricht: `Gesamte Tagesarbeitszeit überschreitet 12 Stunden (${(gesamtTagMinuten / 60).toFixed(1)}h) - AZG §9 Verletzung!`,
+        wert: gesamtTagMinuten,
+        grenzwert: 720,
+        schweregrad: 'KRITISCH'
+      });
+    } else if (gesamtTagMinuten > 600 && nettoMinuten <= 600) {
+      warnings.push({
+        typ: 'TAEGLICH_GESAMT_WARNUNG',
+        code: 'AZG_§9_DAILY_TOTAL_WARN',
+        nachricht: `Gesamte Tagesarbeitszeit überschreitet 10 Stunden (${(gesamtTagMinuten / 60).toFixed(1)}h) - AZG §9 Warnung`,
+        wert: gesamtTagMinuten,
+        grenzwert: 600,
+        schweregrad: 'WARNUNG'
+      });
+    }
+
+    // 3. Wöchentliche Arbeitszeit prüfen
+    const wochenTotal = db.prepare(`
+      SELECT COALESCE(SUM(
+        (strftime('%H', arbeitsende) * 60 + strftime('%M', arbeitsende)) -
+        (strftime('%H', arbeitsbeginn) * 60 + strftime('%M', arbeitsbeginn)) -
+        pause_minuten
+      ), 0) as total
+      FROM zeiteintraege
+      WHERE mitarbeiter_id = ?
+        AND strftime('%Y-%W', datum) = strftime('%Y-%W', ?)
+        ${excludeId ? 'AND id != ?' : ''}
+    `).get(mitarbeiterId, datum, ...(excludeId ? [excludeId] : []));
+
+    const gesamtWocheMinuten = (wochenTotal?.total || 0) + nettoMinuten;
+
+    if (gesamtWocheMinuten > 3600) {
+      violations.push({
+        typ: 'WOECHENTLICH_VERLETZUNG',
+        code: 'AZG_§9_WEEKLY_MAX',
+        nachricht: `Wöchentliche Arbeitszeit überschreitet 60 Stunden (${(gesamtWocheMinuten / 60).toFixed(1)}h) - AZG §9 Verletzung!`,
+        wert: gesamtWocheMinuten,
+        grenzwert: 3600,
+        schweregrad: 'KRITISCH'
+      });
+    } else if (gesamtWocheMinuten > 2880) {
+      warnings.push({
+        typ: 'WOECHENTLICH_WARNUNG',
+        code: 'AZG_§9_WEEKLY_WARN',
+        nachricht: `Wöchentliche Arbeitszeit überschreitet 48 Stunden (${(gesamtWocheMinuten / 60).toFixed(1)}h) - AZG §9 Warnung`,
+        wert: gesamtWocheMinuten,
+        grenzwert: 2880,
+        schweregrad: 'WARNUNG'
+      });
+    }
+
+    return {
+      valid: violations.length === 0,
+      warnings,
+      violations,
+      tagesMinuten: gesamtTagMinuten,
+      wochenMinuten: gesamtWocheMinuten
+    };
+  },
+
+  // Erweiterte AZG-Verstöße (inkl. 12h-Verletzungen)
+  getAZGVerstoesseErweitert: (mitarbeiterId, von, bis) => {
+    const conditions = ['z.datum BETWEEN ? AND ?'];
+    const params = [von, bis];
+
+    if (mitarbeiterId) {
+      conditions.push('z.mitarbeiter_id = ?');
+      params.push(mitarbeiterId);
+    }
+
+    const whereClause = conditions.join(' AND ');
+    const verstoesse = [];
+
+    // 1. Tägliche Arbeitszeit > 12h (VERLETZUNG)
+    const tagesVerletzungen = db.prepare(`
+      SELECT
+        z.mitarbeiter_id,
+        m.name as mitarbeiter_name,
+        m.mitarbeiter_nr,
+        z.datum,
+        SUM(
+          (strftime('%H', z.arbeitsende) * 60 + strftime('%M', z.arbeitsende)) -
+          (strftime('%H', z.arbeitsbeginn) * 60 + strftime('%M', z.arbeitsbeginn)) -
+          z.pause_minuten
+        ) as netto_minuten
+      FROM zeiteintraege z
+      JOIN mitarbeiter m ON z.mitarbeiter_id = m.id
+      WHERE ${whereClause}
+      GROUP BY z.mitarbeiter_id, z.datum
+      HAVING netto_minuten > 720
+    `).all(...params);
+
+    tagesVerletzungen.forEach(v => {
+      verstoesse.push({
+        typ: 'TAEGLICH_VERLETZUNG',
+        schweregrad: 'KRITISCH',
+        beschreibung: `Tägliche Arbeitszeit > 12h (§9 AZG VERLETZUNG)`,
+        mitarbeiter_id: v.mitarbeiter_id,
+        mitarbeiter: v.mitarbeiter_name,
+        mitarbeiter_nr: v.mitarbeiter_nr,
+        datum: v.datum,
+        wert: Math.round(v.netto_minuten / 60 * 100) / 100,
+        einheit: 'Stunden',
+        grenzwert: 12
+      });
+    });
+
+    // 2. Tägliche Arbeitszeit > 10h (WARNUNG)
+    const tagesWarnungen = db.prepare(`
+      SELECT
+        z.mitarbeiter_id,
+        m.name as mitarbeiter_name,
+        m.mitarbeiter_nr,
+        z.datum,
+        SUM(
+          (strftime('%H', z.arbeitsende) * 60 + strftime('%M', z.arbeitsende)) -
+          (strftime('%H', z.arbeitsbeginn) * 60 + strftime('%M', z.arbeitsbeginn)) -
+          z.pause_minuten
+        ) as netto_minuten
+      FROM zeiteintraege z
+      JOIN mitarbeiter m ON z.mitarbeiter_id = m.id
+      WHERE ${whereClause}
+      GROUP BY z.mitarbeiter_id, z.datum
+      HAVING netto_minuten > 600 AND netto_minuten <= 720
+    `).all(...params);
+
+    tagesWarnungen.forEach(v => {
+      verstoesse.push({
+        typ: 'TAEGLICH_WARNUNG',
+        schweregrad: 'WARNUNG',
+        beschreibung: `Tägliche Arbeitszeit > 10h (§9 AZG Warnung)`,
+        mitarbeiter_id: v.mitarbeiter_id,
+        mitarbeiter: v.mitarbeiter_name,
+        mitarbeiter_nr: v.mitarbeiter_nr,
+        datum: v.datum,
+        wert: Math.round(v.netto_minuten / 60 * 100) / 100,
+        einheit: 'Stunden',
+        grenzwert: 10
+      });
+    });
+
+    // 3. Wöchentliche > 60h (VERLETZUNG)
+    const wochenVerletzungen = db.prepare(`
+      SELECT
+        z.mitarbeiter_id,
+        m.name as mitarbeiter_name,
+        m.mitarbeiter_nr,
+        strftime('%Y', z.datum) as jahr,
+        strftime('%W', z.datum) as kalenderwoche,
+        MIN(z.datum) as woche_start,
+        SUM(
+          (strftime('%H', z.arbeitsende) * 60 + strftime('%M', z.arbeitsende)) -
+          (strftime('%H', z.arbeitsbeginn) * 60 + strftime('%M', z.arbeitsbeginn)) -
+          z.pause_minuten
+        ) as netto_minuten
+      FROM zeiteintraege z
+      JOIN mitarbeiter m ON z.mitarbeiter_id = m.id
+      WHERE ${whereClause}
+      GROUP BY z.mitarbeiter_id, strftime('%Y-%W', z.datum)
+      HAVING netto_minuten > 3600
+    `).all(...params);
+
+    wochenVerletzungen.forEach(v => {
+      verstoesse.push({
+        typ: 'WOECHENTLICH_VERLETZUNG',
+        schweregrad: 'KRITISCH',
+        beschreibung: `Wöchentliche Arbeitszeit > 60h (§9 AZG VERLETZUNG)`,
+        mitarbeiter_id: v.mitarbeiter_id,
+        mitarbeiter: v.mitarbeiter_name,
+        mitarbeiter_nr: v.mitarbeiter_nr,
+        datum: v.woche_start,
+        kalenderwoche: `KW ${v.kalenderwoche}/${v.jahr}`,
+        wert: Math.round(v.netto_minuten / 60 * 100) / 100,
+        einheit: 'Stunden',
+        grenzwert: 60
+      });
+    });
+
+    // 4. Wöchentliche > 48h (WARNUNG)
+    const wochenWarnungen = db.prepare(`
+      SELECT
+        z.mitarbeiter_id,
+        m.name as mitarbeiter_name,
+        m.mitarbeiter_nr,
+        strftime('%Y', z.datum) as jahr,
+        strftime('%W', z.datum) as kalenderwoche,
+        MIN(z.datum) as woche_start,
+        SUM(
+          (strftime('%H', z.arbeitsende) * 60 + strftime('%M', z.arbeitsende)) -
+          (strftime('%H', z.arbeitsbeginn) * 60 + strftime('%M', z.arbeitsbeginn)) -
+          z.pause_minuten
+        ) as netto_minuten
+      FROM zeiteintraege z
+      JOIN mitarbeiter m ON z.mitarbeiter_id = m.id
+      WHERE ${whereClause}
+      GROUP BY z.mitarbeiter_id, strftime('%Y-%W', z.datum)
+      HAVING netto_minuten > 2880 AND netto_minuten <= 3600
+    `).all(...params);
+
+    wochenWarnungen.forEach(v => {
+      verstoesse.push({
+        typ: 'WOECHENTLICH_WARNUNG',
+        schweregrad: 'WARNUNG',
+        beschreibung: `Wöchentliche Arbeitszeit > 48h (§9 AZG Warnung)`,
+        mitarbeiter_id: v.mitarbeiter_id,
+        mitarbeiter: v.mitarbeiter_name,
+        mitarbeiter_nr: v.mitarbeiter_nr,
+        datum: v.woche_start,
+        kalenderwoche: `KW ${v.kalenderwoche}/${v.jahr}`,
+        wert: Math.round(v.netto_minuten / 60 * 100) / 100,
+        einheit: 'Stunden',
+        grenzwert: 48
+      });
+    });
+
+    // Nach Schweregrad und Datum sortieren
+    verstoesse.sort((a, b) => {
+      if (a.schweregrad === 'KRITISCH' && b.schweregrad !== 'KRITISCH') return -1;
+      if (b.schweregrad === 'KRITISCH' && a.schweregrad !== 'KRITISCH') return 1;
+      return new Date(b.datum) - new Date(a.datum);
+    });
+
+    return verstoesse;
+  },
+
+  // Validierungsereignis im Audit-Log speichern
+  logValidation: (mitarbeiterId, zeiteintragId, validationResult, ipAdresse = null) => {
+    if (validationResult.violations.length > 0 || validationResult.warnings.length > 0) {
+      const ereignisse = [
+        ...validationResult.violations.map(v => ({ ...v, schweregrad: 'KRITISCH' })),
+        ...validationResult.warnings.map(w => ({ ...w, schweregrad: 'WARNUNG' }))
+      ];
+
+      // Als Audit-Eintrag speichern
+      const lastEntry = db.prepare('SELECT eintrag_hash FROM audit_log ORDER BY id DESC LIMIT 1').get();
+      const vorherigerHash = lastEntry?.eintrag_hash || 'GENESIS';
+      const zeitpunkt = new Date().toISOString().replace('T', ' ').substring(0, 19);
+
+      const neueWerteJson = JSON.stringify({
+        ereignisse,
+        tagesMinuten: validationResult.tagesMinuten,
+        wochenMinuten: validationResult.wochenMinuten
+      });
+
+      const hashData = `${zeitpunkt}|${mitarbeiterId}|VALIDATION|zeiteintraege|${zeiteintragId}|null|${neueWerteJson}|${vorherigerHash}`;
+      const eintragHash = crypto.createHash('sha256').update(hashData).digest('hex');
+
+      return db.prepare(`
+        INSERT INTO audit_log (zeitpunkt, mitarbeiter_id, aktion, tabelle, datensatz_id, alte_werte, neue_werte, ip_adresse, vorheriger_hash, eintrag_hash)
+        VALUES (?, ?, 'VALIDATION', 'zeiteintraege', ?, NULL, ?, ?, ?, ?)
+      `).run(
+        zeitpunkt,
+        mitarbeiterId,
+        zeiteintragId,
+        neueWerteJson,
+        ipAdresse,
+        vorherigerHash,
+        eintragHash
+      );
+    }
+    return null;
   }
 };
