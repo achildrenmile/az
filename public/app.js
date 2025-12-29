@@ -658,8 +658,8 @@ function printZeitnachweis(eintraege, vonAT, bisAT, mitarbeiterName) {
       font-size: 9pt;
     }
     @media print {
-      body { padding: 10mm; }
-      @page { margin: 15mm; }
+      body { padding: 15mm; }
+      @page { margin: 0; size: A4; }
     }
   </style>
 </head>
@@ -799,7 +799,7 @@ window.printEinzelnerEintrag = async (id) => {
     }
     @media print {
       body { padding: 15mm; }
-      @page { margin: 15mm; }
+      @page { margin: 0; size: A4; }
     }
   </style>
 </head>
