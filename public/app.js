@@ -124,9 +124,10 @@ function initErfassungView() {
   document.getElementById('show-admin-btn').classList.toggle('hidden', !isAdmin);
 
   // Datum auf heute setzen via Flatpickr
-  const datumPicker = document.getElementById('datum')._flatpickr;
   if (datumPicker) {
     datumPicker.setDate('today');
+  } else {
+    document.getElementById('datum').value = getTodayAT();
   }
 }
 
@@ -419,20 +420,31 @@ const flatpickrConfig = {
   locale: 'de',
   dateFormat: 'd.m.Y',
   allowInput: true,
-  disableMobile: false
+  clickOpens: true
 };
+
+// Datepicker Instanzen
+let datumPicker = null;
+let filterVonPicker = null;
+let filterBisPicker = null;
 
 // Datepicker initialisieren
 function initDatepickers() {
   // Hauptformular Datum
-  flatpickr('#datum', {
-    ...flatpickrConfig,
-    defaultDate: 'today'
-  });
+  if (document.getElementById('datum')) {
+    datumPicker = flatpickr('#datum', {
+      ...flatpickrConfig,
+      defaultDate: 'today'
+    });
+  }
 
   // Admin Filter
-  flatpickr('#filter-von', flatpickrConfig);
-  flatpickr('#filter-bis', flatpickrConfig);
+  if (document.getElementById('filter-von')) {
+    filterVonPicker = flatpickr('#filter-von', flatpickrConfig);
+  }
+  if (document.getElementById('filter-bis')) {
+    filterBisPicker = flatpickr('#filter-bis', flatpickrConfig);
+  }
 }
 
 // Beim Laden prüfen ob bereits eingeloggt
@@ -444,4 +456,8 @@ if (sessionId && userName) {
 }
 
 // Datepickers initialisieren wenn DOM bereit
-initDatepickers();
+document.addEventListener('DOMContentLoaded', initDatepickers);
+// Falls DOM bereits geladen
+if (document.readyState !== 'loading') {
+  initDatepickers();
+}
