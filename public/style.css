@@ -817,3 +817,43 @@ td[title] {
     font-size: 1.15rem;
   }
 }
+
+/* Export Preview */
+.export-preview {
+  margin-top: 20px;
+  padding: 16px;
+  background: var(--bg-secondary);
+  border-radius: 8px;
+  border: 1px solid var(--border);
+}
+
+.export-preview h4 {
+  margin: 0 0 12px 0;
+  font-size: 0.95rem;
+  color: var(--text-secondary);
+}
+
+.export-preview p {
+  margin: 8px 0;
+  font-size: 0.9rem;
+}
+
+.export-preview ul {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+
+/* Verstöße Modal */
+#verstoesse-modal .table-container {
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+#verstoesse-modal table {
+  font-size: 0.85rem;
+}
+
+#verstoesse-modal th,
+#verstoesse-modal td {
+  padding: 10px 12px;
+}

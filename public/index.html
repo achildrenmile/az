@@ -289,7 +289,7 @@
           </div>
           <div class="filter-row">
             <button id="filter-btn" class="btn btn-primary">Filtern</button>
-            <button id="export-btn" class="btn btn-secondary">CSV Export</button>
+            <button id="export-dialog-btn" class="btn btn-secondary">Export</button>
             <button id="print-btn" class="btn btn-secondary">Drucken</button>
           </div>
           <div class="table-container">
@@ -522,6 +522,64 @@
         </div>
         <div id="kunde-form-message" class="message"></div>
       </form>
+    </div>
+  </div>
+
+  <!-- EXPORT MODAL -->
+  <div id="export-modal" class="modal hidden">
+    <div class="modal-backdrop" onclick="closeExportModal()"></div>
+    <div class="modal-content card">
+      <h2>Daten exportieren</h2>
+      <p style="color: var(--text-secondary); margin-bottom: 20px;">
+        Exportiert Zeiteinträge, Wochen-Totals, Überstunden und AZG-Verstöße.
+      </p>
+      <form id="export-form">
+        <div class="form-row">
+          <div class="form-group">
+            <label for="export-von">Von *</label>
+            <input type="text" id="export-von" class="datepicker-modal" required>
+          </div>
+          <div class="form-group">
+            <label for="export-bis">Bis *</label>
+            <input type="text" id="export-bis" class="datepicker-modal" required>
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="export-mitarbeiter">Mitarbeiter</label>
+          <select id="export-mitarbeiter">
+            <option value="">Alle Mitarbeiter</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Format</label>
+          <div class="btn-group" style="margin-top: 8px;">
+            <button type="button" class="btn btn-secondary export-format active" data-format="pdf">PDF</button>
+            <button type="button" class="btn btn-secondary export-format" data-format="csv">CSV</button>
+          </div>
+        </div>
+        <div id="export-preview" class="export-preview hidden">
+          <h4>Vorschau</h4>
+          <div id="export-preview-content"></div>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-secondary" onclick="closeExportModal()">Abbrechen</button>
+          <button type="button" class="btn btn-secondary" onclick="previewExport()">Vorschau</button>
+          <button type="submit" class="btn btn-primary">Exportieren</button>
+        </div>
+        <div id="export-message" class="message"></div>
+      </form>
+    </div>
+  </div>
+
+  <!-- VERSTÖSSE MODAL -->
+  <div id="verstoesse-modal" class="modal hidden">
+    <div class="modal-backdrop" onclick="closeVerstoesseModal()"></div>
+    <div class="modal-content card" style="max-width: 800px;">
+      <h2 style="color: var(--danger);">AZG-Verstöße</h2>
+      <div id="verstoesse-content"></div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-secondary" onclick="closeVerstoesseModal()">Schließen</button>
+      </div>
     </div>
   </div>
 

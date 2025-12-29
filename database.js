@@ -573,5 +573,180 @@ module.exports = {
 
   deleteBaustelle: (id) => {
     return db.prepare('DELETE FROM baustellen WHERE id = ?').run(id);
+  },
+
+  // Export-Funktionen für rechtskonforme Berichte
+  getExportDaten: (mitarbeiterId, von, bis) => {
+    const conditions = ['z.datum BETWEEN ? AND ?'];
+    const params = [von, bis];
+
+    if (mitarbeiterId) {
+      conditions.push('z.mitarbeiter_id = ?');
+      params.push(mitarbeiterId);
+    }
+
+    const whereClause = conditions.join(' AND ');
+
+    // Tageseinträge
+    const eintraege = db.prepare(`
+      SELECT z.*, m.name as mitarbeiter_name, m.mitarbeiter_nr
+      FROM zeiteintraege z
+      JOIN mitarbeiter m ON z.mitarbeiter_id = m.id
+      WHERE ${whereClause}
+      ORDER BY z.mitarbeiter_id, z.datum, z.arbeitsbeginn
+    `).all(...params);
+
+    return eintraege;
+  },
+
+  // Wochen-Totals für Export
+  getWochenTotals: (mitarbeiterId, von, bis) => {
+    const conditions = ['z.datum BETWEEN ? AND ?'];
+    const params = [von, bis];
+
+    if (mitarbeiterId) {
+      conditions.push('z.mitarbeiter_id = ?');
+      params.push(mitarbeiterId);
+    }
+
+    const whereClause = conditions.join(' AND ');
+
+    return db.prepare(`
+      SELECT
+        m.id as mitarbeiter_id,
+        m.name as mitarbeiter_name,
+        m.mitarbeiter_nr,
+        strftime('%Y', z.datum) as jahr,
+        strftime('%W', z.datum) as kalenderwoche,
+        MIN(z.datum) as woche_start,
+        MAX(z.datum) as woche_ende,
+        COUNT(DISTINCT z.datum) as arbeitstage,
+        SUM(
+          (strftime('%H', z.arbeitsende) * 60 + strftime('%M', z.arbeitsende)) -
+          (strftime('%H', z.arbeitsbeginn) * 60 + strftime('%M', z.arbeitsbeginn)) -
+          z.pause_minuten
+        ) as netto_minuten,
+        SUM(z.pause_minuten) as gesamt_pause
+      FROM zeiteintraege z
+      JOIN mitarbeiter m ON z.mitarbeiter_id = m.id
+      WHERE ${whereClause}
+      GROUP BY m.id, strftime('%Y-%W', z.datum)
+      ORDER BY m.name, z.datum
+    `).all(...params);
+  },
+
+  // AZG-Verstöße erkennen
+  getAZGVerstoesse: (mitarbeiterId, von, bis) => {
+    const conditions = ['z.datum BETWEEN ? AND ?'];
+    const params = [von, bis];
+
+    if (mitarbeiterId) {
+      conditions.push('z.mitarbeiter_id = ?');
+      params.push(mitarbeiterId);
+    }
+
+    const whereClause = conditions.join(' AND ');
+    const verstoesse = [];
+
+    // 1. Tägliche Arbeitszeit > 10 Stunden (§9 AZG)
+    const tagesVerstoesse = db.prepare(`
+      SELECT
+        m.name as mitarbeiter_name,
+        m.mitarbeiter_nr,
+        z.datum,
+        SUM(
+          (strftime('%H', z.arbeitsende) * 60 + strftime('%M', z.arbeitsende)) -
+          (strftime('%H', z.arbeitsbeginn) * 60 + strftime('%M', z.arbeitsbeginn)) -
+          z.pause_minuten
+        ) as netto_minuten
+      FROM zeiteintraege z
+      JOIN mitarbeiter m ON z.mitarbeiter_id = m.id
+      WHERE ${whereClause}
+      GROUP BY z.mitarbeiter_id, z.datum
+      HAVING netto_minuten > 600
+    `).all(...params);
+
+    tagesVerstoesse.forEach(v => {
+      verstoesse.push({
+        typ: 'TAGESARBEITSZEIT',
+        beschreibung: `Tägliche Arbeitszeit > 10h (§9 AZG)`,
+        mitarbeiter: v.mitarbeiter_name,
+        mitarbeiter_nr: v.mitarbeiter_nr,
+        datum: v.datum,
+        wert: Math.round(v.netto_minuten / 60 * 100) / 100,
+        einheit: 'Stunden',
+        grenzwert: 10
+      });
+    });
+
+    // 2. Wöchentliche Arbeitszeit > 50 Stunden (§9 AZG)
+    const wochenVerstoesse = db.prepare(`
+      SELECT
+        m.name as mitarbeiter_name,
+        m.mitarbeiter_nr,
+        strftime('%Y', z.datum) as jahr,
+        strftime('%W', z.datum) as kalenderwoche,
+        MIN(z.datum) as woche_start,
+        SUM(
+          (strftime('%H', z.arbeitsende) * 60 + strftime('%M', z.arbeitsende)) -
+          (strftime('%H', z.arbeitsbeginn) * 60 + strftime('%M', z.arbeitsbeginn)) -
+          z.pause_minuten
+        ) as netto_minuten
+      FROM zeiteintraege z
+      JOIN mitarbeiter m ON z.mitarbeiter_id = m.id
+      WHERE ${whereClause}
+      GROUP BY z.mitarbeiter_id, strftime('%Y-%W', z.datum)
+      HAVING netto_minuten > 3000
+    `).all(...params);
+
+    wochenVerstoesse.forEach(v => {
+      verstoesse.push({
+        typ: 'WOCHENARBEITSZEIT',
+        beschreibung: `Wöchentliche Arbeitszeit > 50h (§9 AZG)`,
+        mitarbeiter: v.mitarbeiter_name,
+        mitarbeiter_nr: v.mitarbeiter_nr,
+        datum: v.woche_start,
+        kalenderwoche: `KW ${v.kalenderwoche}/${v.jahr}`,
+        wert: Math.round(v.netto_minuten / 60 * 100) / 100,
+        einheit: 'Stunden',
+        grenzwert: 50
+      });
+    });
+
+    // 3. Pause < 30 Min bei Arbeitszeit > 6h (§11 AZG)
+    const pausenVerstoesse = db.prepare(`
+      SELECT
+        m.name as mitarbeiter_name,
+        m.mitarbeiter_nr,
+        z.datum,
+        z.pause_minuten,
+        (
+          (strftime('%H', z.arbeitsende) * 60 + strftime('%M', z.arbeitsende)) -
+          (strftime('%H', z.arbeitsbeginn) * 60 + strftime('%M', z.arbeitsbeginn))
+        ) as brutto_minuten
+      FROM zeiteintraege z
+      JOIN mitarbeiter m ON z.mitarbeiter_id = m.id
+      WHERE ${whereClause}
+        AND (
+          (strftime('%H', z.arbeitsende) * 60 + strftime('%M', z.arbeitsende)) -
+          (strftime('%H', z.arbeitsbeginn) * 60 + strftime('%M', z.arbeitsbeginn))
+        ) > 360
+        AND z.pause_minuten < 30
+    `).all(...params);
+
+    pausenVerstoesse.forEach(v => {
+      verstoesse.push({
+        typ: 'PAUSENZEIT',
+        beschreibung: `Pause < 30 Min bei > 6h Arbeitszeit (§11 AZG)`,
+        mitarbeiter: v.mitarbeiter_name,
+        mitarbeiter_nr: v.mitarbeiter_nr,
+        datum: v.datum,
+        wert: v.pause_minuten,
+        einheit: 'Minuten Pause',
+        grenzwert: 30
+      });
+    });
+
+    return verstoesse;
   }
 };

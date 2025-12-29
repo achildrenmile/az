@@ -1634,3 +1634,203 @@ originalTabHandler.forEach(tab => {
     }
   });
 });
+
+// ==================== EXPORT FUNKTIONEN ====================
+
+let exportFormat = 'pdf';
+let exportDatepickerVon = null;
+let exportDatepickerBis = null;
+
+function openExportModal() {
+  const modal = document.getElementById('export-modal');
+  modal.classList.remove('hidden');
+
+  // Mitarbeiter-Dropdown befüllen
+  const select = document.getElementById('export-mitarbeiter');
+  api('/admin/mitarbeiter?limit=1000').then(result => {
+    const mitarbeiter = result.data || result;
+    select.innerHTML = '<option value="">Alle Mitarbeiter</option>' +
+      mitarbeiter.filter(m => m.aktiv).map(m => `<option value="${m.id}">${m.name} (${m.mitarbeiter_nr})</option>`).join('');
+  });
+
+  // Standard-Zeitraum: Aktueller Monat
+  const heute = new Date();
+  const ersterTag = new Date(heute.getFullYear(), heute.getMonth(), 1);
+  const letzterTag = new Date(heute.getFullYear(), heute.getMonth() + 1, 0);
+
+  // Datepicker initialisieren
+  if (exportDatepickerVon) exportDatepickerVon.destroy();
+  if (exportDatepickerBis) exportDatepickerBis.destroy();
+
+  exportDatepickerVon = flatpickr('#export-von', {
+    locale: 'de',
+    dateFormat: 'd.m.Y',
+    defaultDate: ersterTag
+  });
+
+  exportDatepickerBis = flatpickr('#export-bis', {
+    locale: 'de',
+    dateFormat: 'd.m.Y',
+    defaultDate: letzterTag
+  });
+
+  // Preview zurücksetzen
+  document.getElementById('export-preview').classList.add('hidden');
+  document.getElementById('export-message').innerHTML = '';
+}
+
+function closeExportModal() {
+  document.getElementById('export-modal').classList.add('hidden');
+}
+
+// Format-Buttons
+document.querySelectorAll('.export-format').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.export-format').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    exportFormat = btn.dataset.format;
+  });
+});
+
+// Vorschau laden
+async function previewExport() {
+  const vonAT = document.getElementById('export-von').value;
+  const bisAT = document.getElementById('export-bis').value;
+  const von = parseATDate(vonAT);
+  const bis = parseATDate(bisAT);
+  const mitarbeiter = document.getElementById('export-mitarbeiter').value;
+
+  if (!von || !bis) {
+    document.getElementById('export-message').innerHTML = '<span class="error">Bitte Zeitraum auswählen</span>';
+    return;
+  }
+
+  try {
+    const verstoesse = await api(`/admin/verstoesse?von=${von}&bis=${bis}${mitarbeiter ? '&mitarbeiter=' + mitarbeiter : ''}`);
+
+    const previewDiv = document.getElementById('export-preview');
+    const contentDiv = document.getElementById('export-preview-content');
+
+    let html = `<p><strong>Zeitraum:</strong> ${vonAT} - ${bisAT}</p>`;
+
+    if (verstoesse.length > 0) {
+      html += `<p style="color: var(--danger);"><strong>AZG-Verstöße gefunden: ${verstoesse.length}</strong></p>`;
+      html += '<ul style="margin: 10px 0; padding-left: 20px;">';
+      verstoesse.slice(0, 5).forEach(v => {
+        html += `<li>${v.beschreibung} - ${v.mitarbeiter} (${v.kalenderwoche || formatDate(v.datum)})</li>`;
+      });
+      if (verstoesse.length > 5) {
+        html += `<li>... und ${verstoesse.length - 5} weitere</li>`;
+      }
+      html += '</ul>';
+    } else {
+      html += '<p style="color: var(--success);"><strong>Keine AZG-Verstöße im Zeitraum</strong></p>';
+    }
+
+    contentDiv.innerHTML = html;
+    previewDiv.classList.remove('hidden');
+  } catch (error) {
+    document.getElementById('export-message').innerHTML = '<span class="error">Fehler beim Laden der Vorschau</span>';
+  }
+}
+
+// Export-Form absenden
+document.getElementById('export-form')?.addEventListener('submit', async (e) => {
+  e.preventDefault();
+
+  const vonAT = document.getElementById('export-von').value;
+  const bisAT = document.getElementById('export-bis').value;
+  const von = parseATDate(vonAT);
+  const bis = parseATDate(bisAT);
+  const mitarbeiter = document.getElementById('export-mitarbeiter').value;
+
+  if (!von || !bis) {
+    document.getElementById('export-message').innerHTML = '<span class="error">Bitte Zeitraum auswählen</span>';
+    return;
+  }
+
+  // Download starten
+  let url = `/api/admin/export/${exportFormat}?von=${von}&bis=${bis}`;
+  if (mitarbeiter) url += `&mitarbeiter=${mitarbeiter}`;
+
+  // Session-Header für Download
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `arbeitszeit_export_${von}_${bis}.${exportFormat}`;
+
+  // Fetch mit Session-Header für PDF/CSV
+  try {
+    showLoading();
+    const response = await fetch(url, {
+      headers: { 'X-Session-Id': sessionId }
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Export fehlgeschlagen');
+    }
+
+    const blob = await response.blob();
+    const downloadUrl = window.URL.createObjectURL(blob);
+    link.href = downloadUrl;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(downloadUrl);
+
+    closeExportModal();
+  } catch (error) {
+    document.getElementById('export-message').innerHTML = `<span class="error">${error.message}</span>`;
+  } finally {
+    hideLoading();
+  }
+});
+
+// Export-Dialog Button Event
+document.getElementById('export-dialog-btn')?.addEventListener('click', openExportModal);
+
+// Verstöße Modal
+function openVerstoesseModal(verstoesse) {
+  const modal = document.getElementById('verstoesse-modal');
+  const content = document.getElementById('verstoesse-content');
+
+  if (verstoesse.length === 0) {
+    content.innerHTML = '<p style="color: var(--success);">Keine AZG-Verstöße im gewählten Zeitraum.</p>';
+  } else {
+    let html = `<p style="margin-bottom: 16px;"><strong>${verstoesse.length} Verstöße gefunden:</strong></p>`;
+    html += '<div class="table-container"><table><thead><tr><th>Typ</th><th>Mitarbeiter</th><th>Datum</th><th>Ist</th><th>Grenzwert</th></tr></thead><tbody>';
+    verstoesse.forEach(v => {
+      html += `<tr>
+        <td style="color: var(--danger);">${v.typ}</td>
+        <td>${v.mitarbeiter} (${v.mitarbeiter_nr})</td>
+        <td>${v.kalenderwoche || formatDate(v.datum)}</td>
+        <td><strong>${v.wert} ${v.einheit}</strong></td>
+        <td>${v.grenzwert} ${v.einheit}</td>
+      </tr>`;
+    });
+    html += '</tbody></table></div>';
+    content.innerHTML = html;
+  }
+
+  modal.classList.remove('hidden');
+}
+
+function closeVerstoesseModal() {
+  document.getElementById('verstoesse-modal').classList.add('hidden');
+}
+
+// Verstöße prüfen Button in Statistik
+async function checkVerstoesse() {
+  const jahr = document.getElementById('admin-statistik-jahr')?.value || new Date().getFullYear();
+  const monat = document.getElementById('admin-statistik-monat')?.value || (new Date().getMonth() + 1);
+
+  const von = `${jahr}-${String(monat).padStart(2, '0')}-01`;
+  const bis = `${jahr}-${String(monat).padStart(2, '0')}-31`;
+
+  try {
+    const verstoesse = await api(`/admin/verstoesse?von=${von}&bis=${bis}`);
+    openVerstoesseModal(verstoesse);
+  } catch (error) {
+    console.error('Verstöße laden fehlgeschlagen:', error);
+  }
+}

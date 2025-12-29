@@ -1,6 +1,7 @@
 const express = require('express');
 const crypto = require('crypto');
 const path = require('path');
+const PDFDocument = require('pdfkit');
 const db = require('./database');
 
 const app = express();
@@ -663,22 +664,306 @@ app.delete('/api/admin/baustellen/:id', checkSession, checkAdmin, (req, res) => 
 
 // Helper: Datum formatieren (österreichisches Format DD.MM.YYYY)
 function formatDateAT(dateStr) {
+  if (!dateStr) return '';
   const [year, month, day] = dateStr.split('-');
   return `${day}.${month}.${year}`;
 }
 
-// CSV-Export (Admin)
+// Helper: Minuten in Stunden formatieren (österreichisches Format)
+function formatStunden(minuten) {
+  return (minuten / 60).toFixed(2).replace('.', ',');
+}
+
+// ==================== EXPORT ROUTES ====================
+
+// Erweiterte CSV-Export (Admin) - Rechtskonform mit Wochen-Totals und Verstößen
+app.get('/api/admin/export/csv', checkSession, checkAdmin, (req, res) => {
+  const { von, bis, mitarbeiter } = req.query;
+
+  if (!von || !bis) {
+    return res.status(400).json({ error: 'Zeitraum (von, bis) erforderlich' });
+  }
+
+  const eintraege = db.getExportDaten(mitarbeiter || null, von, bis);
+  const wochenTotals = db.getWochenTotals(mitarbeiter || null, von, bis);
+  const verstoesse = db.getAZGVerstoesse(mitarbeiter || null, von, bis);
+
+  let csv = '';
+
+  // Abschnitt 1: Tägliche Aufzeichnungen
+  csv += '=== TÄGLICHE AUFZEICHNUNGEN ===\n';
+  csv += 'Datum;Mitarbeiter-Nr;Name;Beginn;Ende;Pause (Min);Netto (Std);Baustelle;Kunde;Anfahrt;Notizen\n';
+
+  eintraege.forEach(e => {
+    const beginnMin = parseInt(e.arbeitsbeginn.split(':')[0]) * 60 + parseInt(e.arbeitsbeginn.split(':')[1]);
+    const endeMin = parseInt(e.arbeitsende.split(':')[0]) * 60 + parseInt(e.arbeitsende.split(':')[1]);
+    const nettoMinuten = endeMin - beginnMin - e.pause_minuten;
+
+    csv += [
+      formatDateAT(e.datum),
+      e.mitarbeiter_nr,
+      `"${e.mitarbeiter_name}"`,
+      e.arbeitsbeginn,
+      e.arbeitsende,
+      e.pause_minuten,
+      formatStunden(nettoMinuten),
+      `"${e.baustelle || ''}"`,
+      `"${e.kunde || ''}"`,
+      `"${e.anfahrt || ''}"`,
+      `"${(e.notizen || '').replace(/"/g, '""')}"`
+    ].join(';') + '\n';
+  });
+
+  // Abschnitt 2: Wochen-Totals
+  csv += '\n=== WOCHEN-TOTALS ===\n';
+  csv += 'Mitarbeiter-Nr;Name;Jahr;KW;Von;Bis;Arbeitstage;Netto (Std);Pause gesamt (Min);Überstunden (Std)\n';
+
+  wochenTotals.forEach(w => {
+    const nettoStunden = w.netto_minuten / 60;
+    const ueberstunden = nettoStunden - STANDARD_WOCHENSTUNDEN;
+
+    csv += [
+      w.mitarbeiter_nr,
+      `"${w.mitarbeiter_name}"`,
+      w.jahr,
+      w.kalenderwoche,
+      formatDateAT(w.woche_start),
+      formatDateAT(w.woche_ende),
+      w.arbeitstage,
+      formatStunden(w.netto_minuten),
+      w.gesamt_pause,
+      ueberstunden.toFixed(2).replace('.', ',')
+    ].join(';') + '\n';
+  });
+
+  // Abschnitt 3: AZG-Verstöße
+  csv += '\n=== AZG-VERSTÖSSE ===\n';
+  if (verstoesse.length === 0) {
+    csv += 'Keine Verstöße im gewählten Zeitraum.\n';
+  } else {
+    csv += 'Typ;Beschreibung;Mitarbeiter-Nr;Name;Datum;Wert;Grenzwert\n';
+    verstoesse.forEach(v => {
+      csv += [
+        v.typ,
+        `"${v.beschreibung}"`,
+        v.mitarbeiter_nr,
+        `"${v.mitarbeiter}"`,
+        v.kalenderwoche || formatDateAT(v.datum),
+        `${v.wert} ${v.einheit}`,
+        `${v.grenzwert} ${v.einheit}`
+      ].join(';') + '\n';
+    });
+  }
+
+  // Fußzeile
+  csv += '\n=== EXPORT-INFORMATIONEN ===\n';
+  csv += `Exportiert am;${new Date().toLocaleString('de-AT')}\n`;
+  csv += `Zeitraum;${formatDateAT(von)} - ${formatDateAT(bis)}\n`;
+  csv += `Anzahl Einträge;${eintraege.length}\n`;
+  csv += `Anzahl Verstöße;${verstoesse.length}\n`;
+
+  const filename = `arbeitszeit_export_${von}_${bis}.csv`;
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+  res.send('\ufeff' + csv);
+});
+
+// PDF-Export (Admin) - Rechtskonform
+app.get('/api/admin/export/pdf', checkSession, checkAdmin, (req, res) => {
+  const { von, bis, mitarbeiter } = req.query;
+
+  if (!von || !bis) {
+    return res.status(400).json({ error: 'Zeitraum (von, bis) erforderlich' });
+  }
+
+  const eintraege = db.getExportDaten(mitarbeiter || null, von, bis);
+  const wochenTotals = db.getWochenTotals(mitarbeiter || null, von, bis);
+  const verstoesse = db.getAZGVerstoesse(mitarbeiter || null, von, bis);
+
+  // PDF erstellen
+  const doc = new PDFDocument({ margin: 40, size: 'A4' });
+
+  const filename = `arbeitszeit_export_${von}_${bis}.pdf`;
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+
+  doc.pipe(res);
+
+  // Header
+  doc.fontSize(18).font('Helvetica-Bold').text('Arbeitszeitnachweis', { align: 'center' });
+  doc.fontSize(12).font('Helvetica').text(`Zeitraum: ${formatDateAT(von)} - ${formatDateAT(bis)}`, { align: 'center' });
+  doc.moveDown();
+
+  // Rechtlicher Hinweis
+  doc.fontSize(8).fillColor('#666')
+    .text('Erstellt gemäß österreichischem Arbeitszeitgesetz (AZG). Aufbewahrungspflicht: 1 Jahr nach Ablauf des Arbeitsjahres.', { align: 'center' });
+  doc.fillColor('#000').moveDown();
+
+  // Zusammenfassung
+  doc.fontSize(14).font('Helvetica-Bold').text('Zusammenfassung');
+  doc.fontSize(10).font('Helvetica');
+  const gesamtMinuten = eintraege.reduce((sum, e) => {
+    const beginnMin = parseInt(e.arbeitsbeginn.split(':')[0]) * 60 + parseInt(e.arbeitsbeginn.split(':')[1]);
+    const endeMin = parseInt(e.arbeitsende.split(':')[0]) * 60 + parseInt(e.arbeitsende.split(':')[1]);
+    return sum + (endeMin - beginnMin - e.pause_minuten);
+  }, 0);
+
+  doc.text(`Anzahl Einträge: ${eintraege.length}`);
+  doc.text(`Gesamtstunden: ${formatStunden(gesamtMinuten).replace(',', '.')} h`);
+  doc.text(`Gesamtpausen: ${eintraege.reduce((s, e) => s + e.pause_minuten, 0)} Min`);
+  doc.text(`AZG-Verstöße: ${verstoesse.length}`, { continued: verstoesse.length > 0 });
+  if (verstoesse.length > 0) {
+    doc.fillColor('#c00').text(' (Siehe Details unten)', { continued: false });
+    doc.fillColor('#000');
+  }
+  doc.moveDown();
+
+  // Wochen-Totals Tabelle
+  doc.fontSize(14).font('Helvetica-Bold').text('Wochen-Übersicht');
+  doc.moveDown(0.5);
+
+  if (wochenTotals.length > 0) {
+    // Tabellen-Header
+    const tableTop = doc.y;
+    const colWidths = [80, 100, 50, 70, 70, 70, 70];
+    const headers = ['Mitarbeiter', 'Name', 'KW', 'Von', 'Bis', 'Stunden', 'Überst.'];
+
+    doc.fontSize(9).font('Helvetica-Bold');
+    let x = 40;
+    headers.forEach((h, i) => {
+      doc.text(h, x, tableTop, { width: colWidths[i], align: 'left' });
+      x += colWidths[i];
+    });
+
+    doc.moveTo(40, tableTop + 12).lineTo(555, tableTop + 12).stroke();
+
+    doc.font('Helvetica').fontSize(8);
+    let y = tableTop + 18;
+
+    wochenTotals.forEach(w => {
+      if (y > 750) {
+        doc.addPage();
+        y = 50;
+      }
+
+      const nettoStunden = w.netto_minuten / 60;
+      const ueberstunden = nettoStunden - STANDARD_WOCHENSTUNDEN;
+
+      x = 40;
+      doc.text(w.mitarbeiter_nr, x, y, { width: colWidths[0] }); x += colWidths[0];
+      doc.text(w.mitarbeiter_name.substring(0, 15), x, y, { width: colWidths[1] }); x += colWidths[1];
+      doc.text(`${w.kalenderwoche}`, x, y, { width: colWidths[2] }); x += colWidths[2];
+      doc.text(formatDateAT(w.woche_start), x, y, { width: colWidths[3] }); x += colWidths[3];
+      doc.text(formatDateAT(w.woche_ende), x, y, { width: colWidths[4] }); x += colWidths[4];
+      doc.text(formatStunden(w.netto_minuten).replace(',', '.'), x, y, { width: colWidths[5] }); x += colWidths[5];
+
+      // Überstunden farbig
+      const ueberText = ueberstunden.toFixed(1);
+      if (ueberstunden > 0) {
+        doc.fillColor('#060').text(`+${ueberText}`, x, y, { width: colWidths[6] });
+      } else if (ueberstunden < 0) {
+        doc.fillColor('#c00').text(ueberText, x, y, { width: colWidths[6] });
+      } else {
+        doc.text('0', x, y, { width: colWidths[6] });
+      }
+      doc.fillColor('#000');
+
+      y += 14;
+    });
+  } else {
+    doc.fontSize(10).text('Keine Daten im gewählten Zeitraum.');
+  }
+
+  doc.moveDown(2);
+
+  // AZG-Verstöße
+  if (verstoesse.length > 0) {
+    doc.addPage();
+    doc.fontSize(14).font('Helvetica-Bold').fillColor('#c00').text('AZG-Verstöße');
+    doc.fillColor('#000').moveDown(0.5);
+
+    doc.fontSize(9).font('Helvetica');
+    verstoesse.forEach((v, i) => {
+      doc.font('Helvetica-Bold').text(`${i + 1}. ${v.beschreibung}`);
+      doc.font('Helvetica')
+        .text(`   Mitarbeiter: ${v.mitarbeiter_nr} - ${v.mitarbeiter}`)
+        .text(`   Datum: ${v.kalenderwoche || formatDateAT(v.datum)}`)
+        .text(`   Ist-Wert: ${v.wert} ${v.einheit} (Grenzwert: ${v.grenzwert} ${v.einheit})`);
+      doc.moveDown(0.5);
+    });
+  }
+
+  // Tägliche Aufzeichnungen (neue Seite)
+  doc.addPage();
+  doc.fontSize(14).font('Helvetica-Bold').text('Tägliche Aufzeichnungen');
+  doc.moveDown(0.5);
+
+  if (eintraege.length > 0) {
+    const tableTop2 = doc.y;
+    const colWidths2 = [65, 55, 85, 40, 40, 35, 40, 90];
+    const headers2 = ['Datum', 'MA-Nr', 'Name', 'Von', 'Bis', 'Pause', 'Netto', 'Baustelle'];
+
+    doc.fontSize(8).font('Helvetica-Bold');
+    let x2 = 40;
+    headers2.forEach((h, i) => {
+      doc.text(h, x2, tableTop2, { width: colWidths2[i], align: 'left' });
+      x2 += colWidths2[i];
+    });
+
+    doc.moveTo(40, tableTop2 + 10).lineTo(555, tableTop2 + 10).stroke();
+
+    doc.font('Helvetica').fontSize(7);
+    let y2 = tableTop2 + 14;
+
+    eintraege.forEach(e => {
+      if (y2 > 780) {
+        doc.addPage();
+        y2 = 50;
+      }
+
+      const beginnMin = parseInt(e.arbeitsbeginn.split(':')[0]) * 60 + parseInt(e.arbeitsbeginn.split(':')[1]);
+      const endeMin = parseInt(e.arbeitsende.split(':')[0]) * 60 + parseInt(e.arbeitsende.split(':')[1]);
+      const nettoMinuten = endeMin - beginnMin - e.pause_minuten;
+
+      x2 = 40;
+      doc.text(formatDateAT(e.datum), x2, y2, { width: colWidths2[0] }); x2 += colWidths2[0];
+      doc.text(e.mitarbeiter_nr, x2, y2, { width: colWidths2[1] }); x2 += colWidths2[1];
+      doc.text(e.mitarbeiter_name.substring(0, 12), x2, y2, { width: colWidths2[2] }); x2 += colWidths2[2];
+      doc.text(e.arbeitsbeginn, x2, y2, { width: colWidths2[3] }); x2 += colWidths2[3];
+      doc.text(e.arbeitsende, x2, y2, { width: colWidths2[4] }); x2 += colWidths2[4];
+      doc.text(`${e.pause_minuten}`, x2, y2, { width: colWidths2[5] }); x2 += colWidths2[5];
+      doc.text(formatStunden(nettoMinuten).replace(',', '.'), x2, y2, { width: colWidths2[6] }); x2 += colWidths2[6];
+      doc.text((e.baustelle || '-').substring(0, 15), x2, y2, { width: colWidths2[7] });
+
+      y2 += 11;
+    });
+  }
+
+  // Fußzeile
+  const pages = doc.bufferedPageRange();
+  for (let i = 0; i < pages.count; i++) {
+    doc.switchToPage(i);
+    doc.fontSize(8).fillColor('#999')
+      .text(
+        `Seite ${i + 1} von ${pages.count} | Exportiert: ${new Date().toLocaleString('de-AT')}`,
+        40, 810, { align: 'center', width: 515 }
+      );
+  }
+
+  doc.end();
+});
+
+// Alte Export-Route für Abwärtskompatibilität
 app.get('/api/admin/export', checkSession, checkAdmin, (req, res) => {
   const { von, bis } = req.query;
-  const eintraege = db.getAllZeiteintraege(von, bis);
+  const result = db.getAllZeiteintraege(von, bis, 1, 10000);
+  const eintraege = result.data || result;
 
-  // CSV-Header (österreichisches Format)
   let csv = 'Datum;Mitarbeiter-Nr;Name;Beginn;Ende;Pause (Min.);Netto (Std.);Baustelle;Kunde;Anfahrt;Notizen\n';
 
   eintraege.forEach(e => {
     const beginnMin = parseInt(e.arbeitsbeginn.split(':')[0]) * 60 + parseInt(e.arbeitsbeginn.split(':')[1]);
     const endeMin = parseInt(e.arbeitsende.split(':')[0]) * 60 + parseInt(e.arbeitsende.split(':')[1]);
-    // Österreichisches Format: Komma als Dezimaltrennzeichen
     const nettoStunden = ((endeMin - beginnMin - e.pause_minuten) / 60).toFixed(2).replace('.', ',');
 
     csv += [
@@ -698,7 +983,19 @@ app.get('/api/admin/export', checkSession, checkAdmin, (req, res) => {
 
   res.setHeader('Content-Type', 'text/csv; charset=utf-8');
   res.setHeader('Content-Disposition', `attachment; filename=arbeitszeiten_${von || 'alle'}_${bis || 'alle'}.csv`);
-  res.send('\ufeff' + csv); // BOM für Excel-Kompatibilität
+  res.send('\ufeff' + csv);
+});
+
+// Verstöße-API (für Frontend)
+app.get('/api/admin/verstoesse', checkSession, checkAdmin, (req, res) => {
+  const { von, bis, mitarbeiter } = req.query;
+
+  if (!von || !bis) {
+    return res.status(400).json({ error: 'Zeitraum (von, bis) erforderlich' });
+  }
+
+  const verstoesse = db.getAZGVerstoesse(mitarbeiter || null, von, bis);
+  res.json(verstoesse);
 });
 
 // ==================== START ====================
