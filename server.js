@@ -457,6 +457,88 @@ app.delete('/api/admin/kunden/:id', checkSession, checkAdmin, (req, res) => {
   }
 });
 
+// ==================== BAUSTELLEN ROUTES ====================
+
+// Alle aktiven Baustellen abrufen (für Dropdown - alle Benutzer)
+app.get('/api/baustellen', checkSession, (req, res) => {
+  const baustellen = db.getAllBaustellen(true);
+  res.json(baustellen);
+});
+
+// Alle Baustellen abrufen (Admin - inkl. inaktive)
+app.get('/api/admin/baustellen', checkSession, checkAdmin, (req, res) => {
+  const baustellen = db.getAllBaustellen(false);
+  res.json(baustellen);
+});
+
+// Einzelne Baustelle abrufen (Admin)
+app.get('/api/admin/baustellen/:id', checkSession, checkAdmin, (req, res) => {
+  const baustelle = db.getBaustelleById(req.params.id);
+  if (!baustelle) {
+    return res.status(404).json({ error: 'Baustelle nicht gefunden' });
+  }
+  res.json(baustelle);
+});
+
+// Neue Baustelle anlegen (Admin)
+app.post('/api/admin/baustellen', checkSession, checkAdmin, (req, res) => {
+  const { name, kunde, adresse, notizen } = req.body;
+
+  if (!name || !name.trim()) {
+    return res.status(400).json({ error: 'Baustellenname erforderlich' });
+  }
+
+  try {
+    db.createBaustelle({
+      name: name.trim(),
+      kunde,
+      adresse,
+      notizen
+    });
+    res.json({ success: true });
+  } catch (error) {
+    if (error.message.includes('UNIQUE')) {
+      return res.status(400).json({ error: 'Baustelle existiert bereits' });
+    }
+    res.status(500).json({ error: 'Fehler beim Erstellen' });
+  }
+});
+
+// Baustelle bearbeiten (Admin)
+app.put('/api/admin/baustellen/:id', checkSession, checkAdmin, (req, res) => {
+  const { name, kunde, adresse, notizen, aktiv } = req.body;
+
+  if (!name || !name.trim()) {
+    return res.status(400).json({ error: 'Baustellenname erforderlich' });
+  }
+
+  try {
+    db.updateBaustelle(req.params.id, {
+      name: name.trim(),
+      kunde,
+      adresse,
+      notizen,
+      aktiv
+    });
+    res.json({ success: true });
+  } catch (error) {
+    if (error.message.includes('UNIQUE')) {
+      return res.status(400).json({ error: 'Baustellenname existiert bereits' });
+    }
+    res.status(500).json({ error: 'Fehler beim Aktualisieren' });
+  }
+});
+
+// Baustelle löschen (Admin)
+app.delete('/api/admin/baustellen/:id', checkSession, checkAdmin, (req, res) => {
+  try {
+    db.deleteBaustelle(req.params.id);
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: 'Fehler beim Löschen' });
+  }
+});
+
 // Helper: Datum formatieren (österreichisches Format DD.MM.YYYY)
 function formatDateAT(dateStr) {
   const [year, month, day] = dateStr.split('-');

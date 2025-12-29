@@ -145,6 +145,17 @@ async function loadKundenListe() {
   }
 }
 
+// Baustellenliste für Dropdown laden
+async function loadBaustellenListe() {
+  try {
+    const baustellen = await api('/baustellen');
+    const datalist = document.getElementById('baustellen-liste');
+    datalist.innerHTML = baustellen.map(b => `<option value="${b.name}">`).join('');
+  } catch (error) {
+    console.error('Baustellen laden fehlgeschlagen:', error);
+  }
+}
+
 function initErfassungView() {
   document.getElementById('user-name').textContent = `Hallo, ${userName}`;
   document.getElementById('show-admin-btn').classList.toggle('hidden', !isAdmin);
@@ -156,8 +167,9 @@ function initErfassungView() {
     document.getElementById('datum').value = getTodayAT();
   }
 
-  // Kundenliste laden
+  // Listen laden
   loadKundenListe();
+  loadBaustellenListe();
 }
 
 document.getElementById('zeit-form').addEventListener('submit', async (e) => {
@@ -370,7 +382,7 @@ document.getElementById('back-to-erfassung-btn').addEventListener('click', () =>
 });
 
 async function loadAdminData() {
-  await Promise.all([loadEintraege(), loadMitarbeiter(), loadKunden()]);
+  await Promise.all([loadEintraege(), loadMitarbeiter(), loadKunden(), loadBaustellen()]);
 }
 
 async function loadEintraege() {
@@ -452,6 +464,33 @@ async function loadKunden() {
         <td class="action-btns">
           <button class="btn btn-small btn-icon" onclick="openKundeModal(${k.id})" title="Bearbeiten">✎</button>
           <button class="btn btn-small btn-icon" onclick="toggleKundeAktiv(${k.id}, ${k.aktiv})" title="${k.aktiv ? 'Deaktivieren' : 'Aktivieren'}">${k.aktiv ? '⏸' : '▶'}</button>
+        </td>
+      </tr>
+    `).join('');
+  } catch (error) {
+    console.error(error);
+  }
+}
+
+async function loadBaustellen() {
+  try {
+    const baustellen = await api('/admin/baustellen');
+    const tbody = document.querySelector('#baustellen-table tbody');
+
+    if (baustellen.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="5" style="text-align:center">Noch keine Baustellen angelegt.</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = baustellen.map(b => `
+      <tr>
+        <td>${b.name}</td>
+        <td>${b.kunde || '-'}</td>
+        <td>${b.adresse || '-'}</td>
+        <td>${b.aktiv ? 'Aktiv' : 'Inaktiv'}</td>
+        <td class="action-btns">
+          <button class="btn btn-small btn-icon" onclick="openBaustelleModal(${b.id})" title="Bearbeiten">✎</button>
+          <button class="btn btn-small btn-icon" onclick="toggleBaustelleAktiv(${b.id}, ${b.aktiv})" title="${b.aktiv ? 'Deaktivieren' : 'Aktivieren'}">${b.aktiv ? '⏸' : '▶'}</button>
         </td>
       </tr>
     `).join('');
@@ -1016,6 +1055,88 @@ window.toggleKundeAktiv = async (id, currentStatus) => {
     });
     loadKunden();
     loadKundenListe();
+  } catch (error) {
+    alert(error.message);
+  }
+};
+
+// Baustelle Modal öffnen
+window.openBaustelleModal = async (id = null) => {
+  const modal = document.getElementById('baustelle-modal');
+  const title = document.getElementById('baustelle-modal-title');
+  const form = document.getElementById('baustelle-form');
+
+  // Formular zurücksetzen
+  form.reset();
+  document.getElementById('baustelle-id').value = '';
+  document.getElementById('baustelle-form-message').textContent = '';
+
+  if (id) {
+    // Bearbeiten - Daten laden
+    title.textContent = 'Baustelle bearbeiten';
+    try {
+      const baustelle = await api(`/admin/baustellen/${id}`);
+      document.getElementById('baustelle-id').value = baustelle.id;
+      document.getElementById('baustelle-name').value = baustelle.name || '';
+      document.getElementById('baustelle-kunde').value = baustelle.kunde || '';
+      document.getElementById('baustelle-adresse').value = baustelle.adresse || '';
+      document.getElementById('baustelle-notizen').value = baustelle.notizen || '';
+    } catch (error) {
+      alert('Fehler beim Laden: ' + error.message);
+      return;
+    }
+  } else {
+    title.textContent = 'Neue Baustelle';
+  }
+
+  modal.classList.remove('hidden');
+};
+
+window.closeBaustelleModal = () => {
+  document.getElementById('baustelle-modal').classList.add('hidden');
+};
+
+// Baustelle Formular absenden
+document.getElementById('baustelle-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const messageEl = document.getElementById('baustelle-form-message');
+  messageEl.textContent = '';
+
+  const id = document.getElementById('baustelle-id').value;
+  const data = {
+    name: document.getElementById('baustelle-name').value,
+    kunde: document.getElementById('baustelle-kunde').value,
+    adresse: document.getElementById('baustelle-adresse').value,
+    notizen: document.getElementById('baustelle-notizen').value,
+    aktiv: true
+  };
+
+  try {
+    if (id) {
+      await api(`/admin/baustellen/${id}`, 'PUT', data);
+    } else {
+      await api('/admin/baustellen', 'POST', data);
+    }
+    closeBaustelleModal();
+    loadBaustellen();
+    loadBaustellenListe();
+  } catch (error) {
+    messageEl.textContent = error.message;
+    messageEl.className = 'message error';
+  }
+});
+
+window.toggleBaustelleAktiv = async (id, currentStatus) => {
+  try {
+    const baustelle = await api(`/admin/baustellen/${id}`);
+    if (!baustelle) return;
+
+    await api(`/admin/baustellen/${id}`, 'PUT', {
+      ...baustelle,
+      aktiv: !currentStatus
+    });
+    loadBaustellen();
+    loadBaustellenListe();
   } catch (error) {
     alert(error.message);
   }

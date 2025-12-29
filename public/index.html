@@ -67,7 +67,8 @@
 
           <div class="form-group">
             <label for="baustelle">Baustelle / Projekt</label>
-            <input type="text" id="baustelle" placeholder="z.B. Neubau Musterstraße 12">
+            <input type="text" id="baustelle" list="baustellen-liste" placeholder="Auswählen oder eingeben">
+            <datalist id="baustellen-liste"></datalist>
           </div>
 
           <div class="form-group">
@@ -146,7 +147,7 @@
         </div>
         <div class="form-group">
           <label for="edit-baustelle">Baustelle</label>
-          <input type="text" id="edit-baustelle">
+          <input type="text" id="edit-baustelle" list="baustellen-liste">
         </div>
         <div class="form-group">
           <label for="edit-kunde">Kunde</label>
@@ -185,6 +186,7 @@
         <button class="tab active" data-tab="eintraege">Zeiteinträge</button>
         <button class="tab" data-tab="mitarbeiter">Mitarbeiter</button>
         <button class="tab" data-tab="kunden">Kunden</button>
+        <button class="tab" data-tab="baustellen">Baustellen</button>
       </div>
 
       <!-- Zeiteinträge Tab -->
@@ -278,6 +280,62 @@
           </div>
         </div>
       </div>
+
+      <!-- Baustellen Tab -->
+      <div id="tab-baustellen" class="tab-content hidden">
+        <div class="card">
+          <h2>Baustellen verwalten</h2>
+          <button class="btn btn-primary" onclick="openBaustelleModal()">+ Neue Baustelle</button>
+          <div id="baustelle-message" class="message"></div>
+
+          <div class="table-container">
+            <table id="baustellen-table">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Kunde</th>
+                  <th>Adresse</th>
+                  <th>Status</th>
+                  <th>Aktionen</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- BAUSTELLE MODAL -->
+  <div id="baustelle-modal" class="modal hidden">
+    <div class="modal-backdrop" onclick="closeBaustelleModal()"></div>
+    <div class="modal-content card">
+      <h2 id="baustelle-modal-title">Neue Baustelle</h2>
+      <form id="baustelle-form">
+        <input type="hidden" id="baustelle-id">
+        <div class="form-group">
+          <label for="baustelle-name">Bezeichnung *</label>
+          <input type="text" id="baustelle-name" required>
+        </div>
+        <div class="form-group">
+          <label for="baustelle-kunde">Kunde</label>
+          <input type="text" id="baustelle-kunde" list="kunden-liste">
+        </div>
+        <div class="form-group">
+          <label for="baustelle-adresse">Adresse</label>
+          <input type="text" id="baustelle-adresse">
+        </div>
+        <div class="form-group">
+          <label for="baustelle-notizen">Notizen</label>
+          <textarea id="baustelle-notizen" rows="2"></textarea>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-secondary" onclick="closeBaustelleModal()">Abbrechen</button>
+          <button type="submit" class="btn btn-primary">Speichern</button>
+        </div>
+        <div id="baustelle-form-message" class="message"></div>
+      </form>
     </div>
   </div>
 

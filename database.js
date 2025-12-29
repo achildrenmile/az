@@ -82,6 +82,19 @@ db.exec(`
   );
 
   CREATE INDEX IF NOT EXISTS idx_kunden_name ON kunden(name);
+
+  -- Baustellen-Tabelle
+  CREATE TABLE IF NOT EXISTS baustellen (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT UNIQUE NOT NULL,
+    kunde TEXT,
+    adresse TEXT,
+    notizen TEXT,
+    aktiv INTEGER DEFAULT 1,
+    erstellt_am DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_baustellen_name ON baustellen(name);
 `);
 
 // Migration: Neue Spalten hinzufügen falls sie fehlen
@@ -360,5 +373,48 @@ module.exports = {
 
   deleteKunde: (id) => {
     return db.prepare('DELETE FROM kunden WHERE id = ?').run(id);
+  },
+
+  // Baustellen-Funktionen
+  getAllBaustellen: (nurAktive = true) => {
+    if (nurAktive) {
+      return db.prepare('SELECT * FROM baustellen WHERE aktiv = 1 ORDER BY name').all();
+    }
+    return db.prepare('SELECT * FROM baustellen ORDER BY name').all();
+  },
+
+  getBaustelleById: (id) => {
+    return db.prepare('SELECT * FROM baustellen WHERE id = ?').get(id);
+  },
+
+  createBaustelle: (data) => {
+    return db.prepare(`
+      INSERT INTO baustellen (name, kunde, adresse, notizen)
+      VALUES (?, ?, ?, ?)
+    `).run(
+      data.name,
+      data.kunde || '',
+      data.adresse || '',
+      data.notizen || ''
+    );
+  },
+
+  updateBaustelle: (id, data) => {
+    return db.prepare(`
+      UPDATE baustellen
+      SET name = ?, kunde = ?, adresse = ?, notizen = ?, aktiv = ?
+      WHERE id = ?
+    `).run(
+      data.name,
+      data.kunde || '',
+      data.adresse || '',
+      data.notizen || '',
+      data.aktiv !== false ? 1 : 0,
+      id
+    );
+  },
+
+  deleteBaustelle: (id) => {
+    return db.prepare('DELETE FROM baustellen WHERE id = ?').run(id);
   }
 };
