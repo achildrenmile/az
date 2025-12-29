@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Hilfe - AZ Arbeitszeiterfassung</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%234f46e5'/><text x='50' y='68' font-family='Arial' font-size='50' font-weight='bold' fill='white' text-anchor='middle'>AZ</text></svg>">
+  <style>
+    .help-container {
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 24px;
+    }
+    .help-header {
+      text-align: center;
+      margin-bottom: 40px;
+    }
+    .help-header .logo-icon {
+      width: 64px;
+      height: 64px;
+      font-size: 24px;
+      margin: 0 auto 16px;
+    }
+    .help-section {
+      margin-bottom: 32px;
+    }
+    .help-section h2 {
+      color: var(--primary);
+      border-bottom: 2px solid var(--border);
+      padding-bottom: 8px;
+      margin-bottom: 16px;
+    }
+    .help-section h3 {
+      color: var(--text-primary);
+      margin: 20px 0 12px;
+      font-size: 1.1rem;
+    }
+    .help-section p, .help-section li {
+      color: var(--text-secondary);
+      line-height: 1.7;
+    }
+    .help-section ul {
+      margin: 12px 0;
+      padding-left: 24px;
+    }
+    .help-section li {
+      margin-bottom: 8px;
+    }
+    .help-tip {
+      background: #f0f9ff;
+      border-left: 4px solid var(--accent);
+      padding: 16px;
+      border-radius: 0 8px 8px 0;
+      margin: 16px 0;
+    }
+    .help-tip strong {
+      color: var(--accent-dark);
+    }
+    .back-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--primary);
+      text-decoration: none;
+      font-weight: 600;
+      margin-bottom: 24px;
+    }
+    .back-link:hover {
+      text-decoration: underline;
+    }
+    .feature-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: 16px;
+      margin: 20px 0;
+    }
+    .feature-card {
+      background: var(--bg-light);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 20px;
+    }
+    .feature-card h4 {
+      color: var(--text-primary);
+      margin: 0 0 8px;
+      font-size: 1rem;
+    }
+    .feature-card p {
+      margin: 0;
+      font-size: 0.9rem;
+    }
+    .kbd {
+      background: var(--bg-light);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 2px 6px;
+      font-family: monospace;
+      font-size: 0.9em;
+    }
+  </style>
+</head>
+<body>
+  <div class="help-container">
+    <a href="/" class="back-link">&larr; Zurück zur App</a>
+
+    <div class="help-header">
+      <div class="logo-icon">AZ</div>
+      <h1>Hilfe & Anleitung</h1>
+      <p class="subtitle">Arbeitszeiterfassung - Benutzerhandbuch</p>
+    </div>
+
+    <div class="card">
+      <div class="help-section">
+        <h2>Erste Schritte</h2>
+        <p>Willkommen bei der AZ Arbeitszeiterfassung! Diese Anwendung ermöglicht es dir, deine Arbeitszeiten einfach und gesetzeskonform zu erfassen.</p>
+
+        <h3>Anmeldung</h3>
+        <p>Um die App zu nutzen, melde dich mit deiner Mitarbeiter-Nummer und deinem Passwort an. Diese Zugangsdaten erhältst du von deinem Administrator.</p>
+
+        <div class="help-tip">
+          <strong>Tipp:</strong> Halte dein Passwort geheim und teile es mit niemandem.
+        </div>
+      </div>
+
+      <div class="help-section">
+        <h2>Arbeitszeit erfassen</h2>
+        <p>Nach der Anmeldung siehst du das Erfassungsformular. Hier trägst du deine tägliche Arbeitszeit ein:</p>
+
+        <div class="feature-grid">
+          <div class="feature-card">
+            <h4>Datum</h4>
+            <p>Wähle das Datum aus dem Kalender oder tippe es im Format TT.MM.JJJJ ein.</p>
+          </div>
+          <div class="feature-card">
+            <h4>Arbeitsbeginn & -ende</h4>
+            <p>Gib die Zeiten im Format HH:MM ein (z.B. 07:00 oder 16:30).</p>
+          </div>
+          <div class="feature-card">
+            <h4>Pause</h4>
+            <p>Trage die gesamte Pausenzeit in Minuten ein (z.B. 30 für eine halbe Stunde).</p>
+          </div>
+          <div class="feature-card">
+            <h4>Baustelle & Kunde</h4>
+            <p>Optional: Wähle aus der Liste oder gib einen neuen Eintrag ein.</p>
+          </div>
+        </div>
+
+        <div class="help-tip">
+          <strong>Gesetzliche Pausenregelung:</strong> Bei mehr als 6 Stunden Arbeitszeit ist eine Pause von mindestens 30 Minuten vorgeschrieben. Die App warnt dich automatisch, wenn die Pause zu kurz ist.
+        </div>
+      </div>
+
+      <div class="help-section">
+        <h2>Meine Einträge</h2>
+        <p>Unterhalb des Erfassungsformulars siehst du eine Übersicht deiner erfassten Arbeitszeiten.</p>
+
+        <h3>Aktionen</h3>
+        <ul>
+          <li><strong>Bearbeiten:</strong> Klicke auf das Stift-Symbol, um einen Eintrag zu ändern.</li>
+          <li><strong>Löschen:</strong> Klicke auf das X-Symbol, um einen Eintrag zu entfernen.</li>
+          <li><strong>Drucken:</strong> Erstelle einen Ausdruck einzelner Einträge oder des gesamten Zeitnachweises.</li>
+        </ul>
+      </div>
+
+      <div class="help-section">
+        <h2>Zeitnachweis drucken</h2>
+        <p>Mit der Funktion "Zeitnachweis drucken" erstellst du einen offiziellen Ausdruck deiner Arbeitszeiten. Dieser enthält:</p>
+        <ul>
+          <li>Alle erfassten Einträge mit Datum, Zeiten und Pausen</li>
+          <li>Die berechnete Netto-Arbeitszeit pro Tag</li>
+          <li>Die Gesamtstunden im ausgewählten Zeitraum</li>
+          <li>Unterschriftsfelder für Mitarbeiter und Arbeitgeber</li>
+        </ul>
+      </div>
+
+      <div class="help-section">
+        <h2>Admin-Bereich</h2>
+        <p>Administratoren haben Zugriff auf erweiterte Funktionen:</p>
+
+        <h3>Zeiteinträge</h3>
+        <ul>
+          <li>Alle Einträge aller Mitarbeiter einsehen</li>
+          <li>Nach Datum, Mitarbeiter, Baustelle oder Kunde filtern</li>
+          <li>Gefilterte Daten als CSV exportieren</li>
+          <li>Zeitnachweise für beliebige Filter drucken</li>
+        </ul>
+
+        <h3>Mitarbeiter</h3>
+        <ul>
+          <li>Neue Mitarbeiter anlegen</li>
+          <li>Passwörter zurücksetzen</li>
+          <li>Mitarbeiter aktivieren/deaktivieren</li>
+        </ul>
+
+        <h3>Kunden & Baustellen</h3>
+        <ul>
+          <li>Kunden mit Kontaktdaten verwalten</li>
+          <li>Baustellen anlegen und bearbeiten</li>
+          <li>Einträge aktivieren/deaktivieren</li>
+        </ul>
+      </div>
+
+      <div class="help-section">
+        <h2>Passwort-Anforderungen</h2>
+        <p>Für maximale Sicherheit muss dein Passwort folgende Kriterien erfüllen:</p>
+        <ul>
+          <li>Mindestens 8 Zeichen lang</li>
+          <li>Mindestens ein Großbuchstabe (A-Z)</li>
+          <li>Mindestens ein Kleinbuchstabe (a-z)</li>
+          <li>Mindestens eine Zahl (0-9)</li>
+          <li>Mindestens ein Sonderzeichen (z.B. !@#$%^&*)</li>
+        </ul>
+
+        <div class="help-tip">
+          <strong>Beispiel für ein sicheres Passwort:</strong> <span class="kbd">Baustelle2024!</span>
+        </div>
+      </div>
+
+      <div class="help-section">
+        <h2>Tastaturkürzel</h2>
+        <ul>
+          <li><span class="kbd">Tab</span> - Zum nächsten Eingabefeld springen</li>
+          <li><span class="kbd">Enter</span> - Formular absenden</li>
+          <li><span class="kbd">Esc</span> - Dialog schließen</li>
+        </ul>
+      </div>
+
+      <div class="help-section">
+        <h2>Support</h2>
+        <p>Bei Fragen oder Problemen wende dich an deinen Administrator oder die IT-Abteilung.</p>
+      </div>
+    </div>
+
+    <div style="text-align: center; margin-top: 32px;">
+      <a href="/" class="btn btn-primary">Zur App</a>
+    </div>
+  </div>
+</body>
+</html>
