@@ -95,7 +95,33 @@ db.exec(`
   );
 
   CREATE INDEX IF NOT EXISTS idx_baustellen_name ON baustellen(name);
+
+  -- Pausenregeln-Tabelle (konfigurierbar, AZG §11)
+  CREATE TABLE IF NOT EXISTS pausenregeln (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    min_arbeitszeit_minuten INTEGER NOT NULL,
+    min_pause_minuten INTEGER NOT NULL,
+    warnung_text TEXT,
+    aktiv INTEGER DEFAULT 1,
+    erstellt_am DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
 `);
+
+// Standard-Pausenregeln einfügen falls nicht vorhanden (AZG §11)
+const pausenregelExists = db.prepare('SELECT id FROM pausenregeln LIMIT 1').get();
+if (!pausenregelExists) {
+  db.prepare(`
+    INSERT INTO pausenregeln (name, min_arbeitszeit_minuten, min_pause_minuten, warnung_text, aktiv)
+    VALUES (?, ?, ?, ?, 1)
+  `).run(
+    'AZG §11 - Standardregel',
+    360, // 6 Stunden
+    30,  // 30 Minuten Pause
+    'Bei mehr als 6 Stunden Arbeitszeit sind mindestens 30 Minuten Pause vorgeschrieben (§11 AZG).'
+  );
+  console.log('Standard-Pausenregel (AZG §11) erstellt');
+}
 
 // Migration: Neue Spalten hinzufügen falls sie fehlen
 try {
@@ -746,6 +772,79 @@ module.exports = {
         grenzwert: 30
       });
     });
+
+    return verstoesse;
+  },
+
+  // ==================== PAUSENREGELN ====================
+
+  // Alle Pausenregeln abrufen
+  getAllPausenregeln: () => {
+    return db.prepare('SELECT * FROM pausenregeln ORDER BY min_arbeitszeit_minuten').all();
+  },
+
+  // Aktive Pausenregeln abrufen
+  getAktivePausenregeln: () => {
+    return db.prepare('SELECT * FROM pausenregeln WHERE aktiv = 1 ORDER BY min_arbeitszeit_minuten').all();
+  },
+
+  // Einzelne Pausenregel abrufen
+  getPausenregelById: (id) => {
+    return db.prepare('SELECT * FROM pausenregeln WHERE id = ?').get(id);
+  },
+
+  // Pausenregel erstellen
+  createPausenregel: (data) => {
+    return db.prepare(`
+      INSERT INTO pausenregeln (name, min_arbeitszeit_minuten, min_pause_minuten, warnung_text, aktiv)
+      VALUES (?, ?, ?, ?, ?)
+    `).run(
+      data.name,
+      data.min_arbeitszeit_minuten,
+      data.min_pause_minuten,
+      data.warnung_text || '',
+      data.aktiv !== false ? 1 : 0
+    );
+  },
+
+  // Pausenregel aktualisieren
+  updatePausenregel: (id, data) => {
+    return db.prepare(`
+      UPDATE pausenregeln
+      SET name = ?, min_arbeitszeit_minuten = ?, min_pause_minuten = ?, warnung_text = ?, aktiv = ?
+      WHERE id = ?
+    `).run(
+      data.name,
+      data.min_arbeitszeit_minuten,
+      data.min_pause_minuten,
+      data.warnung_text || '',
+      data.aktiv !== false ? 1 : 0,
+      id
+    );
+  },
+
+  // Pausenregel löschen
+  deletePausenregel: (id) => {
+    return db.prepare('DELETE FROM pausenregeln WHERE id = ?').run(id);
+  },
+
+  // Pausenverstoß prüfen (für einzelnen Eintrag)
+  checkPausenverstoesse: (bruttoMinuten, pauseMinuten) => {
+    const regeln = db.prepare('SELECT * FROM pausenregeln WHERE aktiv = 1 ORDER BY min_arbeitszeit_minuten DESC').all();
+    const verstoesse = [];
+
+    for (const regel of regeln) {
+      if (bruttoMinuten > regel.min_arbeitszeit_minuten && pauseMinuten < regel.min_pause_minuten) {
+        verstoesse.push({
+          regel_id: regel.id,
+          regel_name: regel.name,
+          min_arbeitszeit: regel.min_arbeitszeit_minuten,
+          min_pause: regel.min_pause_minuten,
+          ist_pause: pauseMinuten,
+          warnung: regel.warnung_text
+        });
+      }
+    }
 
     return verstoesse;
   }

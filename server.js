@@ -180,11 +180,14 @@ app.post('/api/zeiteintraege', checkSession, (req, res) => {
     return res.status(400).json({ error: 'Pause kann nicht länger als die Arbeitszeit sein' });
   }
 
-  // AZG-Hinweis: Bei mehr als 6 Stunden ist mindestens 30 Min Pause Pflicht
-  const nettoMinuten = arbeitsMinuten - (pause_minuten || 0);
-  let warnung = null;
-  if (nettoMinuten > 360 && (!pause_minuten || pause_minuten < 30)) {
-    warnung = 'Hinweis: Bei mehr als 6 Stunden Arbeitszeit sind lt. AZG mindestens 30 Minuten Pause vorgeschrieben.';
+  // Pausenregeln prüfen (konfigurierbar)
+  const pausenVerstoesse = db.checkPausenverstoesse(arbeitsMinuten, pause_minuten || 0);
+  let warnungen = [];
+
+  if (pausenVerstoesse.length > 0) {
+    warnungen = pausenVerstoesse.map(v => v.warnung ||
+      `Bei mehr als ${Math.floor(v.min_arbeitszeit / 60)} Stunden Arbeitszeit sind mindestens ${v.min_pause} Minuten Pause vorgeschrieben.`
+    );
   }
 
   try {
@@ -200,7 +203,11 @@ app.post('/api/zeiteintraege', checkSession, (req, res) => {
       notizen
     });
 
-    res.json({ success: true, warnung });
+    res.json({
+      success: true,
+      warnung: warnungen.length > 0 ? warnungen[0] : null,
+      warnungen: warnungen.length > 0 ? warnungen : undefined
+    });
   } catch (error) {
     res.status(500).json({ error: 'Fehler beim Speichern' });
   }
@@ -660,6 +667,110 @@ app.delete('/api/admin/baustellen/:id', checkSession, checkAdmin, (req, res) => 
   } catch (error) {
     res.status(500).json({ error: 'Fehler beim Löschen' });
   }
+});
+
+// ==================== PAUSENREGELN ROUTES ====================
+
+// Alle Pausenregeln abrufen (Admin)
+app.get('/api/admin/pausenregeln', checkSession, checkAdmin, (req, res) => {
+  const regeln = db.getAllPausenregeln();
+  res.json(regeln);
+});
+
+// Aktive Pausenregeln abrufen (für Validierung)
+app.get('/api/pausenregeln', checkSession, (req, res) => {
+  const regeln = db.getAktivePausenregeln();
+  res.json(regeln);
+});
+
+// Einzelne Pausenregel abrufen (Admin)
+app.get('/api/admin/pausenregeln/:id', checkSession, checkAdmin, (req, res) => {
+  const regel = db.getPausenregelById(req.params.id);
+  if (!regel) {
+    return res.status(404).json({ error: 'Pausenregel nicht gefunden' });
+  }
+  res.json(regel);
+});
+
+// Neue Pausenregel erstellen (Admin)
+app.post('/api/admin/pausenregeln', checkSession, checkAdmin, (req, res) => {
+  const { name, min_arbeitszeit_minuten, min_pause_minuten, warnung_text, aktiv } = req.body;
+
+  if (!name || !min_arbeitszeit_minuten || !min_pause_minuten) {
+    return res.status(400).json({ error: 'Name, Mindestarbeitszeit und Mindestpause erforderlich' });
+  }
+
+  if (min_arbeitszeit_minuten < 0 || min_pause_minuten < 0) {
+    return res.status(400).json({ error: 'Werte müssen positiv sein' });
+  }
+
+  try {
+    db.createPausenregel({
+      name,
+      min_arbeitszeit_minuten: parseInt(min_arbeitszeit_minuten),
+      min_pause_minuten: parseInt(min_pause_minuten),
+      warnung_text,
+      aktiv
+    });
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: 'Fehler beim Erstellen' });
+  }
+});
+
+// Pausenregel aktualisieren (Admin)
+app.put('/api/admin/pausenregeln/:id', checkSession, checkAdmin, (req, res) => {
+  const { name, min_arbeitszeit_minuten, min_pause_minuten, warnung_text, aktiv } = req.body;
+
+  if (!name || !min_arbeitszeit_minuten || !min_pause_minuten) {
+    return res.status(400).json({ error: 'Name, Mindestarbeitszeit und Mindestpause erforderlich' });
+  }
+
+  try {
+    db.updatePausenregel(req.params.id, {
+      name,
+      min_arbeitszeit_minuten: parseInt(min_arbeitszeit_minuten),
+      min_pause_minuten: parseInt(min_pause_minuten),
+      warnung_text,
+      aktiv
+    });
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: 'Fehler beim Aktualisieren' });
+  }
+});
+
+// Pausenregel löschen (Admin)
+app.delete('/api/admin/pausenregeln/:id', checkSession, checkAdmin, (req, res) => {
+  try {
+    db.deletePausenregel(req.params.id);
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: 'Fehler beim Löschen' });
+  }
+});
+
+// Pausenverstoß prüfen (für Frontend-Validierung)
+app.post('/api/check-pause', checkSession, (req, res) => {
+  const { arbeitsbeginn, arbeitsende, pause_minuten } = req.body;
+
+  if (!arbeitsbeginn || !arbeitsende) {
+    return res.status(400).json({ error: 'Beginn und Ende erforderlich' });
+  }
+
+  const beginnMinuten = parseInt(arbeitsbeginn.split(':')[0]) * 60 + parseInt(arbeitsbeginn.split(':')[1]);
+  const endeMinuten = parseInt(arbeitsende.split(':')[0]) * 60 + parseInt(arbeitsende.split(':')[1]);
+  const arbeitsMinuten = endeMinuten - beginnMinuten;
+
+  const verstoesse = db.checkPausenverstoesse(arbeitsMinuten, pause_minuten || 0);
+
+  res.json({
+    valid: verstoesse.length === 0,
+    verstoesse: verstoesse,
+    warnungen: verstoesse.map(v => v.warnung ||
+      `Bei mehr als ${Math.floor(v.min_arbeitszeit / 60)} Stunden Arbeitszeit sind mindestens ${v.min_pause} Minuten Pause vorgeschrieben.`
+    )
+  });
 });
 
 // Helper: Datum formatieren (österreichisches Format DD.MM.YYYY)

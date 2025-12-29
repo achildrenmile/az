@@ -253,6 +253,7 @@
         <button class="tab" data-tab="mitarbeiter">Mitarbeiter</button>
         <button class="tab" data-tab="kunden">Kunden</button>
         <button class="tab" data-tab="baustellen">Baustellen</button>
+        <button class="tab" data-tab="pausenregeln">Pausenregeln</button>
       </div>
 
       <!-- Zeiteinträge Tab -->
@@ -438,6 +439,73 @@
           <div id="baustellen-pagination" class="pagination"></div>
         </div>
       </div>
+
+      <!-- Pausenregeln Tab -->
+      <div id="tab-pausenregeln" class="tab-content hidden">
+        <div class="card">
+          <h2>Pausenregeln (AZG §11)</h2>
+          <p style="color: var(--text-secondary); margin-bottom: 20px;">
+            Konfigurieren Sie die Mindestpausen gemäß Arbeitszeitgesetz. Bei Verstößen werden Mitarbeiter gewarnt.
+          </p>
+          <button class="btn btn-primary" onclick="openPausenregelModal()">+ Neue Regel</button>
+          <div id="pausenregel-message" class="message"></div>
+
+          <div class="table-container" style="margin-top: 20px;">
+            <table id="pausenregeln-table">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Ab Arbeitszeit</th>
+                  <th>Min. Pause</th>
+                  <th>Warnung</th>
+                  <th>Status</th>
+                  <th>Aktionen</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- PAUSENREGEL MODAL -->
+  <div id="pausenregel-modal" class="modal hidden">
+    <div class="modal-backdrop" onclick="closePausenregelModal()"></div>
+    <div class="modal-content card">
+      <h2 id="pausenregel-modal-title">Neue Pausenregel</h2>
+      <form id="pausenregel-form">
+        <input type="hidden" id="pausenregel-id">
+        <div class="form-group">
+          <label for="pausenregel-name">Bezeichnung *</label>
+          <input type="text" id="pausenregel-name" required placeholder="z.B. AZG §11 - 6 Stunden">
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="pausenregel-arbeitszeit">Ab Arbeitszeit (Stunden) *</label>
+            <input type="number" id="pausenregel-arbeitszeit" required min="1" max="24" step="0.5" value="6">
+          </div>
+          <div class="form-group">
+            <label for="pausenregel-pause">Min. Pause (Minuten) *</label>
+            <input type="number" id="pausenregel-pause" required min="1" max="120" value="30">
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="pausenregel-warnung">Warnungstext</label>
+          <textarea id="pausenregel-warnung" rows="2" placeholder="Wird dem Mitarbeiter bei Verstoß angezeigt"></textarea>
+        </div>
+        <div class="form-group">
+          <label>
+            <input type="checkbox" id="pausenregel-aktiv" checked> Regel aktiv
+          </label>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-secondary" onclick="closePausenregelModal()">Abbrechen</button>
+          <button type="submit" class="btn btn-primary">Speichern</button>
+        </div>
+        <div id="pausenregel-form-message" class="message"></div>
+      </form>
     </div>
   </div>
 

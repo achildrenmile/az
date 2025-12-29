@@ -1822,3 +1822,132 @@ async function checkVerstoesse() {
     console.error('Verstöße laden fehlgeschlagen:', error);
   }
 }
+
+// ==================== PAUSENREGELN ====================
+
+async function loadPausenregeln() {
+  try {
+    const regeln = await api('/admin/pausenregeln');
+    const tbody = document.querySelector('#pausenregeln-table tbody');
+
+    if (regeln.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:40px;color:var(--text-secondary)">Keine Pausenregeln definiert</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = regeln.map(r => `
+      <tr>
+        <td>${r.name}</td>
+        <td>${(r.min_arbeitszeit_minuten / 60).toFixed(1)} h</td>
+        <td>${r.min_pause_minuten} Min</td>
+        <td title="${r.warnung_text || '-'}">${(r.warnung_text || '-').substring(0, 30)}${(r.warnung_text || '').length > 30 ? '...' : ''}</td>
+        <td>${r.aktiv ? '<span style="color:var(--success)">Aktiv</span>' : '<span style="color:var(--text-secondary)">Inaktiv</span>'}</td>
+        <td class="action-btns">
+          <button class="btn btn-small btn-icon" onclick="openPausenregelModal(${r.id})" title="Bearbeiten">✎</button>
+          <button class="btn btn-small btn-icon" onclick="togglePausenregelAktiv(${r.id}, ${r.aktiv})" title="${r.aktiv ? 'Deaktivieren' : 'Aktivieren'}">${r.aktiv ? '⏸' : '▶'}</button>
+          <button class="btn btn-small btn-danger btn-icon" onclick="deletePausenregel(${r.id})" title="Löschen">✕</button>
+        </td>
+      </tr>
+    `).join('');
+  } catch (error) {
+    console.error('Pausenregeln laden fehlgeschlagen:', error);
+  }
+}
+
+async function openPausenregelModal(id = null) {
+  const modal = document.getElementById('pausenregel-modal');
+  const title = document.getElementById('pausenregel-modal-title');
+  const form = document.getElementById('pausenregel-form');
+
+  form.reset();
+  document.getElementById('pausenregel-id').value = '';
+  document.getElementById('pausenregel-aktiv').checked = true;
+  document.getElementById('pausenregel-form-message').innerHTML = '';
+
+  if (id) {
+    title.textContent = 'Pausenregel bearbeiten';
+    try {
+      const regel = await api(`/admin/pausenregeln/${id}`);
+      document.getElementById('pausenregel-id').value = regel.id;
+      document.getElementById('pausenregel-name').value = regel.name;
+      document.getElementById('pausenregel-arbeitszeit').value = regel.min_arbeitszeit_minuten / 60;
+      document.getElementById('pausenregel-pause').value = regel.min_pause_minuten;
+      document.getElementById('pausenregel-warnung').value = regel.warnung_text || '';
+      document.getElementById('pausenregel-aktiv').checked = regel.aktiv === 1;
+    } catch (error) {
+      console.error('Pausenregel laden fehlgeschlagen:', error);
+    }
+  } else {
+    title.textContent = 'Neue Pausenregel';
+  }
+
+  modal.classList.remove('hidden');
+}
+
+function closePausenregelModal() {
+  document.getElementById('pausenregel-modal').classList.add('hidden');
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('pausenregel-form')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const messageEl = document.getElementById('pausenregel-form-message');
+    messageEl.innerHTML = '';
+
+    const id = document.getElementById('pausenregel-id').value;
+    const data = {
+      name: document.getElementById('pausenregel-name').value,
+      min_arbeitszeit_minuten: Math.round(parseFloat(document.getElementById('pausenregel-arbeitszeit').value) * 60),
+      min_pause_minuten: parseInt(document.getElementById('pausenregel-pause').value),
+      warnung_text: document.getElementById('pausenregel-warnung').value,
+      aktiv: document.getElementById('pausenregel-aktiv').checked
+    };
+
+    try {
+      if (id) {
+        await api(`/admin/pausenregeln/${id}`, 'PUT', data);
+      } else {
+        await api('/admin/pausenregeln', 'POST', data);
+      }
+      closePausenregelModal();
+      loadPausenregeln();
+    } catch (error) {
+      messageEl.innerHTML = `<span class="error">${error.message}</span>`;
+    }
+  });
+});
+
+async function togglePausenregelAktiv(id, currentAktiv) {
+  try {
+    const regel = await api(`/admin/pausenregeln/${id}`);
+    await api(`/admin/pausenregeln/${id}`, 'PUT', {
+      ...regel,
+      aktiv: !currentAktiv
+    });
+    loadPausenregeln();
+  } catch (error) {
+    console.error('Status ändern fehlgeschlagen:', error);
+  }
+}
+
+async function deletePausenregel(id) {
+  if (!confirm('Pausenregel wirklich löschen?')) return;
+
+  try {
+    await api(`/admin/pausenregeln/${id}`, 'DELETE');
+    loadPausenregeln();
+  } catch (error) {
+    alert('Fehler beim Löschen: ' + error.message);
+  }
+}
+
+// Tab-Wechsel: Pausenregeln laden
+document.addEventListener('DOMContentLoaded', () => {
+  document.querySelectorAll('.tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      if (tab.dataset.tab === 'pausenregeln') {
+        loadPausenregeln();
+      }
+    });
+  });
+});
