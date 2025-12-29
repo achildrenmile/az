@@ -3,6 +3,20 @@ let sessionId = localStorage.getItem('sessionId');
 let userName = localStorage.getItem('userName');
 let isAdmin = localStorage.getItem('isAdmin') === 'true';
 
+// Flatpickr Konfiguration (österreichisches Format)
+const flatpickrConfig = {
+  locale: 'de',
+  dateFormat: 'd.m.Y',
+  allowInput: true,
+  clickOpens: true
+};
+
+// Datepicker Instanzen
+let datumPicker = null;
+let filterVonPicker = null;
+let filterBisPicker = null;
+let editDatumPicker = null;
+
 // DOM Elements
 const views = {
   login: document.getElementById('login-view'),
@@ -257,9 +271,6 @@ async function loadHistory() {
     console.error(error);
   }
 }
-
-// Modal Datepicker
-let editDatumPicker = null;
 
 // Edit Modal öffnen
 window.openEditModal = async (id) => {
@@ -1143,19 +1154,6 @@ window.toggleBaustelleAktiv = async (id, currentStatus) => {
 };
 
 // ==================== INIT ====================
-
-// Flatpickr Konfiguration (österreichisches Format)
-const flatpickrConfig = {
-  locale: 'de',
-  dateFormat: 'd.m.Y',
-  allowInput: true,
-  clickOpens: true
-};
-
-// Datepicker Instanzen
-let datumPicker = null;
-let filterVonPicker = null;
-let filterBisPicker = null;
 
 // Datepicker initialisieren
 function initDatepickers() {
