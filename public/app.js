@@ -51,6 +51,55 @@ let sessionId = localStorage.getItem('sessionId');
 let userName = localStorage.getItem('userName');
 let isAdmin = localStorage.getItem('isAdmin') === 'true';
 
+// Paging State
+let historyPage = 1;
+let adminPage = 1;
+const PAGE_LIMIT = 10;
+
+// Pagination rendern
+function renderPagination(containerId, currentPage, totalPages, total, onPageChange) {
+  const container = document.getElementById(containerId);
+  if (!container) return;
+
+  if (totalPages <= 1) {
+    container.innerHTML = '';
+    return;
+  }
+
+  let html = `<span class="pagination-info">${total} Einträge</span>`;
+
+  // Zurück-Button
+  html += `<button class="pagination-btn" onclick="${onPageChange}(${currentPage - 1})" ${currentPage === 1 ? 'disabled' : ''}>&laquo;</button>`;
+
+  // Seitenzahlen
+  const maxVisible = 5;
+  let startPage = Math.max(1, currentPage - Math.floor(maxVisible / 2));
+  let endPage = Math.min(totalPages, startPage + maxVisible - 1);
+
+  if (endPage - startPage < maxVisible - 1) {
+    startPage = Math.max(1, endPage - maxVisible + 1);
+  }
+
+  if (startPage > 1) {
+    html += `<button class="pagination-btn" onclick="${onPageChange}(1)">1</button>`;
+    if (startPage > 2) html += `<span class="pagination-dots">...</span>`;
+  }
+
+  for (let i = startPage; i <= endPage; i++) {
+    html += `<button class="pagination-btn ${i === currentPage ? 'active' : ''}" onclick="${onPageChange}(${i})">${i}</button>`;
+  }
+
+  if (endPage < totalPages) {
+    if (endPage < totalPages - 1) html += `<span class="pagination-dots">...</span>`;
+    html += `<button class="pagination-btn" onclick="${onPageChange}(${totalPages})">${totalPages}</button>`;
+  }
+
+  // Vor-Button
+  html += `<button class="pagination-btn" onclick="${onPageChange}(${currentPage + 1})" ${currentPage === totalPages ? 'disabled' : ''}>&raquo;</button>`;
+
+  container.innerHTML = html;
+}
+
 // Flatpickr Konfiguration (österreichisches Format)
 const flatpickrConfig = {
   locale: 'de',
@@ -287,18 +336,22 @@ document.getElementById('zeit-form').addEventListener('submit', async (e) => {
   }
 });
 
-async function loadHistory() {
+async function loadHistory(page = 1) {
   try {
-    const eintraege = await api('/zeiteintraege');
+    historyPage = page;
+    const result = await api(`/zeiteintraege?page=${page}&limit=${PAGE_LIMIT}`);
+    const { data: eintraege, total, totalPages } = result;
+
     const tbody = document.querySelector('#user-eintraege-table tbody');
     const emptyState = document.getElementById('history-empty');
     const tableContainer = document.getElementById('history-table-container');
     const printBtn = document.getElementById('print-user-btn');
 
-    if (eintraege.length === 0) {
+    if (total === 0) {
       emptyState.classList.remove('hidden');
       tableContainer.classList.add('hidden');
       printBtn.classList.add('hidden');
+      renderPagination('history-pagination', 1, 1, 0, 'goToHistoryPage');
       return;
     }
 
@@ -321,10 +374,17 @@ async function loadHistory() {
         </td>
       </tr>
     `).join('');
+
+    renderPagination('history-pagination', page, totalPages, total, 'goToHistoryPage');
   } catch (error) {
     console.error(error);
   }
 }
+
+// Paging-Funktion für History
+window.goToHistoryPage = function(page) {
+  loadHistory(page);
+};
 
 // Edit Modal öffnen
 window.openEditModal = async (id) => {
@@ -478,7 +538,9 @@ async function loadFilterOptions() {
   }
 }
 
-async function loadEintraege() {
+async function loadEintraege(page = 1) {
+  adminPage = page;
+
   const vonAT = document.getElementById('filter-von').value;
   const bisAT = document.getElementById('filter-bis').value;
   const von = parseATDate(vonAT);
@@ -488,26 +550,25 @@ async function loadEintraege() {
   const kunde = document.getElementById('filter-kunde').value;
 
   let url = '/admin/zeiteintraege';
-  const params = [];
+  const params = [`page=${page}`, `limit=${PAGE_LIMIT}`];
   if (von) params.push(`von=${von}`);
   if (bis) params.push(`bis=${bis}`);
-  if (params.length) url += '?' + params.join('&');
+  if (mitarbeiterId) params.push(`mitarbeiter=${mitarbeiterId}`);
+  if (baustelle) params.push(`baustelle=${encodeURIComponent(baustelle)}`);
+  if (kunde) params.push(`kunde=${encodeURIComponent(kunde)}`);
+  url += '?' + params.join('&');
 
   try {
-    let eintraege = await api(url);
-
-    // Client-seitig nach Mitarbeiter, Baustelle, Kunde filtern
-    if (mitarbeiterId) {
-      eintraege = eintraege.filter(e => e.mitarbeiter_id == mitarbeiterId);
-    }
-    if (baustelle) {
-      eintraege = eintraege.filter(e => e.baustelle === baustelle);
-    }
-    if (kunde) {
-      eintraege = eintraege.filter(e => e.kunde === kunde);
-    }
+    const result = await api(url);
+    const { data: eintraege, total, totalPages } = result;
 
     const tbody = document.querySelector('#eintraege-table tbody');
+
+    if (eintraege.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:var(--text-secondary);padding:40px;">Keine Einträge gefunden</td></tr>';
+      renderPagination('admin-pagination', 1, 1, 0, 'goToAdminPage');
+      return;
+    }
 
     tbody.innerHTML = eintraege.map(e => `
       <tr>
@@ -525,10 +586,17 @@ async function loadEintraege() {
         </td>
       </tr>
     `).join('');
+
+    renderPagination('admin-pagination', page, totalPages, total, 'goToAdminPage');
   } catch (error) {
     console.error(error);
   }
 }
+
+// Paging-Funktion für Admin
+window.goToAdminPage = function(page) {
+  loadEintraege(page);
+};
 
 async function loadMitarbeiter() {
   try {

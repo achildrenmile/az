@@ -188,37 +188,87 @@ module.exports = {
     );
   },
 
-  getZeiteintraegeByMitarbeiter: (mitarbeiterId, limit = 30) => {
-    return db.prepare(`
+  getZeiteintraegeByMitarbeiter: (mitarbeiterId, page = 1, limit = 10) => {
+    const offset = (page - 1) * limit;
+    const eintraege = db.prepare(`
       SELECT * FROM zeiteintraege
       WHERE mitarbeiter_id = ?
       ORDER BY datum DESC, arbeitsbeginn DESC
-      LIMIT ?
-    `).all(mitarbeiterId, limit);
+      LIMIT ? OFFSET ?
+    `).all(mitarbeiterId, limit, offset);
+
+    const total = db.prepare(`
+      SELECT COUNT(*) as count FROM zeiteintraege WHERE mitarbeiter_id = ?
+    `).get(mitarbeiterId).count;
+
+    return {
+      data: eintraege,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit)
+    };
   },
 
-  getAllZeiteintraege: (von, bis) => {
-    let query = `
-      SELECT z.*, m.name as mitarbeiter_name, m.mitarbeiter_nr
-      FROM zeiteintraege z
-      JOIN mitarbeiter m ON z.mitarbeiter_id = m.id
-    `;
+  getAllZeiteintraege: (von, bis, page = 1, limit = 10, mitarbeiterId, baustelle, kunde) => {
+    const conditions = [];
     const params = [];
 
     if (von && bis) {
-      query += ' WHERE z.datum BETWEEN ? AND ?';
+      conditions.push('z.datum BETWEEN ? AND ?');
       params.push(von, bis);
     } else if (von) {
-      query += ' WHERE z.datum >= ?';
+      conditions.push('z.datum >= ?');
       params.push(von);
     } else if (bis) {
-      query += ' WHERE z.datum <= ?';
+      conditions.push('z.datum <= ?');
       params.push(bis);
     }
 
-    query += ' ORDER BY z.datum DESC, z.arbeitsbeginn DESC';
+    if (mitarbeiterId) {
+      conditions.push('z.mitarbeiter_id = ?');
+      params.push(mitarbeiterId);
+    }
 
-    return db.prepare(query).all(...params);
+    if (baustelle) {
+      conditions.push('z.baustelle = ?');
+      params.push(baustelle);
+    }
+
+    if (kunde) {
+      conditions.push('z.kunde = ?');
+      params.push(kunde);
+    }
+
+    const whereClause = conditions.length > 0 ? ' WHERE ' + conditions.join(' AND ') : '';
+    const offset = (page - 1) * limit;
+
+    const query = `
+      SELECT z.*, m.name as mitarbeiter_name, m.mitarbeiter_nr
+      FROM zeiteintraege z
+      JOIN mitarbeiter m ON z.mitarbeiter_id = m.id
+      ${whereClause}
+      ORDER BY z.datum DESC, z.arbeitsbeginn DESC
+      LIMIT ? OFFSET ?
+    `;
+
+    const countQuery = `
+      SELECT COUNT(*) as count
+      FROM zeiteintraege z
+      JOIN mitarbeiter m ON z.mitarbeiter_id = m.id
+      ${whereClause}
+    `;
+
+    const eintraege = db.prepare(query).all(...params, limit, offset);
+    const total = db.prepare(countQuery).all(...params)[0].count;
+
+    return {
+      data: eintraege,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit)
+    };
   },
 
   deleteZeiteintrag: (id) => {

@@ -207,8 +207,10 @@ app.post('/api/zeiteintraege', checkSession, (req, res) => {
 
 // Eigene Zeiteinträge abrufen
 app.get('/api/zeiteintraege', checkSession, (req, res) => {
-  const eintraege = db.getZeiteintraegeByMitarbeiter(req.session.id);
-  res.json(eintraege);
+  const page = parseInt(req.query.page) || 1;
+  const limit = parseInt(req.query.limit) || 10;
+  const result = db.getZeiteintraegeByMitarbeiter(req.session.id, page, limit);
+  res.json(result);
 });
 
 // Einzelnen Zeiteintrag abrufen
@@ -322,9 +324,11 @@ app.delete('/api/zeiteintraege/:id', checkSession, (req, res) => {
 
 // Alle Zeiteinträge (Admin)
 app.get('/api/admin/zeiteintraege', checkSession, checkAdmin, (req, res) => {
-  const { von, bis } = req.query;
-  const eintraege = db.getAllZeiteintraege(von, bis);
-  res.json(eintraege);
+  const { von, bis, mitarbeiter, baustelle, kunde } = req.query;
+  const page = parseInt(req.query.page) || 1;
+  const limit = parseInt(req.query.limit) || 10;
+  const result = db.getAllZeiteintraege(von, bis, page, limit, mitarbeiter, baustelle, kunde);
+  res.json(result);
 });
 
 // Zeiteintrag löschen (Admin)
