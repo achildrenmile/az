@@ -164,6 +164,10 @@ h1 {
   border-radius: 4px;
 }
 
+.message:empty, .error:empty {
+  display: none;
+}
+
 .message.success {
   background: #d4edda;
   color: #155724;
