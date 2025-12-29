@@ -393,7 +393,35 @@ document.getElementById('back-to-erfassung-btn').addEventListener('click', () =>
 });
 
 async function loadAdminData() {
-  await Promise.all([loadEintraege(), loadMitarbeiter(), loadKunden(), loadBaustellen()]);
+  await Promise.all([loadFilterOptions(), loadEintraege(), loadMitarbeiter(), loadKunden(), loadBaustellen()]);
+}
+
+// Filter-Dropdowns befüllen
+async function loadFilterOptions() {
+  try {
+    const [mitarbeiter, baustellen, kunden] = await Promise.all([
+      api('/admin/mitarbeiter'),
+      api('/admin/baustellen'),
+      api('/admin/kunden')
+    ]);
+
+    // Mitarbeiter-Dropdown
+    const maSelect = document.getElementById('filter-mitarbeiter');
+    maSelect.innerHTML = '<option value="">Alle</option>' +
+      mitarbeiter.filter(m => m.aktiv).map(m => `<option value="${m.id}">${m.name}</option>`).join('');
+
+    // Baustellen-Dropdown
+    const bsSelect = document.getElementById('filter-baustelle');
+    bsSelect.innerHTML = '<option value="">Alle</option>' +
+      baustellen.filter(b => b.aktiv).map(b => `<option value="${b.name}">${b.name}</option>`).join('');
+
+    // Kunden-Dropdown
+    const kdSelect = document.getElementById('filter-kunde');
+    kdSelect.innerHTML = '<option value="">Alle</option>' +
+      kunden.filter(k => k.aktiv).map(k => `<option value="${k.name}">${k.name}</option>`).join('');
+  } catch (error) {
+    console.error('Filter-Optionen laden fehlgeschlagen:', error);
+  }
 }
 
 async function loadEintraege() {
@@ -401,6 +429,9 @@ async function loadEintraege() {
   const bisAT = document.getElementById('filter-bis').value;
   const von = parseATDate(vonAT);
   const bis = parseATDate(bisAT);
+  const mitarbeiterId = document.getElementById('filter-mitarbeiter').value;
+  const baustelle = document.getElementById('filter-baustelle').value;
+  const kunde = document.getElementById('filter-kunde').value;
 
   let url = '/admin/zeiteintraege';
   const params = [];
@@ -409,7 +440,19 @@ async function loadEintraege() {
   if (params.length) url += '?' + params.join('&');
 
   try {
-    const eintraege = await api(url);
+    let eintraege = await api(url);
+
+    // Client-seitig nach Mitarbeiter, Baustelle, Kunde filtern
+    if (mitarbeiterId) {
+      eintraege = eintraege.filter(e => e.mitarbeiter_id == mitarbeiterId);
+    }
+    if (baustelle) {
+      eintraege = eintraege.filter(e => e.baustelle === baustelle);
+    }
+    if (kunde) {
+      eintraege = eintraege.filter(e => e.kunde === kunde);
+    }
+
     const tbody = document.querySelector('#eintraege-table tbody');
 
     tbody.innerHTML = eintraege.map(e => `
@@ -548,6 +591,10 @@ document.getElementById('print-btn').addEventListener('click', async () => {
   const bisAT = document.getElementById('filter-bis').value;
   const von = parseATDate(vonAT);
   const bis = parseATDate(bisAT);
+  const mitarbeiterId = document.getElementById('filter-mitarbeiter').value;
+  const mitarbeiterName = document.getElementById('filter-mitarbeiter').selectedOptions[0]?.text;
+  const baustelle = document.getElementById('filter-baustelle').value;
+  const kunde = document.getElementById('filter-kunde').value;
 
   let url = '/admin/zeiteintraege';
   const params = [];
@@ -556,8 +603,27 @@ document.getElementById('print-btn').addEventListener('click', async () => {
   if (params.length) url += '?' + params.join('&');
 
   try {
-    const eintraege = await api(url);
-    printZeitnachweis(eintraege, vonAT, bisAT, null);
+    let eintraege = await api(url);
+
+    // Client-seitig filtern
+    if (mitarbeiterId) {
+      eintraege = eintraege.filter(e => e.mitarbeiter_id == mitarbeiterId);
+    }
+    if (baustelle) {
+      eintraege = eintraege.filter(e => e.baustelle === baustelle);
+    }
+    if (kunde) {
+      eintraege = eintraege.filter(e => e.kunde === kunde);
+    }
+
+    // Filter-Info für Druckansicht
+    const filterInfo = {
+      mitarbeiter: mitarbeiterId ? mitarbeiterName : null,
+      baustelle: baustelle || null,
+      kunde: kunde || null
+    };
+
+    printZeitnachweis(eintraege, vonAT, bisAT, filterInfo);
   } catch (error) {
     alert('Fehler beim Laden: ' + error.message);
   }
@@ -574,11 +640,17 @@ document.getElementById('print-user-btn').addEventListener('click', async () => 
 });
 
 // Druckfunktion
-function printZeitnachweis(eintraege, vonAT, bisAT, mitarbeiterName) {
+function printZeitnachweis(eintraege, vonAT, bisAT, filterInfo) {
   if (eintraege.length === 0) {
     alert('Keine Einträge zum Drucken vorhanden.');
     return;
   }
+
+  // filterInfo kann ein String (User-Ansicht) oder Objekt (Admin-Ansicht) sein
+  const isUserPrint = typeof filterInfo === 'string';
+  const mitarbeiterFilter = isUserPrint ? filterInfo : (filterInfo?.mitarbeiter || null);
+  const baustelleFilter = isUserPrint ? null : (filterInfo?.baustelle || null);
+  const kundeFilter = isUserPrint ? null : (filterInfo?.kunde || null);
 
   // Zeitraum bestimmen
   let zeitraum = '';
@@ -603,22 +675,39 @@ function printZeitnachweis(eintraege, vonAT, bisAT, mitarbeiterName) {
   });
   const gesamtStunden = (gesamtMinuten / 60).toFixed(2).replace('.', ',');
 
+  // Spalten basierend auf Filter ein-/ausblenden
+  const showMitarbeiterCol = !mitarbeiterFilter;
+  const showBaustelleCol = !baustelleFilter;
+  const showKundeCol = !kundeFilter;
+
   // Tabellenzeilen erstellen
   const zeilen = eintraege.map(e => {
     const netto = calculateNetto(e.arbeitsbeginn, e.arbeitsende, e.pause_minuten);
     return `
       <tr>
         <td>${formatDate(e.datum)}</td>
-        ${!mitarbeiterName ? `<td>${e.mitarbeiter_name || ''}</td>` : ''}
+        ${showMitarbeiterCol ? `<td>${e.mitarbeiter_name || ''}</td>` : ''}
         <td>${e.arbeitsbeginn}</td>
         <td>${e.arbeitsende}</td>
         <td style="text-align:center">${e.pause_minuten}</td>
         <td style="text-align:right">${netto}</td>
-        <td>${e.baustelle || ''}</td>
-        <td>${e.kunde || ''}</td>
+        ${showBaustelleCol ? `<td>${e.baustelle || ''}</td>` : ''}
+        ${showKundeCol ? `<td>${e.kunde || ''}</td>` : ''}
       </tr>
     `;
   }).join('');
+
+  // Filter-Info Zeilen erstellen
+  let filterInfoHtml = '';
+  if (mitarbeiterFilter) {
+    filterInfoHtml += `<div class="info-row"><strong>Mitarbeiter:</strong> ${mitarbeiterFilter}</div>`;
+  }
+  if (baustelleFilter) {
+    filterInfoHtml += `<div class="info-row"><strong>Baustelle:</strong> ${baustelleFilter}</div>`;
+  }
+  if (kundeFilter) {
+    filterInfoHtml += `<div class="info-row"><strong>Kunde:</strong> ${kundeFilter}</div>`;
+  }
 
   // HTML für Druckansicht
   const html = `
@@ -651,10 +740,11 @@ function printZeitnachweis(eintraege, vonAT, bisAT, mitarbeiterName) {
       color: #666;
     }
     .info {
-      display: flex;
-      justify-content: space-between;
       margin-bottom: 15px;
       font-size: 10pt;
+    }
+    .info-row {
+      margin-bottom: 3px;
     }
     table {
       width: 100%;
@@ -719,19 +809,19 @@ function printZeitnachweis(eintraege, vonAT, bisAT, mitarbeiterName) {
     <div class="zeitraum">${zeitraum}</div>
   </div>
 
-  ${mitarbeiterName ? `<div class="info"><strong>Mitarbeiter:</strong> ${mitarbeiterName}</div>` : ''}
+  ${filterInfoHtml ? `<div class="info">${filterInfoHtml}</div>` : ''}
 
   <table>
     <thead>
       <tr>
         <th>Datum</th>
-        ${!mitarbeiterName ? '<th>Mitarbeiter</th>' : ''}
+        ${showMitarbeiterCol ? '<th>Mitarbeiter</th>' : ''}
         <th>Beginn</th>
         <th>Ende</th>
         <th>Pause (Min)</th>
         <th>Netto</th>
-        <th>Baustelle</th>
-        <th>Kunde</th>
+        ${showBaustelleCol ? '<th>Baustelle</th>' : ''}
+        ${showKundeCol ? '<th>Kunde</th>' : ''}
       </tr>
     </thead>
     <tbody>
