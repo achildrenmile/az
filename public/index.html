@@ -43,22 +43,22 @@
         <form id="zeit-form">
           <div class="form-row">
             <div class="form-group">
-              <label for="datum">Datum *</label>
-              <input type="date" id="datum" required>
+              <label for="datum">Datum * (TT.MM.JJJJ)</label>
+              <input type="text" id="datum" placeholder="29.12.2025" pattern="\d{2}\.\d{2}\.\d{4}" required>
             </div>
           </div>
 
           <div class="form-row">
             <div class="form-group">
-              <label for="arbeitsbeginn">Arbeitsbeginn *</label>
-              <input type="time" id="arbeitsbeginn" required>
+              <label for="arbeitsbeginn">Arbeitsbeginn * (HH:MM)</label>
+              <input type="text" id="arbeitsbeginn" placeholder="07:00" pattern="\d{2}:\d{2}" required>
             </div>
             <div class="form-group">
-              <label for="arbeitsende">Arbeitsende *</label>
-              <input type="time" id="arbeitsende" required>
+              <label for="arbeitsende">Arbeitsende * (HH:MM)</label>
+              <input type="text" id="arbeitsende" placeholder="16:30" pattern="\d{2}:\d{2}" required>
             </div>
             <div class="form-group">
-              <label for="pause_minuten">Pause (Min)</label>
+              <label for="pause_minuten">Pause (Min.)</label>
               <input type="number" id="pause_minuten" min="0" value="30">
             </div>
           </div>
@@ -119,12 +119,12 @@
           <h2>Alle Zeiteinträge</h2>
           <div class="filter-row">
             <div class="form-group">
-              <label for="filter-von">Von</label>
-              <input type="date" id="filter-von">
+              <label for="filter-von">Von (TT.MM.JJJJ)</label>
+              <input type="text" id="filter-von" placeholder="01.12.2025" pattern="\d{2}\.\d{2}\.\d{4}">
             </div>
             <div class="form-group">
-              <label for="filter-bis">Bis</label>
-              <input type="date" id="filter-bis">
+              <label for="filter-bis">Bis (TT.MM.JJJJ)</label>
+              <input type="text" id="filter-bis" placeholder="31.12.2025" pattern="\d{2}\.\d{2}\.\d{4}">
             </div>
             <button id="filter-btn" class="btn btn-primary">Filtern</button>
             <button id="export-btn" class="btn btn-secondary">CSV Export</button>

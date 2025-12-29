@@ -44,17 +44,33 @@ function showView(viewName) {
 }
 
 // Helper: Formatierung (Österreich)
+
+// DD.MM.YYYY -> YYYY-MM-DD (für API)
+function parseATDate(dateStr) {
+  if (!dateStr) return '';
+  const parts = dateStr.split('.');
+  if (parts.length !== 3) return dateStr;
+  return `${parts[2]}-${parts[1]}-${parts[0]}`;
+}
+
+// YYYY-MM-DD -> DD.MM.YYYY (für Anzeige)
 function formatDate(dateStr) {
-  const d = new Date(dateStr);
-  return d.toLocaleDateString('de-AT', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric'
-  });
+  if (!dateStr) return '';
+  const parts = dateStr.split('-');
+  if (parts.length !== 3) return dateStr;
+  return `${parts[2]}.${parts[1]}.${parts[0]}`;
+}
+
+// Heutiges Datum im AT-Format
+function getTodayAT() {
+  const d = new Date();
+  const day = String(d.getDate()).padStart(2, '0');
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const year = d.getFullYear();
+  return `${day}.${month}.${year}`;
 }
 
 function formatTime(timeStr) {
-  // Zeitformat: HH:MM Uhr
   return timeStr + ' Uhr';
 }
 
@@ -71,7 +87,6 @@ function formatNettoDecimal(beginn, ende, pause) {
   const [bH, bM] = beginn.split(':').map(Number);
   const [eH, eM] = ende.split(':').map(Number);
   const minuten = (eH * 60 + eM) - (bH * 60 + bM) - pause;
-  // Österreichisches Format: Komma als Dezimaltrennzeichen
   return (minuten / 60).toFixed(2).replace('.', ',');
 }
 
@@ -108,8 +123,8 @@ function initErfassungView() {
   document.getElementById('user-name').textContent = `Hallo, ${userName}`;
   document.getElementById('show-admin-btn').classList.toggle('hidden', !isAdmin);
 
-  // Datum auf heute setzen
-  document.getElementById('datum').value = new Date().toISOString().split('T')[0];
+  // Datum auf heute setzen (österreichisches Format)
+  document.getElementById('datum').value = getTodayAT();
 }
 
 document.getElementById('zeit-form').addEventListener('submit', async (e) => {
@@ -119,7 +134,7 @@ document.getElementById('zeit-form').addEventListener('submit', async (e) => {
   messageEl.className = 'message';
 
   const data = {
-    datum: document.getElementById('datum').value,
+    datum: parseATDate(document.getElementById('datum').value),
     arbeitsbeginn: document.getElementById('arbeitsbeginn').value,
     arbeitsende: document.getElementById('arbeitsende').value,
     pause_minuten: parseInt(document.getElementById('pause_minuten').value) || 0,
@@ -246,8 +261,10 @@ async function loadAdminData() {
 }
 
 async function loadEintraege() {
-  const von = document.getElementById('filter-von').value;
-  const bis = document.getElementById('filter-bis').value;
+  const vonAT = document.getElementById('filter-von').value;
+  const bisAT = document.getElementById('filter-bis').value;
+  const von = parseATDate(vonAT);
+  const bis = parseATDate(bisAT);
 
   let url = '/admin/zeiteintraege';
   const params = [];
@@ -304,8 +321,10 @@ document.getElementById('filter-btn').addEventListener('click', loadEintraege);
 
 // Export
 document.getElementById('export-btn').addEventListener('click', () => {
-  const von = document.getElementById('filter-von').value;
-  const bis = document.getElementById('filter-bis').value;
+  const vonAT = document.getElementById('filter-von').value;
+  const bisAT = document.getElementById('filter-bis').value;
+  const von = parseATDate(vonAT);
+  const bis = parseATDate(bisAT);
 
   let url = '/api/admin/export';
   const params = [];
