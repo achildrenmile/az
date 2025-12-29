@@ -152,6 +152,9 @@ document.getElementById('zeit-form').addEventListener('submit', async (e) => {
   messageEl.textContent = '';
   messageEl.className = 'message';
 
+  const form = e.target;
+  const editId = form.dataset.editId;
+
   const data = {
     datum: parseATDate(document.getElementById('datum').value),
     arbeitsbeginn: document.getElementById('arbeitsbeginn').value,
@@ -164,23 +167,35 @@ document.getElementById('zeit-form').addEventListener('submit', async (e) => {
   };
 
   try {
-    const result = await api('/zeiteintraege', 'POST', data);
-    messageEl.textContent = 'Eintrag gespeichert!';
-    messageEl.className = 'message success';
+    let result;
+    if (editId) {
+      // Update
+      result = await api(`/zeiteintraege/${editId}`, 'PUT', data);
+      messageEl.textContent = 'Änderungen gespeichert!';
+      cancelEdit(); // Edit-Modus beenden
+    } else {
+      // Create
+      result = await api('/zeiteintraege', 'POST', data);
+      messageEl.textContent = 'Eintrag gespeichert!';
 
-    if (result.warnung) {
-      messageEl.textContent += ' ' + result.warnung;
-      messageEl.className = 'message warning';
+      if (result.warnung) {
+        messageEl.textContent += ' ' + result.warnung;
+        messageEl.className = 'message warning';
+      } else {
+        messageEl.className = 'message success';
+      }
+
+      // Formular zurücksetzen (außer Datum)
+      document.getElementById('arbeitsbeginn').value = '';
+      document.getElementById('arbeitsende').value = '';
+      document.getElementById('pause_minuten').value = '30';
+      document.getElementById('baustelle').value = '';
+      document.getElementById('kunde').value = '';
+      document.getElementById('anfahrt').value = '';
+      document.getElementById('notizen').value = '';
     }
 
-    // Formular zurücksetzen (außer Datum)
-    document.getElementById('arbeitsbeginn').value = '';
-    document.getElementById('arbeitsende').value = '';
-    document.getElementById('pause_minuten').value = '30';
-    document.getElementById('baustelle').value = '';
-    document.getElementById('kunde').value = '';
-    document.getElementById('anfahrt').value = '';
-    document.getElementById('notizen').value = '';
+    messageEl.className = messageEl.className || 'message success';
 
     // History aktualisieren falls sichtbar
     if (!document.getElementById('history-section').classList.contains('hidden')) {
@@ -213,8 +228,14 @@ async function loadHistory() {
     }
 
     listEl.innerHTML = eintraege.map(e => `
-      <div class="history-item">
-        <div class="history-date">${formatDate(e.datum)}</div>
+      <div class="history-item" data-id="${e.id}">
+        <div class="history-header">
+          <div class="history-date">${formatDate(e.datum)}</div>
+          <div class="history-actions">
+            <button class="btn btn-small" onclick="editEintrag(${e.id})">Bearbeiten</button>
+            <button class="btn btn-small btn-danger" onclick="deleteEintragUser(${e.id})">Löschen</button>
+          </div>
+        </div>
         <div class="history-time">
           ${e.arbeitsbeginn} Uhr - ${e.arbeitsende} Uhr
           (Pause: ${e.pause_minuten} Min., Netto: ${calculateNetto(e.arbeitsbeginn, e.arbeitsende, e.pause_minuten)})
@@ -229,6 +250,82 @@ async function loadHistory() {
     console.error(error);
   }
 }
+
+// Eintrag bearbeiten
+window.editEintrag = async (id) => {
+  try {
+    const eintrag = await api(`/zeiteintraege/${id}`);
+
+    // Formular mit Daten füllen
+    document.getElementById('datum').value = formatDate(eintrag.datum);
+    if (datumPicker) datumPicker.setDate(eintrag.datum);
+
+    document.getElementById('arbeitsbeginn').value = eintrag.arbeitsbeginn;
+    document.getElementById('arbeitsende').value = eintrag.arbeitsende;
+    document.getElementById('pause_minuten').value = eintrag.pause_minuten;
+    document.getElementById('baustelle').value = eintrag.baustelle || '';
+    document.getElementById('kunde').value = eintrag.kunde || '';
+    document.getElementById('anfahrt').value = eintrag.anfahrt || '';
+    document.getElementById('notizen').value = eintrag.notizen || '';
+
+    // Formular in Edit-Modus setzen
+    const form = document.getElementById('zeit-form');
+    form.dataset.editId = id;
+
+    const submitBtn = form.querySelector('button[type="submit"]');
+    submitBtn.textContent = 'Änderungen speichern';
+
+    // Abbrechen-Button hinzufügen falls nicht vorhanden
+    if (!document.getElementById('cancel-edit-btn')) {
+      const cancelBtn = document.createElement('button');
+      cancelBtn.type = 'button';
+      cancelBtn.id = 'cancel-edit-btn';
+      cancelBtn.className = 'btn btn-secondary';
+      cancelBtn.textContent = 'Abbrechen';
+      cancelBtn.onclick = cancelEdit;
+      submitBtn.parentNode.insertBefore(cancelBtn, submitBtn.nextSibling);
+    }
+
+    // Nach oben scrollen
+    form.scrollIntoView({ behavior: 'smooth' });
+  } catch (error) {
+    alert('Fehler beim Laden: ' + error.message);
+  }
+};
+
+// Bearbeitung abbrechen
+function cancelEdit() {
+  const form = document.getElementById('zeit-form');
+  delete form.dataset.editId;
+
+  const submitBtn = form.querySelector('button[type="submit"]');
+  submitBtn.textContent = 'Eintrag speichern';
+
+  const cancelBtn = document.getElementById('cancel-edit-btn');
+  if (cancelBtn) cancelBtn.remove();
+
+  // Formular zurücksetzen
+  if (datumPicker) datumPicker.setDate('today');
+  document.getElementById('arbeitsbeginn').value = '';
+  document.getElementById('arbeitsende').value = '';
+  document.getElementById('pause_minuten').value = '30';
+  document.getElementById('baustelle').value = '';
+  document.getElementById('kunde').value = '';
+  document.getElementById('anfahrt').value = '';
+  document.getElementById('notizen').value = '';
+}
+
+// Eintrag löschen (User)
+window.deleteEintragUser = async (id) => {
+  if (!confirm('Eintrag wirklich löschen?')) return;
+
+  try {
+    await api(`/zeiteintraege/${id}`, 'DELETE');
+    loadHistory();
+  } catch (error) {
+    alert('Fehler: ' + error.message);
+  }
+};
 
 // Admin-Button
 document.getElementById('show-admin-btn').addEventListener('click', () => {

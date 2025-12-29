@@ -49,6 +49,22 @@ db.exec(`
 
   -- Index für Session-Cleanup
   CREATE INDEX IF NOT EXISTS idx_sessions_ablauf ON sessions(laeuft_ab_am);
+
+  -- Audit-Log für Änderungen (AZG-konform)
+  CREATE TABLE IF NOT EXISTS audit_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    zeitpunkt DATETIME DEFAULT CURRENT_TIMESTAMP,
+    mitarbeiter_id INTEGER NOT NULL,
+    aktion TEXT NOT NULL,
+    tabelle TEXT NOT NULL,
+    datensatz_id INTEGER,
+    alte_werte TEXT,
+    neue_werte TEXT,
+    FOREIGN KEY (mitarbeiter_id) REFERENCES mitarbeiter(id)
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_audit_zeitpunkt ON audit_log(zeitpunkt);
+  CREATE INDEX IF NOT EXISTS idx_audit_datensatz ON audit_log(tabelle, datensatz_id);
 `);
 
 // Standard-Admin erstellen falls nicht vorhanden
@@ -192,5 +208,65 @@ module.exports = {
 
   cleanupExpiredSessions: () => {
     return db.prepare(`DELETE FROM sessions WHERE laeuft_ab_am <= datetime('now')`).run();
+  },
+
+  // Zeiteintrag abrufen (für Update/Delete Validierung)
+  getZeiteintragById: (id) => {
+    return db.prepare('SELECT * FROM zeiteintraege WHERE id = ?').get(id);
+  },
+
+  // Zeiteintrag aktualisieren
+  updateZeiteintrag: (id, data) => {
+    return db.prepare(`
+      UPDATE zeiteintraege
+      SET datum = ?, arbeitsbeginn = ?, arbeitsende = ?, pause_minuten = ?,
+          baustelle = ?, kunde = ?, anfahrt = ?, notizen = ?
+      WHERE id = ?
+    `).run(
+      data.datum,
+      data.arbeitsbeginn,
+      data.arbeitsende,
+      data.pause_minuten || 0,
+      data.baustelle || '',
+      data.kunde || '',
+      data.anfahrt || '',
+      data.notizen || '',
+      id
+    );
+  },
+
+  // Audit-Log Funktionen
+  logAudit: (mitarbeiterId, aktion, tabelle, datensatzId, alteWerte, neueWerte) => {
+    return db.prepare(`
+      INSERT INTO audit_log (mitarbeiter_id, aktion, tabelle, datensatz_id, alte_werte, neue_werte)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `).run(
+      mitarbeiterId,
+      aktion,
+      tabelle,
+      datensatzId,
+      alteWerte ? JSON.stringify(alteWerte) : null,
+      neueWerte ? JSON.stringify(neueWerte) : null
+    );
+  },
+
+  getAuditLog: (tabelle, datensatzId) => {
+    return db.prepare(`
+      SELECT a.*, m.name as mitarbeiter_name
+      FROM audit_log a
+      JOIN mitarbeiter m ON a.mitarbeiter_id = m.id
+      WHERE a.tabelle = ? AND a.datensatz_id = ?
+      ORDER BY a.zeitpunkt DESC
+    `).all(tabelle, datensatzId);
+  },
+
+  getAllAuditLogs: (limit = 100) => {
+    return db.prepare(`
+      SELECT a.*, m.name as mitarbeiter_name
+      FROM audit_log a
+      JOIN mitarbeiter m ON a.mitarbeiter_id = m.id
+      ORDER BY a.zeitpunkt DESC
+      LIMIT ?
+    `).all(limit);
   }
 };

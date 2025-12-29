@@ -261,9 +261,22 @@ tr:hover {
   border-bottom: none;
 }
 
+.history-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .history-date {
   font-weight: 600;
   color: #2c3e50;
+}
+
+.history-actions {
+  display: flex;
+  gap: 8px;
 }
 
 .history-time {
@@ -275,6 +288,11 @@ tr:hover {
   font-size: 14px;
   color: #777;
   margin-top: 4px;
+}
+
+/* Edit Mode */
+#cancel-edit-btn {
+  margin-left: 10px;
 }
 
 /* Responsive */

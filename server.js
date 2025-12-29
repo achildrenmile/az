@@ -184,6 +184,113 @@ app.get('/api/zeiteintraege', checkSession, (req, res) => {
   res.json(eintraege);
 });
 
+// Einzelnen Zeiteintrag abrufen
+app.get('/api/zeiteintraege/:id', checkSession, (req, res) => {
+  const eintrag = db.getZeiteintragById(req.params.id);
+
+  if (!eintrag) {
+    return res.status(404).json({ error: 'Eintrag nicht gefunden' });
+  }
+
+  // Nur eigene Einträge oder Admin
+  if (eintrag.mitarbeiter_id !== req.session.id && !req.session.ist_admin) {
+    return res.status(403).json({ error: 'Keine Berechtigung' });
+  }
+
+  res.json(eintrag);
+});
+
+// Zeiteintrag aktualisieren (eigene oder Admin)
+app.put('/api/zeiteintraege/:id', checkSession, (req, res) => {
+  const { datum, arbeitsbeginn, arbeitsende, pause_minuten, baustelle, kunde, anfahrt, notizen } = req.body;
+
+  // Alten Eintrag laden
+  const alterEintrag = db.getZeiteintragById(req.params.id);
+
+  if (!alterEintrag) {
+    return res.status(404).json({ error: 'Eintrag nicht gefunden' });
+  }
+
+  // Nur eigene Einträge oder Admin
+  if (alterEintrag.mitarbeiter_id !== req.session.id && !req.session.ist_admin) {
+    return res.status(403).json({ error: 'Keine Berechtigung' });
+  }
+
+  // Validierung
+  if (!datum || !arbeitsbeginn || !arbeitsende) {
+    return res.status(400).json({ error: 'Datum, Beginn und Ende sind erforderlich' });
+  }
+
+  if (arbeitsende <= arbeitsbeginn) {
+    return res.status(400).json({ error: 'Arbeitsende muss nach Arbeitsbeginn liegen' });
+  }
+
+  const neueWerte = {
+    datum,
+    arbeitsbeginn,
+    arbeitsende,
+    pause_minuten: pause_minuten || 0,
+    baustelle: baustelle || '',
+    kunde: kunde || '',
+    anfahrt: anfahrt || '',
+    notizen: notizen || ''
+  };
+
+  try {
+    // Update durchführen
+    db.updateZeiteintrag(req.params.id, neueWerte);
+
+    // Audit-Log erstellen
+    db.logAudit(
+      req.session.id,
+      'UPDATE',
+      'zeiteintraege',
+      parseInt(req.params.id),
+      alterEintrag,
+      neueWerte
+    );
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Update fehlgeschlagen:', error);
+    res.status(500).json({ error: 'Fehler beim Aktualisieren' });
+  }
+});
+
+// Zeiteintrag löschen (eigene oder Admin)
+app.delete('/api/zeiteintraege/:id', checkSession, (req, res) => {
+  const eintrag = db.getZeiteintragById(req.params.id);
+
+  if (!eintrag) {
+    return res.status(404).json({ error: 'Eintrag nicht gefunden' });
+  }
+
+  // Nur eigene Einträge oder Admin
+  if (eintrag.mitarbeiter_id !== req.session.id && !req.session.ist_admin) {
+    return res.status(403).json({ error: 'Keine Berechtigung' });
+  }
+
+  try {
+    // Audit-Log vor Löschung erstellen
+    db.logAudit(
+      req.session.id,
+      'DELETE',
+      'zeiteintraege',
+      parseInt(req.params.id),
+      eintrag,
+      null
+    );
+
+    // Löschen
+    db.deleteZeiteintrag(req.params.id);
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Löschen fehlgeschlagen:', error);
+    res.status(500).json({ error: 'Fehler beim Löschen' });
+  }
+});
+
 // ==================== ADMIN ROUTES ====================
 
 // Alle Zeiteinträge (Admin)
@@ -244,6 +351,20 @@ app.put('/api/admin/mitarbeiter/:id', checkSession, checkAdmin, (req, res) => {
   }
 
   res.json({ success: true });
+});
+
+// Audit-Log abrufen (Admin)
+app.get('/api/admin/audit', checkSession, checkAdmin, (req, res) => {
+  const { tabelle, datensatz_id, limit } = req.query;
+
+  let logs;
+  if (tabelle && datensatz_id) {
+    logs = db.getAuditLog(tabelle, parseInt(datensatz_id));
+  } else {
+    logs = db.getAllAuditLogs(parseInt(limit) || 100);
+  }
+
+  res.json(logs);
 });
 
 // Helper: Datum formatieren (österreichisches Format DD.MM.YYYY)
