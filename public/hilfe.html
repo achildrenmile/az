@@ -178,6 +178,27 @@
       </div>
 
       <div class="help-section">
+        <h2>AZG-Validierung</h2>
+        <p>Die App prüft automatisch die Einhaltung des österreichischen Arbeitszeitgesetzes:</p>
+
+        <h3>Tägliche Arbeitszeit (§9 AZG)</h3>
+        <ul>
+          <li><strong>Warnung:</strong> Bei mehr als 10 Stunden Arbeitszeit pro Tag</li>
+          <li><strong>Verletzung:</strong> Bei mehr als 12 Stunden Arbeitszeit pro Tag</li>
+        </ul>
+
+        <h3>Wöchentliche Arbeitszeit (§9 AZG)</h3>
+        <ul>
+          <li><strong>Warnung:</strong> Bei mehr als 48 Stunden pro Woche</li>
+          <li><strong>Verletzung:</strong> Bei mehr als 60 Stunden pro Woche</li>
+        </ul>
+
+        <div class="help-tip">
+          <strong>Wichtig:</strong> Bei Verstößen wird der Eintrag trotzdem gespeichert, aber im Audit-Log und Verstöße-Dashboard dokumentiert.
+        </div>
+      </div>
+
+      <div class="help-section">
         <h2>Admin-Bereich</h2>
         <p>Administratoren haben Zugriff auf erweiterte Funktionen:</p>
 
@@ -187,6 +208,20 @@
           <li>Nach Datum, Mitarbeiter, Baustelle oder Kunde filtern</li>
           <li>Gefilterte Daten als CSV exportieren</li>
           <li>Zeitnachweise für beliebige Filter drucken</li>
+        </ul>
+
+        <h3>Statistik</h3>
+        <ul>
+          <li>Monatsübersicht aller Mitarbeiter</li>
+          <li>Normal- und Überstunden getrennt ausgewiesen</li>
+          <li>Konfigurierbare Soll-Arbeitszeit</li>
+        </ul>
+
+        <h3>Verstöße</h3>
+        <ul>
+          <li>Dashboard mit allen AZG-Verstößen und Warnungen</li>
+          <li>Filter nach Mitarbeiter und Zeitraum</li>
+          <li>Übersicht: Kritische Verstöße vs. Warnungen</li>
         </ul>
 
         <h3>Mitarbeiter</h3>
@@ -202,6 +237,32 @@
           <li>Baustellen anlegen und bearbeiten</li>
           <li>Einträge aktivieren/deaktivieren</li>
         </ul>
+
+        <h3>Pausenregeln</h3>
+        <ul>
+          <li>Konfigurierbare Mindestpausen je nach Arbeitszeit</li>
+          <li>Standard: 30 Min Pause bei >6h Arbeitszeit</li>
+          <li>Eigene Regeln hinzufügen oder deaktivieren</li>
+        </ul>
+
+        <h3>Einstellungen</h3>
+        <ul>
+          <li>Standard-Wochenstunden (z.B. 40h)</li>
+          <li>Standard-Monatsstunden (z.B. 173h)</li>
+          <li>Überstunden-Schwellwerte</li>
+        </ul>
+
+        <h3>Audit-Log</h3>
+        <ul>
+          <li>Unveränderliches Protokoll aller Änderungen</li>
+          <li>Hash-verkettete Einträge (manipulationssicher)</li>
+          <li>Integritätsprüfung per Knopfdruck</li>
+          <li>CSV-Export für rechtliche Nachweise</li>
+        </ul>
+
+        <div class="help-tip">
+          <strong>Audit-Trail:</strong> Jede Änderung an Zeiteinträgen (Erstellen, Bearbeiten, Löschen) wird mit Zeitstempel, Benutzer und IP-Adresse protokolliert. Die Hash-Verkettung stellt sicher, dass keine nachträglichen Manipulationen möglich sind.
+        </div>
       </div>
 
       <div class="help-section">
