@@ -226,6 +226,7 @@ h2 {
   transition: all 0.2s;
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 8px;
 }
 
@@ -241,14 +242,12 @@ h2 {
 }
 
 .btn-secondary {
-  background: white;
-  color: var(--text-primary);
-  border: 2px solid var(--border);
+  background: #334155;
+  color: white;
 }
 
 .btn-secondary:hover {
-  background: var(--bg-light);
-  border-color: var(--primary-light);
+  background: #475569;
 }
 
 .btn-danger {
@@ -268,6 +267,17 @@ h2 {
 .btn-icon {
   padding: 8px 12px;
   font-size: 15px;
+}
+
+/* Navbar buttons override */
+.navbar .btn-secondary {
+  background: rgba(255, 255, 255, 0.15);
+  color: white;
+  backdrop-filter: blur(4px);
+}
+
+.navbar .btn-secondary:hover {
+  background: rgba(255, 255, 255, 0.25);
 }
 
 /* Messages */
