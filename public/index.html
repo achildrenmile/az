@@ -306,6 +306,7 @@
         <button class="tab" data-tab="kunden">Kunden</button>
         <button class="tab" data-tab="baustellen">Baustellen</button>
         <button class="tab" data-tab="pausenregeln">Pausenregeln</button>
+        <button class="tab" data-tab="kollektivvertrag">Kollektivverträge</button>
         <button class="tab" data-tab="einstellungen">Einstellungen</button>
         <button class="tab" data-tab="audit">Audit-Log</button>
       </div>
@@ -735,6 +736,90 @@
         </div>
       </div>
 
+      <!-- Kollektivverträge Tab -->
+      <div id="tab-kollektivvertrag" class="tab-content hidden">
+        <div class="card">
+          <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom:20px;">
+            <div>
+              <h2 style="margin:0">Kollektivverträge (KV)</h2>
+              <p style="color: var(--text-secondary); margin:8px 0 0;">Branchenspezifische Regelwerke für Arbeitszeiten, Überstunden und Zuschläge</p>
+            </div>
+            <button class="btn btn-primary" onclick="openKVModal()">+ Neuer KV</button>
+          </div>
+          <div id="kv-message" class="message"></div>
+
+          <div class="table-container">
+            <table id="kv-table">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Branche</th>
+                  <th>Gruppen</th>
+                  <th>Regeln</th>
+                  <th>Status</th>
+                  <th>Aktionen</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- KV Details (Gruppen & Regeln) -->
+        <div id="kv-details" class="card hidden" style="margin-top: 20px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+            <h3 id="kv-details-title" style="margin:0;"></h3>
+            <button class="btn btn-secondary" onclick="closeKVDetails()">Schließen</button>
+          </div>
+
+          <!-- Gruppen -->
+          <div style="margin-bottom: 30px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+              <h4 style="margin:0;">Mitarbeiter-Gruppen</h4>
+              <button class="btn btn-secondary" onclick="openKVGruppeModal()">+ Neue Gruppe</button>
+            </div>
+            <div class="table-container">
+              <table id="kv-gruppen-table">
+                <thead>
+                  <tr>
+                    <th>Name</th>
+                    <th>Wochenstunden</th>
+                    <th>Monatsstunden</th>
+                    <th>Mitarbeiter</th>
+                    <th>Status</th>
+                    <th>Aktionen</th>
+                  </tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Regeln -->
+          <div>
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+              <h4 style="margin:0;">Regeln</h4>
+              <button class="btn btn-secondary" onclick="openKVRegelModal()">+ Neue Regel</button>
+            </div>
+            <div class="table-container">
+              <table id="kv-regeln-table">
+                <thead>
+                  <tr>
+                    <th>Typ</th>
+                    <th>Name</th>
+                    <th>Wert</th>
+                    <th>Bedingung</th>
+                    <th>Status</th>
+                    <th>Aktionen</th>
+                  </tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- Einstellungen Tab -->
       <div id="tab-einstellungen" class="tab-content hidden">
         <div class="card">
@@ -1058,6 +1143,132 @@
       <div class="modal-actions">
         <button type="button" class="btn btn-secondary" onclick="closeVerstoesseModal()">Schließen</button>
       </div>
+    </div>
+  </div>
+
+  <!-- KOLLEKTIVVERTRAG MODAL -->
+  <div id="kv-modal" class="modal hidden">
+    <div class="modal-backdrop" onclick="closeKVModal()"></div>
+    <div class="modal-content card">
+      <h2 id="kv-modal-title">Neuer Kollektivvertrag</h2>
+      <form id="kv-form" onsubmit="saveKV(event)">
+        <input type="hidden" id="kv-id">
+        <div class="form-group">
+          <label for="kv-name">Name *</label>
+          <input type="text" id="kv-name" required placeholder="z.B. Baugewerbe KV">
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="kv-branche">Branche</label>
+            <input type="text" id="kv-branche" placeholder="z.B. Bauwesen">
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="kv-beschreibung">Beschreibung</label>
+          <textarea id="kv-beschreibung" rows="2" placeholder="Optionale Beschreibung"></textarea>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="kv-gueltig-ab">Gültig ab</label>
+            <input type="text" id="kv-gueltig-ab" class="datepicker" placeholder="TT.MM.JJJJ">
+          </div>
+          <div class="form-group">
+            <label for="kv-gueltig-bis">Gültig bis</label>
+            <input type="text" id="kv-gueltig-bis" class="datepicker" placeholder="TT.MM.JJJJ">
+          </div>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-secondary" onclick="closeKVModal()">Abbrechen</button>
+          <button type="submit" class="btn btn-primary">Speichern</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- KV-GRUPPE MODAL -->
+  <div id="kv-gruppe-modal" class="modal hidden">
+    <div class="modal-backdrop" onclick="closeKVGruppeModal()"></div>
+    <div class="modal-content card">
+      <h2 id="kv-gruppe-modal-title">Neue Mitarbeiter-Gruppe</h2>
+      <form id="kv-gruppe-form" onsubmit="saveKVGruppe(event)">
+        <input type="hidden" id="kv-gruppe-id">
+        <div class="form-group">
+          <label for="kv-gruppe-name">Name *</label>
+          <input type="text" id="kv-gruppe-name" required placeholder="z.B. Arbeiter, Angestellte">
+        </div>
+        <div class="form-group">
+          <label for="kv-gruppe-beschreibung">Beschreibung</label>
+          <textarea id="kv-gruppe-beschreibung" rows="2" placeholder="Optionale Beschreibung"></textarea>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="kv-gruppe-wochenstunden">Standard-Wochenstunden</label>
+            <input type="number" id="kv-gruppe-wochenstunden" value="40" step="0.5" min="1" max="60">
+          </div>
+          <div class="form-group">
+            <label for="kv-gruppe-monatsstunden">Standard-Monatsstunden</label>
+            <input type="number" id="kv-gruppe-monatsstunden" value="173" step="1" min="1" max="260">
+          </div>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-secondary" onclick="closeKVGruppeModal()">Abbrechen</button>
+          <button type="submit" class="btn btn-primary">Speichern</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- KV-REGEL MODAL -->
+  <div id="kv-regel-modal" class="modal hidden">
+    <div class="modal-backdrop" onclick="closeKVRegelModal()"></div>
+    <div class="modal-content card">
+      <h2 id="kv-regel-modal-title">Neue Regel</h2>
+      <form id="kv-regel-form" onsubmit="saveKVRegel(event)">
+        <input type="hidden" id="kv-regel-id">
+        <div class="form-row">
+          <div class="form-group">
+            <label for="kv-regel-typ">Regeltyp *</label>
+            <select id="kv-regel-typ" required onchange="updateKVRegelBedingung()">
+              <option value="">Bitte wählen</option>
+              <option value="UEBERSTUNDEN">Überstunden-Zuschlag</option>
+              <option value="ZUSCHLAG_NACHT">Nachtarbeit-Zuschlag</option>
+              <option value="ZUSCHLAG_SAMSTAG">Samstags-Zuschlag</option>
+              <option value="ZUSCHLAG_SONNTAG">Sonntags-Zuschlag</option>
+              <option value="ZUSCHLAG_FEIERTAG">Feiertags-Zuschlag</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="kv-regel-name">Name *</label>
+            <input type="text" id="kv-regel-name" required placeholder="z.B. Überstunden 50%">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="kv-regel-wert">Wert *</label>
+            <input type="number" id="kv-regel-wert" required step="0.1" placeholder="z.B. 50">
+          </div>
+          <div class="form-group">
+            <label for="kv-regel-einheit">Einheit</label>
+            <select id="kv-regel-einheit">
+              <option value="PROZENT">Prozent (%)</option>
+              <option value="STUNDEN">Stunden</option>
+            </select>
+          </div>
+        </div>
+        <div id="kv-regel-bedingung-container" class="form-group hidden">
+          <label>Bedingung</label>
+          <div id="kv-regel-bedingung-fields"></div>
+        </div>
+        <div class="form-group">
+          <label for="kv-regel-prioritaet">Priorität</label>
+          <input type="number" id="kv-regel-prioritaet" value="0" min="0" max="100">
+          <small style="color:var(--text-secondary);">Höhere Priorität wird zuerst angewendet</small>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-secondary" onclick="closeKVRegelModal()">Abbrechen</button>
+          <button type="submit" class="btn btn-primary">Speichern</button>
+        </div>
+      </form>
     </div>
   </div>
 

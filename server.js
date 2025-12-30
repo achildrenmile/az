@@ -1189,6 +1189,199 @@ app.post('/api/check-pause', checkSession, (req, res) => {
   });
 });
 
+// ==================== KOLLEKTIVVERTRAG (KV) ROUTES ====================
+
+// Alle Kollektivverträge abrufen
+app.get('/api/admin/kv', checkSession, checkAdmin, (req, res) => {
+  const nurAktive = req.query.alle !== 'true';
+  const kvs = db.getAllKollektivvertraege(nurAktive);
+  res.json(kvs);
+});
+
+// Einzelnen KV abrufen
+app.get('/api/admin/kv/:id', checkSession, checkAdmin, (req, res) => {
+  const kv = db.getKollektivvertrag(parseInt(req.params.id));
+  if (!kv) {
+    return res.status(404).json({ error: 'Kollektivvertrag nicht gefunden' });
+  }
+  res.json(kv);
+});
+
+// KV erstellen
+app.post('/api/admin/kv', checkSession, checkAdmin, (req, res) => {
+  const { name, beschreibung, branche, gueltig_ab, gueltig_bis } = req.body;
+
+  if (!name) {
+    return res.status(400).json({ error: 'Name ist erforderlich' });
+  }
+
+  try {
+    const result = db.createKollektivvertrag({ name, beschreibung, branche, gueltig_ab, gueltig_bis });
+    res.json({ success: true, id: result.lastInsertRowid });
+  } catch (error) {
+    if (error.message.includes('UNIQUE constraint')) {
+      return res.status(400).json({ error: 'KV mit diesem Namen existiert bereits' });
+    }
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// KV aktualisieren
+app.put('/api/admin/kv/:id', checkSession, checkAdmin, (req, res) => {
+  const id = parseInt(req.params.id);
+  const { name, beschreibung, branche, gueltig_ab, gueltig_bis, aktiv } = req.body;
+
+  if (!name) {
+    return res.status(400).json({ error: 'Name ist erforderlich' });
+  }
+
+  try {
+    db.updateKollektivvertrag(id, { name, beschreibung, branche, gueltig_ab, gueltig_bis, aktiv });
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// KV löschen
+app.delete('/api/admin/kv/:id', checkSession, checkAdmin, (req, res) => {
+  const result = db.deleteKollektivvertrag(parseInt(req.params.id));
+  if (!result.success) {
+    return res.status(400).json({ error: result.error });
+  }
+  res.json({ success: true });
+});
+
+// KV-Gruppen abrufen
+app.get('/api/admin/kv/:kvId/gruppen', checkSession, checkAdmin, (req, res) => {
+  const kvId = parseInt(req.params.kvId);
+  const nurAktive = req.query.alle !== 'true';
+  const gruppen = db.getKVGruppen(kvId, nurAktive);
+  res.json(gruppen);
+});
+
+// Alle KV-Gruppen (für Dropdowns)
+app.get('/api/admin/kv-gruppen', checkSession, checkAdmin, (req, res) => {
+  const nurAktive = req.query.alle !== 'true';
+  const gruppen = db.getAllKVGruppen(nurAktive);
+  res.json(gruppen);
+});
+
+// KV-Gruppe erstellen
+app.post('/api/admin/kv/:kvId/gruppen', checkSession, checkAdmin, (req, res) => {
+  const kv_id = parseInt(req.params.kvId);
+  const { name, beschreibung, standard_wochenstunden, standard_monatsstunden } = req.body;
+
+  if (!name) {
+    return res.status(400).json({ error: 'Name ist erforderlich' });
+  }
+
+  try {
+    const result = db.createKVGruppe({ kv_id, name, beschreibung, standard_wochenstunden, standard_monatsstunden });
+    res.json({ success: true, id: result.lastInsertRowid });
+  } catch (error) {
+    if (error.message.includes('UNIQUE constraint')) {
+      return res.status(400).json({ error: 'Gruppe mit diesem Namen existiert bereits in diesem KV' });
+    }
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// KV-Gruppe aktualisieren
+app.put('/api/admin/kv-gruppen/:id', checkSession, checkAdmin, (req, res) => {
+  const id = parseInt(req.params.id);
+  const { name, beschreibung, standard_wochenstunden, standard_monatsstunden, aktiv } = req.body;
+
+  if (!name) {
+    return res.status(400).json({ error: 'Name ist erforderlich' });
+  }
+
+  try {
+    db.updateKVGruppe(id, { name, beschreibung, standard_wochenstunden, standard_monatsstunden, aktiv });
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// KV-Gruppe löschen
+app.delete('/api/admin/kv-gruppen/:id', checkSession, checkAdmin, (req, res) => {
+  db.deleteKVGruppe(parseInt(req.params.id));
+  res.json({ success: true });
+});
+
+// KV-Regeln abrufen
+app.get('/api/admin/kv/:kvId/regeln', checkSession, checkAdmin, (req, res) => {
+  const kvId = parseInt(req.params.kvId);
+  const nurAktive = req.query.alle !== 'true';
+  const regeln = db.getKVRegeln(kvId, nurAktive);
+  res.json(regeln);
+});
+
+// KV-Regel erstellen
+app.post('/api/admin/kv/:kvId/regeln', checkSession, checkAdmin, (req, res) => {
+  const kv_id = parseInt(req.params.kvId);
+  const { regel_typ, name, bedingung, wert, einheit, prioritaet } = req.body;
+
+  if (!regel_typ || !name || wert === undefined) {
+    return res.status(400).json({ error: 'Regeltyp, Name und Wert sind erforderlich' });
+  }
+
+  try {
+    const result = db.createKVRegel({ kv_id, regel_typ, name, bedingung, wert, einheit, prioritaet });
+    res.json({ success: true, id: result.lastInsertRowid });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// KV-Regel aktualisieren
+app.put('/api/admin/kv-regeln/:id', checkSession, checkAdmin, (req, res) => {
+  const id = parseInt(req.params.id);
+  const { regel_typ, name, bedingung, wert, einheit, prioritaet, aktiv } = req.body;
+
+  if (!regel_typ || !name || wert === undefined) {
+    return res.status(400).json({ error: 'Regeltyp, Name und Wert sind erforderlich' });
+  }
+
+  try {
+    db.updateKVRegel(id, { regel_typ, name, bedingung, wert, einheit, prioritaet, aktiv });
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// KV-Regel löschen
+app.delete('/api/admin/kv-regeln/:id', checkSession, checkAdmin, (req, res) => {
+  db.deleteKVRegel(parseInt(req.params.id));
+  res.json({ success: true });
+});
+
+// Mitarbeiter KV-Gruppe zuordnen
+app.put('/api/admin/mitarbeiter/:id/kv-gruppe', checkSession, checkAdmin, (req, res) => {
+  const mitarbeiterId = parseInt(req.params.id);
+  const { kv_gruppe_id } = req.body;
+
+  db.setMitarbeiterKVGruppe(mitarbeiterId, kv_gruppe_id || null);
+  res.json({ success: true });
+});
+
+// KV-Regeln für Zeiteintrag anwenden (Preview)
+app.post('/api/kv/berechne', checkSession, (req, res) => {
+  const mitarbeiterId = req.session.mitarbeiter.id;
+  const { datum, arbeitsbeginn, arbeitsende, pause_minuten } = req.body;
+
+  const result = db.anwendeKVRegeln(mitarbeiterId, {
+    datum,
+    arbeitsbeginn,
+    arbeitsende,
+    pause_minuten
+  });
+
+  res.json(result);
+});
+
 // ==================== EINSTELLUNGEN ROUTES ====================
 
 // Alle Einstellungen abrufen (Admin)

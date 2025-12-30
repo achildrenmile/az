@@ -3109,6 +3109,412 @@ document.addEventListener('DOMContentLoaded', () => {
       if (tab.dataset.tab === 'bestaetigungen') {
         loadBestaetigungsUebersicht();
       }
+      if (tab.dataset.tab === 'kollektivvertrag') {
+        loadKollektivvertraege();
+      }
     });
   });
 });
+
+// ==================== KOLLEKTIVVERTRAG (KV) FUNKTIONEN ====================
+
+let currentKVId = null;
+
+async function loadKollektivvertraege() {
+  try {
+    const kvs = await api('/admin/kv?alle=true');
+    const tbody = document.querySelector('#kv-table tbody');
+
+    if (!kvs || kvs.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:40px;color:var(--text-secondary)">Keine Kollektivverträge vorhanden</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = kvs.map(kv => `
+      <tr>
+        <td><strong>${escapeHtml(kv.name)}</strong></td>
+        <td>${escapeHtml(kv.branche || '-')}</td>
+        <td style="text-align:center">${kv.gruppen_anzahl}</td>
+        <td style="text-align:center">${kv.regeln_anzahl}</td>
+        <td>${kv.aktiv ? '<span class="status-badge ok">Aktiv</span>' : '<span class="status-badge" style="background:#f3f4f6">Inaktiv</span>'}</td>
+        <td>
+          <button class="btn-icon" onclick="showKVDetails(${kv.id})" title="Details">📋</button>
+          <button class="btn-icon" onclick="editKV(${kv.id})" title="Bearbeiten">✏️</button>
+          <button class="btn-icon danger" onclick="deleteKV(${kv.id})" title="Löschen">🗑️</button>
+        </td>
+      </tr>
+    `).join('');
+
+  } catch (error) {
+    console.error('KV laden fehlgeschlagen:', error);
+    showMessage('kv-message', 'Fehler beim Laden der Kollektivverträge', 'error');
+  }
+}
+
+function openKVModal(kv = null) {
+  document.getElementById('kv-modal').classList.remove('hidden');
+  document.getElementById('kv-modal-title').textContent = kv ? 'Kollektivvertrag bearbeiten' : 'Neuer Kollektivvertrag';
+  document.getElementById('kv-id').value = kv?.id || '';
+  document.getElementById('kv-name').value = kv?.name || '';
+  document.getElementById('kv-branche').value = kv?.branche || '';
+  document.getElementById('kv-beschreibung').value = kv?.beschreibung || '';
+  document.getElementById('kv-gueltig-ab').value = kv?.gueltig_ab ? formatDateForInput(kv.gueltig_ab) : '';
+  document.getElementById('kv-gueltig-bis').value = kv?.gueltig_bis ? formatDateForInput(kv.gueltig_bis) : '';
+}
+
+function closeKVModal() {
+  document.getElementById('kv-modal').classList.add('hidden');
+  document.getElementById('kv-form').reset();
+}
+
+async function editKV(id) {
+  try {
+    const kv = await api(`/admin/kv/${id}`);
+    openKVModal(kv);
+  } catch (error) {
+    alert('Fehler: ' + error.message);
+  }
+}
+
+async function saveKV(event) {
+  event.preventDefault();
+  const id = document.getElementById('kv-id').value;
+
+  const data = {
+    name: document.getElementById('kv-name').value,
+    branche: document.getElementById('kv-branche').value,
+    beschreibung: document.getElementById('kv-beschreibung').value,
+    gueltig_ab: parseDateInput(document.getElementById('kv-gueltig-ab').value),
+    gueltig_bis: parseDateInput(document.getElementById('kv-gueltig-bis').value)
+  };
+
+  try {
+    if (id) {
+      await api(`/admin/kv/${id}`, { method: 'PUT', body: JSON.stringify(data) });
+    } else {
+      await api('/admin/kv', { method: 'POST', body: JSON.stringify(data) });
+    }
+    closeKVModal();
+    loadKollektivvertraege();
+    showMessage('kv-message', 'Kollektivvertrag gespeichert', 'success');
+  } catch (error) {
+    alert('Fehler: ' + error.message);
+  }
+}
+
+async function deleteKV(id) {
+  if (!confirm('Kollektivvertrag wirklich löschen? Alle zugehörigen Gruppen und Regeln werden ebenfalls gelöscht.')) return;
+
+  try {
+    await api(`/admin/kv/${id}`, { method: 'DELETE' });
+    loadKollektivvertraege();
+    closeKVDetails();
+    showMessage('kv-message', 'Kollektivvertrag gelöscht', 'success');
+  } catch (error) {
+    alert('Fehler: ' + error.message);
+  }
+}
+
+async function showKVDetails(id) {
+  currentKVId = id;
+
+  try {
+    const kv = await api(`/admin/kv/${id}`);
+    document.getElementById('kv-details-title').textContent = `${kv.name} - Details`;
+    document.getElementById('kv-details').classList.remove('hidden');
+
+    await Promise.all([loadKVGruppen(id), loadKVRegeln(id)]);
+  } catch (error) {
+    alert('Fehler: ' + error.message);
+  }
+}
+
+function closeKVDetails() {
+  document.getElementById('kv-details').classList.add('hidden');
+  currentKVId = null;
+}
+
+// KV-Gruppen
+async function loadKVGruppen(kvId) {
+  try {
+    const gruppen = await api(`/admin/kv/${kvId}/gruppen?alle=true`);
+    const tbody = document.querySelector('#kv-gruppen-table tbody');
+
+    if (!gruppen || gruppen.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:20px;color:var(--text-secondary)">Keine Gruppen vorhanden</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = gruppen.map(g => `
+      <tr>
+        <td><strong>${escapeHtml(g.name)}</strong></td>
+        <td style="text-align:center">${g.standard_wochenstunden}h</td>
+        <td style="text-align:center">${g.standard_monatsstunden}h</td>
+        <td style="text-align:center">${g.mitarbeiter_anzahl}</td>
+        <td>${g.aktiv ? '<span class="status-badge ok">Aktiv</span>' : '<span class="status-badge">Inaktiv</span>'}</td>
+        <td>
+          <button class="btn-icon" onclick="editKVGruppe(${g.id})" title="Bearbeiten">✏️</button>
+          <button class="btn-icon danger" onclick="deleteKVGruppe(${g.id})" title="Löschen">🗑️</button>
+        </td>
+      </tr>
+    `).join('');
+
+  } catch (error) {
+    console.error('KV-Gruppen laden fehlgeschlagen:', error);
+  }
+}
+
+function openKVGruppeModal(gruppe = null) {
+  document.getElementById('kv-gruppe-modal').classList.remove('hidden');
+  document.getElementById('kv-gruppe-modal-title').textContent = gruppe ? 'Gruppe bearbeiten' : 'Neue Mitarbeiter-Gruppe';
+  document.getElementById('kv-gruppe-id').value = gruppe?.id || '';
+  document.getElementById('kv-gruppe-name').value = gruppe?.name || '';
+  document.getElementById('kv-gruppe-beschreibung').value = gruppe?.beschreibung || '';
+  document.getElementById('kv-gruppe-wochenstunden').value = gruppe?.standard_wochenstunden || 40;
+  document.getElementById('kv-gruppe-monatsstunden').value = gruppe?.standard_monatsstunden || 173;
+}
+
+function closeKVGruppeModal() {
+  document.getElementById('kv-gruppe-modal').classList.add('hidden');
+  document.getElementById('kv-gruppe-form').reset();
+}
+
+async function editKVGruppe(id) {
+  try {
+    const gruppen = await api(`/admin/kv/${currentKVId}/gruppen?alle=true`);
+    const gruppe = gruppen.find(g => g.id === id);
+    if (gruppe) openKVGruppeModal(gruppe);
+  } catch (error) {
+    alert('Fehler: ' + error.message);
+  }
+}
+
+async function saveKVGruppe(event) {
+  event.preventDefault();
+  const id = document.getElementById('kv-gruppe-id').value;
+
+  const data = {
+    name: document.getElementById('kv-gruppe-name').value,
+    beschreibung: document.getElementById('kv-gruppe-beschreibung').value,
+    standard_wochenstunden: parseFloat(document.getElementById('kv-gruppe-wochenstunden').value),
+    standard_monatsstunden: parseFloat(document.getElementById('kv-gruppe-monatsstunden').value)
+  };
+
+  try {
+    if (id) {
+      await api(`/admin/kv-gruppen/${id}`, { method: 'PUT', body: JSON.stringify(data) });
+    } else {
+      await api(`/admin/kv/${currentKVId}/gruppen`, { method: 'POST', body: JSON.stringify(data) });
+    }
+    closeKVGruppeModal();
+    loadKVGruppen(currentKVId);
+    loadKollektivvertraege();
+  } catch (error) {
+    alert('Fehler: ' + error.message);
+  }
+}
+
+async function deleteKVGruppe(id) {
+  if (!confirm('Gruppe wirklich löschen? Mitarbeiter werden von dieser Gruppe getrennt.')) return;
+
+  try {
+    await api(`/admin/kv-gruppen/${id}`, { method: 'DELETE' });
+    loadKVGruppen(currentKVId);
+    loadKollektivvertraege();
+  } catch (error) {
+    alert('Fehler: ' + error.message);
+  }
+}
+
+// KV-Regeln
+async function loadKVRegeln(kvId) {
+  try {
+    const regeln = await api(`/admin/kv/${kvId}/regeln?alle=true`);
+    const tbody = document.querySelector('#kv-regeln-table tbody');
+
+    if (!regeln || regeln.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:20px;color:var(--text-secondary)">Keine Regeln vorhanden</td></tr>';
+      return;
+    }
+
+    const regelTypLabels = {
+      'UEBERSTUNDEN': 'Überstunden',
+      'ZUSCHLAG_NACHT': 'Nachtarbeit',
+      'ZUSCHLAG_SAMSTAG': 'Samstag',
+      'ZUSCHLAG_SONNTAG': 'Sonntag',
+      'ZUSCHLAG_FEIERTAG': 'Feiertag'
+    };
+
+    tbody.innerHTML = regeln.map(r => {
+      let bedingungText = '-';
+      if (r.bedingung) {
+        try {
+          const bed = JSON.parse(r.bedingung);
+          if (bed.nach_stunden) bedingungText = `Nach ${bed.nach_stunden}h`;
+          if (bed.von_uhrzeit && bed.bis_uhrzeit) bedingungText = `${bed.von_uhrzeit}-${bed.bis_uhrzeit}`;
+        } catch (e) {}
+      }
+
+      return `
+        <tr>
+          <td>${regelTypLabels[r.regel_typ] || r.regel_typ}</td>
+          <td><strong>${escapeHtml(r.name)}</strong></td>
+          <td style="text-align:right">${r.wert}${r.einheit === 'PROZENT' ? '%' : 'h'}</td>
+          <td>${bedingungText}</td>
+          <td>${r.aktiv ? '<span class="status-badge ok">Aktiv</span>' : '<span class="status-badge">Inaktiv</span>'}</td>
+          <td>
+            <button class="btn-icon" onclick="editKVRegel(${r.id})" title="Bearbeiten">✏️</button>
+            <button class="btn-icon danger" onclick="deleteKVRegel(${r.id})" title="Löschen">🗑️</button>
+          </td>
+        </tr>
+      `;
+    }).join('');
+
+  } catch (error) {
+    console.error('KV-Regeln laden fehlgeschlagen:', error);
+  }
+}
+
+function openKVRegelModal(regel = null) {
+  document.getElementById('kv-regel-modal').classList.remove('hidden');
+  document.getElementById('kv-regel-modal-title').textContent = regel ? 'Regel bearbeiten' : 'Neue Regel';
+  document.getElementById('kv-regel-id').value = regel?.id || '';
+  document.getElementById('kv-regel-typ').value = regel?.regel_typ || '';
+  document.getElementById('kv-regel-name').value = regel?.name || '';
+  document.getElementById('kv-regel-wert').value = regel?.wert || '';
+  document.getElementById('kv-regel-einheit').value = regel?.einheit || 'PROZENT';
+  document.getElementById('kv-regel-prioritaet').value = regel?.prioritaet || 0;
+
+  updateKVRegelBedingung();
+
+  if (regel?.bedingung) {
+    try {
+      const bed = JSON.parse(regel.bedingung);
+      if (bed.nach_stunden) {
+        document.getElementById('kv-regel-nach-stunden').value = bed.nach_stunden;
+      }
+      if (bed.von_uhrzeit) {
+        document.getElementById('kv-regel-von-uhrzeit').value = bed.von_uhrzeit;
+      }
+      if (bed.bis_uhrzeit) {
+        document.getElementById('kv-regel-bis-uhrzeit').value = bed.bis_uhrzeit;
+      }
+    } catch (e) {}
+  }
+}
+
+function closeKVRegelModal() {
+  document.getElementById('kv-regel-modal').classList.add('hidden');
+  document.getElementById('kv-regel-form').reset();
+}
+
+function updateKVRegelBedingung() {
+  const typ = document.getElementById('kv-regel-typ').value;
+  const container = document.getElementById('kv-regel-bedingung-container');
+  const fields = document.getElementById('kv-regel-bedingung-fields');
+
+  if (typ === 'UEBERSTUNDEN') {
+    container.classList.remove('hidden');
+    fields.innerHTML = `
+      <div class="form-row">
+        <div class="form-group">
+          <label for="kv-regel-nach-stunden">Nach Stunden pro Tag</label>
+          <input type="number" id="kv-regel-nach-stunden" value="8" step="0.5" min="1" max="16">
+        </div>
+      </div>
+    `;
+  } else if (typ === 'ZUSCHLAG_NACHT') {
+    container.classList.remove('hidden');
+    fields.innerHTML = `
+      <div class="form-row">
+        <div class="form-group">
+          <label for="kv-regel-von-uhrzeit">Von Uhrzeit</label>
+          <input type="text" id="kv-regel-von-uhrzeit" value="22:00" placeholder="HH:MM">
+        </div>
+        <div class="form-group">
+          <label for="kv-regel-bis-uhrzeit">Bis Uhrzeit</label>
+          <input type="text" id="kv-regel-bis-uhrzeit" value="06:00" placeholder="HH:MM">
+        </div>
+      </div>
+    `;
+  } else {
+    container.classList.add('hidden');
+    fields.innerHTML = '';
+  }
+}
+
+async function editKVRegel(id) {
+  try {
+    const regeln = await api(`/admin/kv/${currentKVId}/regeln?alle=true`);
+    const regel = regeln.find(r => r.id === id);
+    if (regel) openKVRegelModal(regel);
+  } catch (error) {
+    alert('Fehler: ' + error.message);
+  }
+}
+
+async function saveKVRegel(event) {
+  event.preventDefault();
+  const id = document.getElementById('kv-regel-id').value;
+  const typ = document.getElementById('kv-regel-typ').value;
+
+  let bedingung = null;
+  if (typ === 'UEBERSTUNDEN') {
+    const nachStunden = document.getElementById('kv-regel-nach-stunden')?.value;
+    if (nachStunden) bedingung = { nach_stunden: parseFloat(nachStunden) };
+  } else if (typ === 'ZUSCHLAG_NACHT') {
+    const vonUhrzeit = document.getElementById('kv-regel-von-uhrzeit')?.value;
+    const bisUhrzeit = document.getElementById('kv-regel-bis-uhrzeit')?.value;
+    if (vonUhrzeit && bisUhrzeit) bedingung = { von_uhrzeit: vonUhrzeit, bis_uhrzeit: bisUhrzeit };
+  }
+
+  const data = {
+    regel_typ: typ,
+    name: document.getElementById('kv-regel-name').value,
+    wert: parseFloat(document.getElementById('kv-regel-wert').value),
+    einheit: document.getElementById('kv-regel-einheit').value,
+    prioritaet: parseInt(document.getElementById('kv-regel-prioritaet').value),
+    bedingung
+  };
+
+  try {
+    if (id) {
+      await api(`/admin/kv-regeln/${id}`, { method: 'PUT', body: JSON.stringify(data) });
+    } else {
+      await api(`/admin/kv/${currentKVId}/regeln`, { method: 'POST', body: JSON.stringify(data) });
+    }
+    closeKVRegelModal();
+    loadKVRegeln(currentKVId);
+    loadKollektivvertraege();
+  } catch (error) {
+    alert('Fehler: ' + error.message);
+  }
+}
+
+async function deleteKVRegel(id) {
+  if (!confirm('Regel wirklich löschen?')) return;
+
+  try {
+    await api(`/admin/kv-regeln/${id}`, { method: 'DELETE' });
+    loadKVRegeln(currentKVId);
+    loadKollektivvertraege();
+  } catch (error) {
+    alert('Fehler: ' + error.message);
+  }
+}
+
+// Helper: Format date for input (YYYY-MM-DD -> DD.MM.YYYY)
+function formatDateForInput(isoDate) {
+  if (!isoDate) return '';
+  const parts = isoDate.split('-');
+  if (parts.length !== 3) return isoDate;
+  return `${parts[2]}.${parts[1]}.${parts[0]}`;
+}
+
+// Helper: Parse date input (DD.MM.YYYY -> YYYY-MM-DD)
+function parseDateInput(dateStr) {
+  if (!dateStr) return null;
+  const parts = dateStr.split('.');
+  if (parts.length !== 3) return dateStr;
+  return `${parts[2]}-${parts[1]}-${parts[0]}`;
+}

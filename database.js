@@ -147,6 +147,54 @@ db.exec(`
 
   CREATE INDEX IF NOT EXISTS idx_gleitzeit_mitarbeiter ON gleitzeit_saldo(mitarbeiter_id);
   CREATE INDEX IF NOT EXISTS idx_gleitzeit_periode ON gleitzeit_saldo(periode_start, periode_ende);
+
+  -- Kollektivverträge (KV) - Branchenspezifische Regelwerke
+  CREATE TABLE IF NOT EXISTS kv_kollektivvertraege (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT UNIQUE NOT NULL,
+    beschreibung TEXT,
+    branche TEXT,
+    gueltig_ab DATE,
+    gueltig_bis DATE,
+    aktiv INTEGER DEFAULT 1,
+    erstellt_am DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_kv_name ON kv_kollektivvertraege(name);
+
+  -- KV-Regeln - Konkrete Regeln pro Kollektivvertrag
+  CREATE TABLE IF NOT EXISTS kv_regeln (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    kv_id INTEGER NOT NULL,
+    regel_typ TEXT NOT NULL,
+    name TEXT NOT NULL,
+    bedingung TEXT,
+    wert REAL NOT NULL,
+    einheit TEXT DEFAULT 'PROZENT',
+    prioritaet INTEGER DEFAULT 0,
+    aktiv INTEGER DEFAULT 1,
+    erstellt_am DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (kv_id) REFERENCES kv_kollektivvertraege(id) ON DELETE CASCADE
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_kv_regeln_kv ON kv_regeln(kv_id);
+  CREATE INDEX IF NOT EXISTS idx_kv_regeln_typ ON kv_regeln(regel_typ);
+
+  -- KV-Gruppen - Mitarbeitergruppen pro Kollektivvertrag
+  CREATE TABLE IF NOT EXISTS kv_gruppen (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    kv_id INTEGER NOT NULL,
+    name TEXT NOT NULL,
+    beschreibung TEXT,
+    standard_wochenstunden REAL DEFAULT 40,
+    standard_monatsstunden REAL DEFAULT 173,
+    aktiv INTEGER DEFAULT 1,
+    erstellt_am DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (kv_id) REFERENCES kv_kollektivvertraege(id) ON DELETE CASCADE,
+    UNIQUE(kv_id, name)
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_kv_gruppen_kv ON kv_gruppen(kv_id);
 `);
 
 // Standard-Pausenregeln einfügen falls nicht vorhanden (AZG §11)
@@ -235,6 +283,11 @@ try {
 // Index für Hash-Spalte erstellen (nach Migration)
 try {
   db.exec(`CREATE INDEX IF NOT EXISTS idx_audit_hash ON audit_log(eintrag_hash)`);
+} catch (e) {}
+
+// Migration: KV-Gruppe zu Mitarbeiter hinzufügen
+try {
+  db.exec(`ALTER TABLE mitarbeiter ADD COLUMN kv_gruppe_id INTEGER REFERENCES kv_gruppen(id)`);
 } catch (e) {}
 
 // Bestehende Audit-Einträge mit Hash versehen (falls noch ohne)
@@ -1977,5 +2030,359 @@ module.exports = {
         bestaetigt_am: bestaetigung?.bestaetigt_am || null
       };
     });
+  },
+
+  // ==================== KOLLEKTIVVERTRAG (KV) FUNKTIONEN ====================
+
+  // Alle Kollektivverträge abrufen
+  getAllKollektivvertraege: (nurAktive = true) => {
+    const whereClause = nurAktive ? 'WHERE aktiv = 1' : '';
+    return db.prepare(`
+      SELECT kv.*,
+        (SELECT COUNT(*) FROM kv_gruppen WHERE kv_id = kv.id) as gruppen_anzahl,
+        (SELECT COUNT(*) FROM kv_regeln WHERE kv_id = kv.id) as regeln_anzahl
+      FROM kv_kollektivvertraege kv
+      ${whereClause}
+      ORDER BY name
+    `).all();
+  },
+
+  // Einzelnen KV abrufen
+  getKollektivvertrag: (id) => {
+    return db.prepare('SELECT * FROM kv_kollektivvertraege WHERE id = ?').get(id);
+  },
+
+  // KV erstellen
+  createKollektivvertrag: (data) => {
+    return db.prepare(`
+      INSERT INTO kv_kollektivvertraege (name, beschreibung, branche, gueltig_ab, gueltig_bis, aktiv)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `).run(
+      data.name,
+      data.beschreibung || '',
+      data.branche || '',
+      data.gueltig_ab || null,
+      data.gueltig_bis || null,
+      data.aktiv !== false ? 1 : 0
+    );
+  },
+
+  // KV aktualisieren
+  updateKollektivvertrag: (id, data) => {
+    return db.prepare(`
+      UPDATE kv_kollektivvertraege
+      SET name = ?, beschreibung = ?, branche = ?, gueltig_ab = ?, gueltig_bis = ?, aktiv = ?
+      WHERE id = ?
+    `).run(
+      data.name,
+      data.beschreibung || '',
+      data.branche || '',
+      data.gueltig_ab || null,
+      data.gueltig_bis || null,
+      data.aktiv !== false ? 1 : 0,
+      id
+    );
+  },
+
+  // KV löschen (mit allen Regeln und Gruppen)
+  deleteKollektivvertrag: (id) => {
+    // Erst prüfen ob Mitarbeiter zugeordnet sind
+    const zugeordnet = db.prepare(`
+      SELECT COUNT(*) as count FROM mitarbeiter m
+      JOIN kv_gruppen g ON m.kv_gruppe_id = g.id
+      WHERE g.kv_id = ?
+    `).get(id);
+
+    if (zugeordnet.count > 0) {
+      return { success: false, error: 'KV hat noch zugeordnete Mitarbeiter' };
+    }
+
+    db.prepare('DELETE FROM kv_regeln WHERE kv_id = ?').run(id);
+    db.prepare('DELETE FROM kv_gruppen WHERE kv_id = ?').run(id);
+    db.prepare('DELETE FROM kv_kollektivvertraege WHERE id = ?').run(id);
+    return { success: true };
+  },
+
+  // KV-Gruppen für einen KV abrufen
+  getKVGruppen: (kvId, nurAktive = true) => {
+    const whereClause = nurAktive ? 'AND g.aktiv = 1' : '';
+    return db.prepare(`
+      SELECT g.*,
+        (SELECT COUNT(*) FROM mitarbeiter WHERE kv_gruppe_id = g.id) as mitarbeiter_anzahl
+      FROM kv_gruppen g
+      WHERE g.kv_id = ? ${whereClause}
+      ORDER BY g.name
+    `).all(kvId);
+  },
+
+  // Alle KV-Gruppen (für Dropdowns)
+  getAllKVGruppen: (nurAktive = true) => {
+    const whereClause = nurAktive ? 'WHERE g.aktiv = 1 AND kv.aktiv = 1' : '';
+    return db.prepare(`
+      SELECT g.*, kv.name as kv_name
+      FROM kv_gruppen g
+      JOIN kv_kollektivvertraege kv ON kv.id = g.kv_id
+      ${whereClause}
+      ORDER BY kv.name, g.name
+    `).all();
+  },
+
+  // Einzelne Gruppe abrufen
+  getKVGruppe: (id) => {
+    return db.prepare(`
+      SELECT g.*, kv.name as kv_name
+      FROM kv_gruppen g
+      JOIN kv_kollektivvertraege kv ON kv.id = g.kv_id
+      WHERE g.id = ?
+    `).get(id);
+  },
+
+  // KV-Gruppe erstellen
+  createKVGruppe: (data) => {
+    return db.prepare(`
+      INSERT INTO kv_gruppen (kv_id, name, beschreibung, standard_wochenstunden, standard_monatsstunden, aktiv)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `).run(
+      data.kv_id,
+      data.name,
+      data.beschreibung || '',
+      data.standard_wochenstunden || 40,
+      data.standard_monatsstunden || 173,
+      data.aktiv !== false ? 1 : 0
+    );
+  },
+
+  // KV-Gruppe aktualisieren
+  updateKVGruppe: (id, data) => {
+    return db.prepare(`
+      UPDATE kv_gruppen
+      SET name = ?, beschreibung = ?, standard_wochenstunden = ?, standard_monatsstunden = ?, aktiv = ?
+      WHERE id = ?
+    `).run(
+      data.name,
+      data.beschreibung || '',
+      data.standard_wochenstunden || 40,
+      data.standard_monatsstunden || 173,
+      data.aktiv !== false ? 1 : 0,
+      id
+    );
+  },
+
+  // KV-Gruppe löschen
+  deleteKVGruppe: (id) => {
+    // Erst Mitarbeiter von der Gruppe lösen
+    db.prepare('UPDATE mitarbeiter SET kv_gruppe_id = NULL WHERE kv_gruppe_id = ?').run(id);
+    return db.prepare('DELETE FROM kv_gruppen WHERE id = ?').run(id);
+  },
+
+  // KV-Regeln für einen KV abrufen
+  getKVRegeln: (kvId, nurAktive = true) => {
+    const whereClause = nurAktive ? 'AND aktiv = 1' : '';
+    return db.prepare(`
+      SELECT * FROM kv_regeln
+      WHERE kv_id = ? ${whereClause}
+      ORDER BY prioritaet DESC, regel_typ, name
+    `).all(kvId);
+  },
+
+  // Einzelne Regel abrufen
+  getKVRegel: (id) => {
+    return db.prepare('SELECT * FROM kv_regeln WHERE id = ?').get(id);
+  },
+
+  // KV-Regel erstellen
+  createKVRegel: (data) => {
+    return db.prepare(`
+      INSERT INTO kv_regeln (kv_id, regel_typ, name, bedingung, wert, einheit, prioritaet, aktiv)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      data.kv_id,
+      data.regel_typ,
+      data.name,
+      data.bedingung ? JSON.stringify(data.bedingung) : null,
+      data.wert,
+      data.einheit || 'PROZENT',
+      data.prioritaet || 0,
+      data.aktiv !== false ? 1 : 0
+    );
+  },
+
+  // KV-Regel aktualisieren
+  updateKVRegel: (id, data) => {
+    return db.prepare(`
+      UPDATE kv_regeln
+      SET regel_typ = ?, name = ?, bedingung = ?, wert = ?, einheit = ?, prioritaet = ?, aktiv = ?
+      WHERE id = ?
+    `).run(
+      data.regel_typ,
+      data.name,
+      data.bedingung ? JSON.stringify(data.bedingung) : null,
+      data.wert,
+      data.einheit || 'PROZENT',
+      data.prioritaet || 0,
+      data.aktiv !== false ? 1 : 0,
+      id
+    );
+  },
+
+  // KV-Regel löschen
+  deleteKVRegel: (id) => {
+    return db.prepare('DELETE FROM kv_regeln WHERE id = ?').run(id);
+  },
+
+  // Mitarbeiter einer KV-Gruppe zuordnen
+  setMitarbeiterKVGruppe: (mitarbeiterId, kvGruppeId) => {
+    return db.prepare('UPDATE mitarbeiter SET kv_gruppe_id = ? WHERE id = ?').run(kvGruppeId, mitarbeiterId);
+  },
+
+  // KV-Gruppe für Mitarbeiter abrufen
+  getMitarbeiterKVGruppe: (mitarbeiterId) => {
+    return db.prepare(`
+      SELECT g.*, kv.name as kv_name, kv.id as kv_id
+      FROM mitarbeiter m
+      JOIN kv_gruppen g ON m.kv_gruppe_id = g.id
+      JOIN kv_kollektivvertraege kv ON kv.id = g.kv_id
+      WHERE m.id = ?
+    `).get(mitarbeiterId);
+  },
+
+  // Regeln für Mitarbeiter anwenden (Rule Engine)
+  anwendeKVRegeln: (mitarbeiterId, zeiteintrag) => {
+    // KV-Gruppe des Mitarbeiters holen
+    const gruppe = db.prepare(`
+      SELECT g.*, kv.id as kv_id
+      FROM mitarbeiter m
+      JOIN kv_gruppen g ON m.kv_gruppe_id = g.id
+      JOIN kv_kollektivvertraege kv ON kv.id = g.kv_id
+      WHERE m.id = ? AND g.aktiv = 1 AND kv.aktiv = 1
+    `).get(mitarbeiterId);
+
+    if (!gruppe) {
+      return { regeln: [], zuschlaege: [] };
+    }
+
+    // Regeln für diesen KV holen
+    const regeln = db.prepare(`
+      SELECT * FROM kv_regeln
+      WHERE kv_id = ? AND aktiv = 1
+      ORDER BY prioritaet DESC
+    `).all(gruppe.kv_id);
+
+    const angewendeteRegeln = [];
+    const zuschlaege = [];
+
+    // Arbeitszeit berechnen
+    const [startH, startM] = zeiteintrag.arbeitsbeginn.split(':').map(Number);
+    const [endeH, endeM] = zeiteintrag.arbeitsende.split(':').map(Number);
+    const startMinuten = startH * 60 + startM;
+    const endeMinuten = endeH * 60 + endeM;
+    const arbeitsMinuten = endeMinuten - startMinuten - (zeiteintrag.pause_minuten || 0);
+    const arbeitsStunden = arbeitsMinuten / 60;
+
+    // Wochentag ermitteln (0=So, 1=Mo, ..., 6=Sa)
+    const datum = new Date(zeiteintrag.datum);
+    const wochentag = datum.getDay();
+
+    regeln.forEach(regel => {
+      let bedingung = {};
+      try {
+        bedingung = regel.bedingung ? JSON.parse(regel.bedingung) : {};
+      } catch (e) {}
+
+      let anwenden = false;
+      let betroffeneStunden = 0;
+
+      switch (regel.regel_typ) {
+        case 'UEBERSTUNDEN':
+          // Überstunden nach X Stunden pro Tag
+          const schwelle = bedingung.nach_stunden || 8;
+          if (arbeitsStunden > schwelle) {
+            anwenden = true;
+            betroffeneStunden = arbeitsStunden - schwelle;
+          }
+          break;
+
+        case 'ZUSCHLAG_NACHT':
+          // Nachtarbeit (z.B. 22:00-06:00)
+          const nachtStart = bedingung.von_uhrzeit || '22:00';
+          const nachtEnde = bedingung.bis_uhrzeit || '06:00';
+          const [nsH, nsM] = nachtStart.split(':').map(Number);
+          const [neH, neM] = nachtEnde.split(':').map(Number);
+          const nachtStartMin = nsH * 60 + nsM;
+          const nachtEndeMin = neH * 60 + neM;
+
+          // Vereinfachte Berechnung: Prüfen ob Arbeitszeit in Nachtzeit fällt
+          if (startMinuten < nachtEndeMin || endeMinuten > nachtStartMin) {
+            anwenden = true;
+            // Betroffene Stunden berechnen (vereinfacht)
+            if (endeMinuten > nachtStartMin) {
+              betroffeneStunden = (endeMinuten - nachtStartMin) / 60;
+            }
+            if (startMinuten < nachtEndeMin) {
+              betroffeneStunden += (nachtEndeMin - startMinuten) / 60;
+            }
+            betroffeneStunden = Math.min(betroffeneStunden, arbeitsStunden);
+          }
+          break;
+
+        case 'ZUSCHLAG_SAMSTAG':
+          if (wochentag === 6) {
+            anwenden = true;
+            betroffeneStunden = arbeitsStunden;
+          }
+          break;
+
+        case 'ZUSCHLAG_SONNTAG':
+          if (wochentag === 0) {
+            anwenden = true;
+            betroffeneStunden = arbeitsStunden;
+          }
+          break;
+
+        case 'ZUSCHLAG_FEIERTAG':
+          // Feiertage müssten aus einer separaten Tabelle kommen
+          // Hier vereinfacht: nur wenn explizit als Feiertag markiert
+          if (zeiteintrag.ist_feiertag) {
+            anwenden = true;
+            betroffeneStunden = arbeitsStunden;
+          }
+          break;
+      }
+
+      if (anwenden && betroffeneStunden > 0) {
+        angewendeteRegeln.push({
+          regel_id: regel.id,
+          regel_typ: regel.regel_typ,
+          name: regel.name
+        });
+
+        const zuschlagBetrag = regel.einheit === 'PROZENT'
+          ? betroffeneStunden * (regel.wert / 100)
+          : regel.wert;
+
+        zuschlaege.push({
+          regel_id: regel.id,
+          regel_typ: regel.regel_typ,
+          name: regel.name,
+          stunden: betroffeneStunden,
+          wert: regel.wert,
+          einheit: regel.einheit,
+          zuschlag_stunden: zuschlagBetrag
+        });
+      }
+    });
+
+    return {
+      gruppe: {
+        id: gruppe.id,
+        name: gruppe.name,
+        kv_name: gruppe.kv_name,
+        standard_wochenstunden: gruppe.standard_wochenstunden,
+        standard_monatsstunden: gruppe.standard_monatsstunden
+      },
+      regeln: angewendeteRegeln,
+      zuschlaege,
+      gesamt_zuschlag_stunden: zuschlaege.reduce((sum, z) => sum + z.zuschlag_stunden, 0)
+    };
   }
 };
