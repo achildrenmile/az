@@ -653,6 +653,12 @@ td[title] {
   color: white;
 }
 
+.nav-group-icon {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+}
+
 .nav-group-arrow {
   font-size: 12px;
   transition: transform 0.2s;
