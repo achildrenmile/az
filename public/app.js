@@ -62,6 +62,353 @@ const PAGE_LIMIT = 10;
 // Statistik State
 let currentStatistikType = 'monate';
 
+// ==================== SEARCHABLE DROPDOWN COMPONENT ====================
+
+/**
+ * SearchableDropdown - A reusable searchable dropdown component
+ * @param {HTMLElement} container - The container element
+ * @param {Object} options - Configuration options
+ * @param {Array} options.items - Array of {value, label} objects
+ * @param {string} options.placeholder - Placeholder text
+ * @param {string} options.emptyText - Text when no items match
+ * @param {Function} options.onChange - Callback when selection changes
+ * @param {boolean} options.allowEmpty - Allow empty/null selection (default: true)
+ * @param {string} options.emptyLabel - Label for empty option (default: "Alle")
+ */
+class SearchableDropdown {
+  constructor(container, options = {}) {
+    this.container = container;
+    this.options = {
+      items: [],
+      placeholder: 'Auswählen...',
+      emptyText: 'Keine Einträge gefunden',
+      onChange: null,
+      allowEmpty: true,
+      emptyLabel: 'Alle',
+      maxVisible: 10,
+      ...options
+    };
+    this.isOpen = false;
+    this.selectedValue = null;
+    this.selectedLabel = '';
+    this.highlightedIndex = -1;
+    this.filteredItems = [];
+    this.render();
+    this.bindEvents();
+  }
+
+  render() {
+    this.container.innerHTML = '';
+    this.container.classList.add('searchable-dropdown');
+
+    // Main input (shows selected value)
+    this.input = document.createElement('input');
+    this.input.type = 'text';
+    this.input.className = 'sd-input';
+    this.input.placeholder = this.options.placeholder;
+    this.input.readOnly = true;
+
+    // Arrow indicator
+    this.arrow = document.createElement('span');
+    this.arrow.className = 'sd-arrow';
+    this.arrow.innerHTML = '▼';
+
+    // Dropdown container
+    this.dropdown = document.createElement('div');
+    this.dropdown.className = 'sd-dropdown';
+
+    // Search wrapper
+    const searchWrap = document.createElement('div');
+    searchWrap.className = 'sd-search-wrap';
+
+    this.searchInput = document.createElement('input');
+    this.searchInput.type = 'text';
+    this.searchInput.className = 'sd-search';
+    this.searchInput.placeholder = 'Suchen...';
+    searchWrap.appendChild(this.searchInput);
+
+    // Options container
+    this.optionsContainer = document.createElement('div');
+    this.optionsContainer.className = 'sd-options';
+
+    // More indicator
+    this.moreIndicator = document.createElement('div');
+    this.moreIndicator.className = 'sd-more';
+
+    this.dropdown.appendChild(searchWrap);
+    this.dropdown.appendChild(this.optionsContainer);
+    this.dropdown.appendChild(this.moreIndicator);
+
+    this.container.appendChild(this.input);
+    this.container.appendChild(this.arrow);
+    this.container.appendChild(this.dropdown);
+
+    this.renderOptions();
+  }
+
+  renderOptions(filter = '') {
+    const filterLower = filter.toLowerCase();
+    let items = this.options.items;
+
+    // Filter items
+    if (filterLower) {
+      items = items.filter(item =>
+        item.label.toLowerCase().includes(filterLower)
+      );
+    }
+
+    this.filteredItems = items;
+
+    // Build options HTML
+    this.optionsContainer.innerHTML = '';
+
+    // Add empty option if allowed
+    if (this.options.allowEmpty && !filterLower) {
+      const emptyOption = document.createElement('div');
+      emptyOption.className = 'sd-option' + (this.selectedValue === '' || this.selectedValue === null ? ' selected' : '');
+      emptyOption.dataset.value = '';
+      emptyOption.textContent = this.options.emptyLabel;
+      this.optionsContainer.appendChild(emptyOption);
+    }
+
+    // Limit visible items
+    const visibleItems = items.slice(0, this.options.maxVisible);
+    const hiddenCount = items.length - visibleItems.length;
+
+    if (items.length === 0 && filterLower) {
+      const empty = document.createElement('div');
+      empty.className = 'sd-empty';
+      empty.textContent = this.options.emptyText;
+      this.optionsContainer.appendChild(empty);
+    } else {
+      visibleItems.forEach((item, index) => {
+        const option = document.createElement('div');
+        option.className = 'sd-option' + (item.value === this.selectedValue ? ' selected' : '');
+        option.dataset.value = item.value;
+        option.dataset.index = index;
+        option.textContent = item.label;
+        this.optionsContainer.appendChild(option);
+      });
+    }
+
+    // Show "more" indicator
+    if (hiddenCount > 0) {
+      this.moreIndicator.textContent = `+ ${hiddenCount} weitere (tippen zum Filtern)`;
+      this.moreIndicator.style.display = 'block';
+    } else {
+      this.moreIndicator.style.display = 'none';
+    }
+  }
+
+  bindEvents() {
+    // Open dropdown on input click
+    this.input.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.toggle();
+    });
+
+    // Search input
+    this.searchInput.addEventListener('input', (e) => {
+      this.renderOptions(e.target.value);
+      this.highlightedIndex = -1;
+    });
+
+    // Prevent closing when clicking inside dropdown
+    this.dropdown.addEventListener('click', (e) => {
+      e.stopPropagation();
+    });
+
+    // Option selection
+    this.optionsContainer.addEventListener('click', (e) => {
+      const option = e.target.closest('.sd-option');
+      if (option) {
+        this.select(option.dataset.value, option.textContent);
+        this.close();
+      }
+    });
+
+    // Keyboard navigation
+    this.searchInput.addEventListener('keydown', (e) => {
+      const options = this.optionsContainer.querySelectorAll('.sd-option');
+      const maxIndex = options.length - 1;
+
+      switch (e.key) {
+        case 'ArrowDown':
+          e.preventDefault();
+          this.highlightedIndex = Math.min(this.highlightedIndex + 1, maxIndex);
+          this.updateHighlight(options);
+          break;
+        case 'ArrowUp':
+          e.preventDefault();
+          this.highlightedIndex = Math.max(this.highlightedIndex - 1, 0);
+          this.updateHighlight(options);
+          break;
+        case 'Enter':
+          e.preventDefault();
+          if (this.highlightedIndex >= 0 && options[this.highlightedIndex]) {
+            const opt = options[this.highlightedIndex];
+            this.select(opt.dataset.value, opt.textContent);
+            this.close();
+          }
+          break;
+        case 'Escape':
+          this.close();
+          break;
+      }
+    });
+
+    // Close on outside click
+    document.addEventListener('click', (e) => {
+      if (!this.container.contains(e.target)) {
+        this.close();
+      }
+    });
+  }
+
+  updateHighlight(options) {
+    options.forEach((opt, i) => {
+      opt.classList.toggle('highlighted', i === this.highlightedIndex);
+    });
+    // Scroll into view
+    if (options[this.highlightedIndex]) {
+      options[this.highlightedIndex].scrollIntoView({ block: 'nearest' });
+    }
+  }
+
+  toggle() {
+    if (this.isOpen) {
+      this.close();
+    } else {
+      this.open();
+    }
+  }
+
+  open() {
+    this.isOpen = true;
+    this.container.classList.add('open');
+    this.searchInput.value = '';
+    this.renderOptions();
+    this.highlightedIndex = -1;
+    // Focus search input after a small delay for mobile keyboards
+    setTimeout(() => this.searchInput.focus(), 50);
+  }
+
+  close() {
+    this.isOpen = false;
+    this.container.classList.remove('open');
+    this.searchInput.value = '';
+  }
+
+  select(value, label) {
+    this.selectedValue = value === '' ? null : value;
+    this.selectedLabel = label;
+    this.input.value = value === '' || value === null ? '' : label;
+
+    // Update selected state in options
+    this.renderOptions();
+
+    // Trigger change callback
+    if (this.options.onChange) {
+      this.options.onChange(this.selectedValue, this.selectedLabel);
+    }
+  }
+
+  setValue(value) {
+    if (value === '' || value === null) {
+      this.selectedValue = null;
+      this.selectedLabel = '';
+      this.input.value = '';
+    } else {
+      const item = this.options.items.find(i => String(i.value) === String(value));
+      if (item) {
+        this.selectedValue = item.value;
+        this.selectedLabel = item.label;
+        this.input.value = item.label;
+      }
+    }
+  }
+
+  getValue() {
+    return this.selectedValue;
+  }
+
+  setItems(items) {
+    this.options.items = items;
+    this.renderOptions();
+  }
+
+  destroy() {
+    this.container.innerHTML = '';
+    this.container.classList.remove('searchable-dropdown', 'open');
+  }
+}
+
+// Store dropdown instances for cleanup and access
+const searchableDropdowns = {};
+
+/**
+ * Initialize a searchable dropdown on a select element
+ * @param {string} selectId - The ID of the select element to replace
+ * @param {Object} extraOptions - Additional options
+ */
+function initSearchableDropdown(selectId, extraOptions = {}) {
+  const select = document.getElementById(selectId);
+  if (!select) return null;
+
+  // Create container
+  const container = document.createElement('div');
+  container.id = selectId + '-sd';
+
+  // Get options from select
+  const items = Array.from(select.options)
+    .filter(opt => opt.value !== '') // Skip empty placeholder option
+    .map(opt => ({ value: opt.value, label: opt.textContent }));
+
+  // Check if there's an empty/all option
+  const hasEmptyOption = Array.from(select.options).some(opt => opt.value === '');
+  const emptyLabel = hasEmptyOption ?
+    (Array.from(select.options).find(opt => opt.value === '')?.textContent || 'Alle') : 'Alle';
+
+  // Replace select with container
+  select.style.display = 'none';
+  select.parentNode.insertBefore(container, select.nextSibling);
+
+  // Create dropdown
+  const dropdown = new SearchableDropdown(container, {
+    items,
+    placeholder: extraOptions.placeholder || select.options[0]?.textContent || 'Auswählen...',
+    allowEmpty: hasEmptyOption,
+    emptyLabel: emptyLabel,
+    onChange: (value) => {
+      // Sync with hidden select
+      select.value = value || '';
+      // Trigger change event on original select
+      select.dispatchEvent(new Event('change', { bubbles: true }));
+    },
+    ...extraOptions
+  });
+
+  // Set initial value
+  if (select.value) {
+    dropdown.setValue(select.value);
+  }
+
+  searchableDropdowns[selectId] = dropdown;
+  return dropdown;
+}
+
+/**
+ * Update items in a searchable dropdown
+ * @param {string} selectId - The ID of the original select element
+ * @param {Array} items - New items array
+ */
+function updateSearchableDropdown(selectId, items) {
+  const dropdown = searchableDropdowns[selectId];
+  if (dropdown) {
+    dropdown.setItems(items);
+  }
+}
+
 // Pagination rendern
 function renderPagination(containerId, currentPage, totalPages, total, onPageChange) {
   const container = document.getElementById(containerId);
@@ -696,6 +1043,11 @@ async function loadFilterOptions() {
     const baustellen = bsResult.data || bsResult;
     const kunden = kdResult.data || kdResult;
 
+    // Prepare items for searchable dropdowns
+    const maItems = mitarbeiter.filter(m => m.aktiv).map(m => ({ value: m.id, label: m.name }));
+    const bsItems = baustellen.filter(b => b.aktiv).map(b => ({ value: b.name, label: b.name }));
+    const kdItems = kunden.filter(k => k.aktiv).map(k => ({ value: k.name, label: k.name }));
+
     // Mitarbeiter-Dropdown
     const maSelect = document.getElementById('filter-mitarbeiter');
     maSelect.innerHTML = '<option value="">Alle</option>' +
@@ -710,6 +1062,25 @@ async function loadFilterOptions() {
     const kdSelect = document.getElementById('filter-kunde');
     kdSelect.innerHTML = '<option value="">Alle</option>' +
       kunden.filter(k => k.aktiv).map(k => `<option value="${k.name}">${k.name}</option>`).join('');
+
+    // Initialize or update searchable dropdowns
+    if (!searchableDropdowns['filter-mitarbeiter']) {
+      initSearchableDropdown('filter-mitarbeiter', { placeholder: 'Mitarbeiter...' });
+    } else {
+      searchableDropdowns['filter-mitarbeiter'].setItems(maItems);
+    }
+
+    if (!searchableDropdowns['filter-baustelle']) {
+      initSearchableDropdown('filter-baustelle', { placeholder: 'Baustelle...' });
+    } else {
+      searchableDropdowns['filter-baustelle'].setItems(bsItems);
+    }
+
+    if (!searchableDropdowns['filter-kunde']) {
+      initSearchableDropdown('filter-kunde', { placeholder: 'Kunde...' });
+    } else {
+      searchableDropdowns['filter-kunde'].setItems(kdItems);
+    }
   } catch (error) {
     console.error('Filter-Optionen laden fehlgeschlagen:', error);
   }
@@ -1878,6 +2249,14 @@ function openExportModal() {
     const mitarbeiter = result.data || result;
     select.innerHTML = '<option value="">Alle Mitarbeiter</option>' +
       mitarbeiter.filter(m => m.aktiv).map(m => `<option value="${m.id}">${m.name} (${m.mitarbeiter_nr})</option>`).join('');
+
+    // Initialize searchable dropdown
+    if (!searchableDropdowns['export-mitarbeiter']) {
+      initSearchableDropdown('export-mitarbeiter', { placeholder: 'Mitarbeiter auswählen...' });
+    } else {
+      const items = mitarbeiter.filter(m => m.aktiv).map(m => ({ value: m.id, label: `${m.name} (${m.mitarbeiter_nr})` }));
+      searchableDropdowns['export-mitarbeiter'].setItems(items);
+    }
   });
 
   // Standard-Zeitraum: Aktueller Monat
@@ -2572,14 +2951,24 @@ async function loadVerstoesseMitarbeiter() {
   if (!select) return;
 
   try {
-    const result = await api('/admin/mitarbeiter?limit=100');
-    if (result.data) {
-      result.data.forEach(m => {
-        const option = document.createElement('option');
-        option.value = m.id;
-        option.textContent = `${m.name} (${m.mitarbeiter_nr})`;
-        select.appendChild(option);
-      });
+    const result = await api('/admin/mitarbeiter?limit=1000');
+    const mitarbeiter = result.data || [];
+
+    // Populate hidden select
+    select.innerHTML = '<option value="">Alle Mitarbeiter</option>';
+    mitarbeiter.forEach(m => {
+      const option = document.createElement('option');
+      option.value = m.id;
+      option.textContent = `${m.name} (${m.mitarbeiter_nr})`;
+      select.appendChild(option);
+    });
+
+    // Initialize searchable dropdown
+    if (!searchableDropdowns['verstoesse-mitarbeiter']) {
+      initSearchableDropdown('verstoesse-mitarbeiter', { placeholder: 'Mitarbeiter...' });
+    } else {
+      const items = mitarbeiter.map(m => ({ value: m.id, label: `${m.name} (${m.mitarbeiter_nr})` }));
+      searchableDropdowns['verstoesse-mitarbeiter'].setItems(items);
     }
   } catch (e) {
     console.error('Mitarbeiter laden fehlgeschlagen:', e);
@@ -4051,12 +4440,28 @@ async function initLeistungsnachweisForm() {
 
     // Handle both array and {data: []} response formats
     const kunden = Array.isArray(kundenData) ? kundenData : (kundenData.data || []);
-    if (kunden.length > 0) {
-      const options = kunden.filter(k => k.aktiv !== 0).map(function(k) {
+    const activeKunden = kunden.filter(k => k.aktiv !== 0);
+
+    if (activeKunden.length > 0) {
+      const options = activeKunden.map(function(k) {
         return '<option value="' + k.id + '">' + k.name + '</option>';
       }).join('');
       if (kundeSelect) kundeSelect.innerHTML = '<option value="">-- Auswählen --</option>' + options;
       if (filterKunde) filterKunde.innerHTML = '<option value="">Alle</option>' + options;
+    }
+
+    // Initialize searchable dropdowns for Kunden
+    const kundenItems = activeKunden.map(k => ({ value: k.id, label: k.name }));
+    if (kundeSelect && !searchableDropdowns['ln-kunde-select']) {
+      initSearchableDropdown('ln-kunde-select', { placeholder: 'Kunde auswählen...', allowEmpty: true, emptyLabel: '-- Auswählen --' });
+    } else if (searchableDropdowns['ln-kunde-select']) {
+      searchableDropdowns['ln-kunde-select'].setItems(kundenItems);
+    }
+
+    if (filterKunde && !searchableDropdowns['ln-filter-kunde']) {
+      initSearchableDropdown('ln-filter-kunde', { placeholder: 'Kunde...' });
+    } else if (searchableDropdowns['ln-filter-kunde']) {
+      searchableDropdowns['ln-filter-kunde'].setItems(kundenItems);
     }
 
     // Baustellen laden (bestehender Endpunkt)
@@ -4064,15 +4469,25 @@ async function initLeistungsnachweisForm() {
     const baustelleSelect = document.getElementById('ln-baustelle-select');
 
     const baustellen = Array.isArray(baustellenData) ? baustellenData : (baustellenData.data || []);
-    if (baustellen.length > 0 && baustelleSelect) {
+    const activeBaustellen = baustellen.filter(b => b.aktiv !== 0);
+
+    if (activeBaustellen.length > 0 && baustelleSelect) {
       baustelleSelect.innerHTML = '<option value="">-- Auswählen --</option>' +
-        baustellen.filter(b => b.aktiv !== 0).map(function(b) {
+        activeBaustellen.map(function(b) {
           return '<option value="' + b.id + '">' + b.name + '</option>';
         }).join('');
     }
 
+    // Initialize searchable dropdown for Baustellen
+    const baustellenItems = activeBaustellen.map(b => ({ value: b.id, label: b.name }));
+    if (baustelleSelect && !searchableDropdowns['ln-baustelle-select']) {
+      initSearchableDropdown('ln-baustelle-select', { placeholder: 'Baustelle auswählen...', allowEmpty: true, emptyLabel: '-- Auswählen --' });
+    } else if (searchableDropdowns['ln-baustelle-select']) {
+      searchableDropdowns['ln-baustelle-select'].setItems(baustellenItems);
+    }
+
     // Mitarbeiter laden (Admin-Endpunkt)
-    const mitarbeiterData = await api('/admin/mitarbeiter?limit=100', 'GET', null, false);
+    const mitarbeiterData = await api('/admin/mitarbeiter?limit=1000', 'GET', null, false);
     const checkboxContainer = document.getElementById('ln-mitarbeiter-checkboxes');
 
     const mitarbeiter = Array.isArray(mitarbeiterData) ? mitarbeiterData : (mitarbeiterData.data || []);
@@ -4146,6 +4561,14 @@ function resetLeistungsnachweisForm() {
   const titleField = document.getElementById('ln-form-title');
   if (titleField) titleField.textContent = 'Neuen Leistungsnachweis erstellen';
   document.querySelectorAll('input[name="ln-mitarbeiter"]').forEach(function(cb) { cb.checked = false; });
+
+  // Reset searchable dropdowns
+  if (searchableDropdowns['ln-kunde-select']) {
+    searchableDropdowns['ln-kunde-select'].setValue('');
+  }
+  if (searchableDropdowns['ln-baustelle-select']) {
+    searchableDropdowns['ln-baustelle-select'].setValue('');
+  }
 }
 
 // Leistungsnachweis bearbeiten
@@ -4170,6 +4593,14 @@ async function editLeistungsnachweis(id) {
     document.getElementById('ln-dauer').value = ln.leistungsdauer_minuten || '';
     document.getElementById('ln-beschreibung').value = ln.beschreibung || '';
     document.getElementById('ln-notizen').value = ln.notizen || '';
+
+    // Update searchable dropdowns with selected values
+    if (searchableDropdowns['ln-kunde-select']) {
+      searchableDropdowns['ln-kunde-select'].setValue(ln.kunde_id || '');
+    }
+    if (searchableDropdowns['ln-baustelle-select']) {
+      searchableDropdowns['ln-baustelle-select'].setValue(ln.baustelle_id || '');
+    }
 
     // Mitarbeiter-Checkboxen setzen
     document.querySelectorAll('input[name="ln-mitarbeiter"]').forEach(function(cb) {
@@ -4660,11 +5091,20 @@ async function openSchlechtwetterModal(id) {
 
   var baustellenSelect = document.getElementById('sw-baustelle');
   try {
-    var baustellen = await api('/baustellen', 'GET', null, false);
+    var baustellenData = await api('/baustellen', 'GET', null, false);
+    var baustellen = Array.isArray(baustellenData) ? baustellenData : (baustellenData.data || []);
     baustellenSelect.innerHTML = '<option value="">Bitte wählen...</option>' +
-      (Array.isArray(baustellen) ? baustellen : (baustellen.data || [])).map(function(b) {
+      baustellen.map(function(b) {
         return '<option value="' + b.id + '">' + escapeHtml(b.name) + '</option>';
       }).join('');
+
+    // Initialize searchable dropdown
+    var baustellenItems = baustellen.map(function(b) { return { value: b.id, label: b.name }; });
+    if (!searchableDropdowns['sw-baustelle']) {
+      initSearchableDropdown('sw-baustelle', { placeholder: 'Baustelle auswählen...', allowEmpty: true, emptyLabel: 'Bitte wählen...' });
+    } else {
+      searchableDropdowns['sw-baustelle'].setItems(baustellenItems);
+    }
   } catch (e) {}
 
   var checkboxContainer = document.getElementById('sw-mitarbeiter-checkboxes');
@@ -4688,6 +5128,11 @@ async function openSchlechtwetterModal(id) {
       document.getElementById('sw-dauer').value = sw.dauer_minuten || '';
       document.getElementById('sw-notizen').value = sw.notizen || '';
 
+      // Update searchable dropdown with selected value
+      if (searchableDropdowns['sw-baustelle']) {
+        searchableDropdowns['sw-baustelle'].setValue(sw.baustelle_id || '');
+      }
+
       if (sw.mitarbeiter) {
         sw.mitarbeiter.forEach(function(m) {
           var cb = document.querySelector('input[name="sw-ma"][value="' + m.id + '"]');
@@ -4702,6 +5147,11 @@ async function openSchlechtwetterModal(id) {
     var today = new Date();
     document.getElementById('sw-datum').value = today.getDate().toString().padStart(2, '0') + '.' +
       (today.getMonth() + 1).toString().padStart(2, '0') + '.' + today.getFullYear();
+
+    // Reset searchable dropdown
+    if (searchableDropdowns['sw-baustelle']) {
+      searchableDropdowns['sw-baustelle'].setValue('');
+    }
   }
 
   if (typeof flatpickr !== 'undefined') {
