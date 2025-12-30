@@ -64,12 +64,44 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
-# Sync to deploy directory (exclude .git and node_modules)
-log "Syncing to $DEPLOY_DIR..."
-rsync -av --exclude='.git' --exclude='node_modules' --exclude='*.db' "$REPO_DIR/" "$DEPLOY_DIR/" 2>&1 | tee -a "$LOG_FILE"
+# Build frontend (minify JS/CSS)
+log "Building frontend..."
+npm run build 2>&1 | tee -a "$LOG_FILE"
 
-# Install dependencies in deploy dir
-log "Installing dependencies in deploy directory..."
+if [ $? -ne 0 ]; then
+    log "ERROR: Build failed!"
+    exit 1
+fi
+
+# Create deploy directory structure if needed
+log "Preparing deploy directory..."
+mkdir -p "$DEPLOY_DIR/public"
+
+# Deploy backend files
+log "Deploying backend files..."
+cp "$REPO_DIR/server.js" "$DEPLOY_DIR/"
+cp "$REPO_DIR/database.js" "$DEPLOY_DIR/"
+cp "$REPO_DIR/package.json" "$DEPLOY_DIR/"
+cp "$REPO_DIR/package-lock.json" "$DEPLOY_DIR/" 2>/dev/null || true
+
+# Deploy built frontend files (from dist/)
+log "Deploying built frontend files..."
+cp "$REPO_DIR/dist/index.html" "$DEPLOY_DIR/public/"
+cp "$REPO_DIR/dist/app.min.js" "$DEPLOY_DIR/public/"
+cp "$REPO_DIR/dist/style.min.css" "$DEPLOY_DIR/public/"
+cp "$REPO_DIR/dist/hilfe.html" "$DEPLOY_DIR/public/" 2>/dev/null || true
+cp "$REPO_DIR/dist/inspektion.html" "$DEPLOY_DIR/public/" 2>/dev/null || true
+
+# Copy config.json if exists
+cp "$REPO_DIR/public/config.json" "$DEPLOY_DIR/public/" 2>/dev/null || true
+
+# Remove old unminified source files from production (security)
+log "Removing raw source files from production..."
+rm -f "$DEPLOY_DIR/public/app.js" 2>/dev/null || true
+rm -f "$DEPLOY_DIR/public/style.css" 2>/dev/null || true
+
+# Install production dependencies in deploy dir
+log "Installing production dependencies in deploy directory..."
 cd "$DEPLOY_DIR" && npm install --production 2>&1 | tee -a "$LOG_FILE"
 
 # Restart PM2 process
