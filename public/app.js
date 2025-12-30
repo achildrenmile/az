@@ -698,7 +698,7 @@ async function loadBaustellen(page = 1) {
     const tbody = document.querySelector('#baustellen-table tbody');
 
     if (total === 0) {
-      tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:40px;color:var(--text-secondary)">Noch keine Baustellen angelegt.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:40px;color:var(--text-secondary)">Noch keine Projekte / Baustellen angelegt.</td></tr>';
       renderPagination('baustellen-pagination', 1, 1, 0, 'goToBaustellenPage');
       return;
     }
@@ -843,7 +843,7 @@ function printZeitnachweis(eintraege, vonAT, bisAT, filterInfo) {
     filterInfoHtml += `<div class="info-row"><strong>Mitarbeiter:</strong> ${mitarbeiterFilter}</div>`;
   }
   if (baustelleFilter) {
-    filterInfoHtml += `<div class="info-row"><strong>Baustelle:</strong> ${baustelleFilter}</div>`;
+    filterInfoHtml += `<div class="info-row"><strong>Projekt / Baustelle:</strong> ${baustelleFilter}</div>`;
   }
   if (kundeFilter) {
     filterInfoHtml += `<div class="info-row"><strong>Kunde:</strong> ${kundeFilter}</div>`;
@@ -960,7 +960,7 @@ function printZeitnachweis(eintraege, vonAT, bisAT, filterInfo) {
         <th>Ende</th>
         <th>Pause (Min)</th>
         <th>Netto</th>
-        ${showBaustelleCol ? '<th>Baustelle</th>' : ''}
+        ${showBaustelleCol ? '<th>Projekt / Baustelle</th>' : ''}
         ${showKundeCol ? '<th>Kunde</th>' : ''}
       </tr>
     </thead>
@@ -1104,7 +1104,7 @@ window.printEinzelnerEintrag = async (id) => {
     </div>
     ${eintrag.baustelle ? `
     <div class="row">
-      <div class="label">Baustelle:</div>
+      <div class="label">Projekt / Baustelle:</div>
       <div class="value">${eintrag.baustelle}</div>
     </div>` : ''}
     ${eintrag.kunde ? `
@@ -1314,7 +1314,7 @@ window.openBaustelleModal = async (id = null) => {
 
   if (id) {
     // Bearbeiten - Daten laden
-    title.textContent = 'Baustelle bearbeiten';
+    title.textContent = 'Projekt / Baustelle bearbeiten';
     try {
       const baustelle = await api(`/admin/baustellen/${id}`);
       document.getElementById('baustelle-id').value = baustelle.id;
@@ -1327,7 +1327,7 @@ window.openBaustelleModal = async (id = null) => {
       return;
     }
   } else {
-    title.textContent = 'Neue Baustelle';
+    title.textContent = 'Neues Projekt / Baustelle';
   }
 
   modal.classList.remove('hidden');
@@ -2552,7 +2552,7 @@ async function loadMonatsabrechnung() {
               <th>Ende</th>
               <th>Pause</th>
               <th>Netto</th>
-              <th>Baustelle/Kunde</th>
+              <th>Projekt / Baustelle / Kunde</th>
             </tr>
           </thead>
           <tbody>
@@ -2801,7 +2801,7 @@ function printMonatsabrechnung() {
             <th>Ende</th>
             <th class="center">Pause</th>
             <th class="right">Netto</th>
-            <th>Baustelle/Kunde</th>
+            <th>Projekt / Baustelle / Kunde</th>
           </tr>
         </thead>
         <tbody>

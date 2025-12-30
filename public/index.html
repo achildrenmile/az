@@ -91,7 +91,7 @@
           </div>
 
           <div class="form-group">
-            <label for="baustelle">Baustelle / Projekt</label>
+            <label for="baustelle">Projekt / Baustelle</label>
             <input type="text" id="baustelle" list="baustellen-liste" placeholder="Auswählen oder eingeben">
             <datalist id="baustellen-liste"></datalist>
           </div>
@@ -138,7 +138,7 @@
                 <th>Ende</th>
                 <th>Pause</th>
                 <th>Netto</th>
-                <th>Baustelle</th>
+                <th>Projekt / Baustelle</th>
                 <th>Aktionen</th>
               </tr>
             </thead>
@@ -208,7 +208,7 @@
           </div>
         </div>
         <div class="form-group">
-          <label for="edit-baustelle">Baustelle</label>
+          <label for="edit-baustelle">Projekt / Baustelle</label>
           <input type="text" id="edit-baustelle" list="baustellen-liste">
         </div>
         <div class="form-group">
@@ -304,7 +304,7 @@
         <button class="tab" data-tab="verstoesse">Verstöße</button>
         <button class="tab" data-tab="mitarbeiter">Mitarbeiter</button>
         <button class="tab" data-tab="kunden">Kunden</button>
-        <button class="tab" data-tab="baustellen">Baustellen</button>
+        <button class="tab" data-tab="baustellen">Projekte / Baustellen</button>
         <button class="tab" data-tab="pausenregeln">Pausenregeln</button>
         <button class="tab" data-tab="kollektivvertrag">Kollektivverträge</button>
         <button class="tab" data-tab="einstellungen">Einstellungen</button>
@@ -332,7 +332,7 @@
               </select>
             </div>
             <div class="form-group">
-              <label for="filter-baustelle">Baustelle</label>
+              <label for="filter-baustelle">Projekt / Baustelle</label>
               <select id="filter-baustelle">
                 <option value="">Alle</option>
               </select>
@@ -359,7 +359,7 @@
                   <th>Ende</th>
                   <th>Pause</th>
                   <th>Netto</th>
-                  <th>Baustelle</th>
+                  <th>Projekt / Baustelle</th>
                   <th>Kunde</th>
                   <th></th>
                 </tr>
@@ -684,11 +684,11 @@
         </div>
       </div>
 
-      <!-- Baustellen Tab -->
+      <!-- Projekte / Baustellen Tab -->
       <div id="tab-baustellen" class="tab-content hidden">
         <div class="card">
-          <h2>Baustellen verwalten</h2>
-          <button class="btn btn-primary" onclick="openBaustelleModal()">+ Neue Baustelle</button>
+          <h2>Projekte / Baustellen verwalten</h2>
+          <button class="btn btn-primary" onclick="openBaustelleModal()">+ Neues Projekt / Baustelle</button>
           <div id="baustelle-message" class="message"></div>
 
           <div class="table-container">
@@ -1135,7 +1135,7 @@
   <div id="baustelle-modal" class="modal hidden">
     <div class="modal-backdrop" onclick="closeBaustelleModal()"></div>
     <div class="modal-content card">
-      <h2 id="baustelle-modal-title">Neue Baustelle</h2>
+      <h2 id="baustelle-modal-title">Neues Projekt / Baustelle</h2>
       <form id="baustelle-form">
         <input type="hidden" id="baustelle-id">
         <div class="form-group">
