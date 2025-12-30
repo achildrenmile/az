@@ -42,6 +42,9 @@ if (fs.existsSync('dist/hilfe.html')) {
 if (fs.existsSync('dist/inspektion.html')) {
   fs.copyFileSync('dist/inspektion.html', path.join(publicDir, 'inspektion.html'));
 }
+if (fs.existsSync('dist/datenschutz.html')) {
+  fs.copyFileSync('dist/datenschutz.html', path.join(publicDir, 'datenschutz.html'));
+}
 
 // Remove old unminified files from production (if they exist)
 const filesToRemove = ['app.js', 'style.css'];
@@ -76,5 +79,5 @@ console.log('');
 console.log('Deployment complete!');
 console.log('');
 console.log('Deployed files:');
-console.log('  Frontend: index.html, app.min.js, style.min.css, hilfe.html');
+console.log('  Frontend: index.html, app.min.js, style.min.css, hilfe.html, datenschutz.html');
 console.log('  Backend:  server.js, database.js');

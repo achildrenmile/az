@@ -1777,3 +1777,57 @@ td[title] {
   opacity: 0.5;
   cursor: not-allowed;
 }
+
+/* Legal Footer */
+.legal-footer {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(8px);
+  border-top: 1px solid var(--border);
+  padding: 10px 20px;
+  text-align: center;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  z-index: 100;
+}
+
+.legal-footer a {
+  color: var(--text-secondary);
+  text-decoration: none;
+  transition: color 0.2s;
+}
+
+.legal-footer a:hover {
+  color: var(--primary);
+}
+
+.footer-divider {
+  margin: 0 12px;
+  color: var(--border);
+}
+
+/* Ensure content doesn't get hidden behind footer */
+body {
+  padding-bottom: 50px;
+}
+
+/* Hide footer on login view (cleaner appearance) */
+#login-view ~ .legal-footer,
+.view:not(.hidden) ~ .legal-footer {
+  display: block;
+}
+
+/* Mobile footer */
+@media (max-width: 768px) {
+  .legal-footer {
+    padding: 8px 15px;
+    font-size: 0.75rem;
+  }
+
+  .footer-divider {
+    margin: 0 8px;
+  }
+}
