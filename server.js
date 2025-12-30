@@ -2199,6 +2199,367 @@ app.get('/api/admin/verstoesse', checkSession, checkAdmin, (req, res) => {
   res.json(verstoesse);
 });
 
+// ==================== LEISTUNGSNACHWEISE ROUTES ====================
+
+// Stammdaten für Leistungsnachweis-Formular (für alle authentifizierten Benutzer)
+app.get('/api/leistungsnachweise/stammdaten/kunden', checkSession, (req, res) => {
+  const kunden = db.getAllKunden(1, 1000);
+  res.json({ data: kunden.data.filter(k => k.aktiv === 1).map(k => ({ id: k.id, name: k.name })) });
+});
+
+app.get('/api/leistungsnachweise/stammdaten/baustellen', checkSession, (req, res) => {
+  const baustellen = db.getAllBaustellen(1, 1000);
+  res.json({ data: baustellen.data.filter(b => b.aktiv === 1).map(b => ({ id: b.id, name: b.name })) });
+});
+
+app.get('/api/leistungsnachweise/stammdaten/mitarbeiter', checkSession, (req, res) => {
+  const mitarbeiter = db.getAllMitarbeiter(1, 1000);
+  res.json({ data: mitarbeiter.data.filter(m => m.aktiv === 1).map(m => ({ id: m.id, name: m.name, mitarbeiter_nr: m.mitarbeiter_nr })) });
+});
+
+// Leistungsnachweise auflisten (alle Benutzer können eigene sehen, Admins alle)
+app.get('/api/leistungsnachweise', checkSession, (req, res) => {
+  const filter = {
+    page: parseInt(req.query.page) || 1,
+    limit: parseInt(req.query.limit) || 20,
+    status: req.query.status || null,
+    kunde_id: req.query.kunde_id ? parseInt(req.query.kunde_id) : null,
+    baustelle_id: req.query.baustelle_id ? parseInt(req.query.baustelle_id) : null,
+    datum_von: req.query.datum_von || null,
+    datum_bis: req.query.datum_bis || null
+  };
+
+  // Nicht-Admins sehen nur eigene Einträge
+  if (!req.session.mitarbeiter.ist_admin) {
+    filter.ersteller_id = req.session.mitarbeiter.id;
+  } else if (req.query.ersteller_id) {
+    filter.ersteller_id = parseInt(req.query.ersteller_id);
+  }
+
+  if (req.query.mitarbeiter_id) {
+    filter.mitarbeiter_id = parseInt(req.query.mitarbeiter_id);
+  }
+
+  const result = db.getLeistungsnachweise(filter);
+  res.json(result);
+});
+
+// Einzelnen Leistungsnachweis abrufen
+app.get('/api/leistungsnachweise/:id', checkSession, (req, res) => {
+  const id = parseInt(req.params.id);
+  const ln = db.getLeistungsnachweis(id);
+
+  if (!ln) {
+    return res.status(404).json({ error: 'Leistungsnachweis nicht gefunden' });
+  }
+
+  // Nicht-Admins dürfen nur eigene sehen
+  if (!req.session.mitarbeiter.ist_admin && ln.ersteller_id !== req.session.mitarbeiter.id) {
+    return res.status(403).json({ error: 'Kein Zugriff auf diesen Leistungsnachweis' });
+  }
+
+  res.json(ln);
+});
+
+// Neuen Leistungsnachweis erstellen
+app.post('/api/leistungsnachweise', checkSession, (req, res) => {
+  const { datum, kunde_id, baustelle_id, kunde_freitext, baustelle_freitext,
+          beschreibung, leistungszeit_von, leistungszeit_bis, leistungsdauer_minuten,
+          notizen, mitarbeiter_ids } = req.body;
+
+  if (!datum || !beschreibung) {
+    return res.status(400).json({ error: 'Datum und Beschreibung sind erforderlich' });
+  }
+
+  try {
+    const result = db.createLeistungsnachweis({
+      datum,
+      kunde_id: kunde_id || null,
+      baustelle_id: baustelle_id || null,
+      kunde_freitext: kunde_freitext || null,
+      baustelle_freitext: baustelle_freitext || null,
+      beschreibung,
+      leistungszeit_von: leistungszeit_von || null,
+      leistungszeit_bis: leistungszeit_bis || null,
+      leistungsdauer_minuten: leistungsdauer_minuten || null,
+      notizen: notizen || null,
+      ersteller_id: req.session.mitarbeiter.id,
+      mitarbeiter_ids: mitarbeiter_ids || []
+    });
+
+    res.json({ success: true, id: result.id });
+  } catch (err) {
+    console.error('Fehler beim Erstellen des Leistungsnachweises:', err);
+    res.status(500).json({ error: 'Fehler beim Erstellen' });
+  }
+});
+
+// Leistungsnachweis aktualisieren (nur Entwürfe)
+app.put('/api/leistungsnachweise/:id', checkSession, (req, res) => {
+  const id = parseInt(req.params.id);
+  const ln = db.getLeistungsnachweis(id);
+
+  if (!ln) {
+    return res.status(404).json({ error: 'Leistungsnachweis nicht gefunden' });
+  }
+
+  // Nur Ersteller oder Admin dürfen bearbeiten
+  if (!req.session.mitarbeiter.ist_admin && ln.ersteller_id !== req.session.mitarbeiter.id) {
+    return res.status(403).json({ error: 'Keine Berechtigung zum Bearbeiten' });
+  }
+
+  const { datum, kunde_id, baustelle_id, kunde_freitext, baustelle_freitext,
+          beschreibung, leistungszeit_von, leistungszeit_bis, leistungsdauer_minuten,
+          notizen, mitarbeiter_ids } = req.body;
+
+  try {
+    const result = db.updateLeistungsnachweis(id, {
+      datum,
+      kunde_id: kunde_id || null,
+      baustelle_id: baustelle_id || null,
+      kunde_freitext: kunde_freitext || null,
+      baustelle_freitext: baustelle_freitext || null,
+      beschreibung,
+      leistungszeit_von: leistungszeit_von || null,
+      leistungszeit_bis: leistungszeit_bis || null,
+      leistungsdauer_minuten: leistungsdauer_minuten || null,
+      notizen: notizen || null,
+      mitarbeiter_ids: mitarbeiter_ids || []
+    });
+
+    if (!result.success) {
+      return res.status(400).json({ error: result.error });
+    }
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Fehler beim Aktualisieren des Leistungsnachweises:', err);
+    res.status(500).json({ error: 'Fehler beim Aktualisieren' });
+  }
+});
+
+// Leistungsnachweis unterschreiben
+app.post('/api/leistungsnachweise/:id/unterschreiben', checkSession, (req, res) => {
+  const id = parseInt(req.params.id);
+  const { unterschrift_daten, unterschrift_name } = req.body;
+
+  if (!unterschrift_daten || !unterschrift_name) {
+    return res.status(400).json({ error: 'Unterschrift und Name sind erforderlich' });
+  }
+
+  const ln = db.getLeistungsnachweis(id);
+
+  if (!ln) {
+    return res.status(404).json({ error: 'Leistungsnachweis nicht gefunden' });
+  }
+
+  try {
+    const result = db.signLeistungsnachweis(id, unterschrift_daten, unterschrift_name);
+
+    if (!result.success) {
+      return res.status(400).json({ error: result.error });
+    }
+
+    res.json({ success: true, unterschrift_zeitpunkt: result.unterschrift_zeitpunkt });
+  } catch (err) {
+    console.error('Fehler beim Unterschreiben:', err);
+    res.status(500).json({ error: 'Fehler beim Unterschreiben' });
+  }
+});
+
+// Leistungsnachweis stornieren
+app.post('/api/leistungsnachweise/:id/stornieren', checkSession, (req, res) => {
+  const id = parseInt(req.params.id);
+  const { grund } = req.body;
+
+  const ln = db.getLeistungsnachweis(id);
+
+  if (!ln) {
+    return res.status(404).json({ error: 'Leistungsnachweis nicht gefunden' });
+  }
+
+  // Nur Ersteller oder Admin dürfen stornieren
+  if (!req.session.mitarbeiter.ist_admin && ln.ersteller_id !== req.session.mitarbeiter.id) {
+    return res.status(403).json({ error: 'Keine Berechtigung zum Stornieren' });
+  }
+
+  try {
+    const result = db.storniereLeistungsnachweis(id, req.session.mitarbeiter.id, grund || '');
+
+    if (!result.success) {
+      return res.status(400).json({ error: result.error });
+    }
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Fehler beim Stornieren:', err);
+    res.status(500).json({ error: 'Fehler beim Stornieren' });
+  }
+});
+
+// Leistungsnachweis löschen (nur Entwürfe)
+app.delete('/api/leistungsnachweise/:id', checkSession, (req, res) => {
+  const id = parseInt(req.params.id);
+  const ln = db.getLeistungsnachweis(id);
+
+  if (!ln) {
+    return res.status(404).json({ error: 'Leistungsnachweis nicht gefunden' });
+  }
+
+  // Nur Ersteller oder Admin dürfen löschen
+  if (!req.session.mitarbeiter.ist_admin && ln.ersteller_id !== req.session.mitarbeiter.id) {
+    return res.status(403).json({ error: 'Keine Berechtigung zum Löschen' });
+  }
+
+  try {
+    const result = db.deleteLeistungsnachweis(id);
+
+    if (!result.success) {
+      return res.status(400).json({ error: result.error });
+    }
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Fehler beim Löschen:', err);
+    res.status(500).json({ error: 'Fehler beim Löschen' });
+  }
+});
+
+// Leistungsnachweis als PDF exportieren
+app.get('/api/leistungsnachweise/:id/pdf', checkSession, (req, res) => {
+  const id = parseInt(req.params.id);
+  const ln = db.getLeistungsnachweis(id);
+
+  if (!ln) {
+    return res.status(404).json({ error: 'Leistungsnachweis nicht gefunden' });
+  }
+
+  // Nicht-Admins dürfen nur eigene sehen
+  if (!req.session.mitarbeiter.ist_admin && ln.ersteller_id !== req.session.mitarbeiter.id) {
+    return res.status(403).json({ error: 'Kein Zugriff auf diesen Leistungsnachweis' });
+  }
+
+  try {
+    const PDFDocument = require('pdfkit');
+    const doc = new PDFDocument({ size: 'A4', margin: 50 });
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename=leistungsnachweis_${id}.pdf`);
+
+    doc.pipe(res);
+
+    // Header
+    doc.fontSize(18).text('Leistungsnachweis', { align: 'center' });
+    doc.moveDown();
+
+    // Status-Badge
+    const statusText = ln.status === 'unterschrieben' ? 'UNTERSCHRIEBEN' :
+                       ln.status === 'storniert' ? 'STORNIERT' : 'ENTWURF';
+    doc.fontSize(12).text(`Status: ${statusText}`, { align: 'right' });
+    doc.moveDown();
+
+    // Trennlinie
+    doc.moveTo(50, doc.y).lineTo(545, doc.y).stroke();
+    doc.moveDown();
+
+    // Details
+    doc.fontSize(11);
+
+    doc.text(`Datum: ${formatDateAT(ln.datum)}`);
+    doc.moveDown(0.5);
+
+    if (ln.kunde_name || ln.kunde_freitext) {
+      doc.text(`Kunde: ${ln.kunde_name || ln.kunde_freitext}`);
+      doc.moveDown(0.5);
+    }
+
+    if (ln.baustelle_name || ln.baustelle_freitext) {
+      doc.text(`Projekt/Baustelle: ${ln.baustelle_name || ln.baustelle_freitext}`);
+      doc.moveDown(0.5);
+    }
+
+    // Leistungszeit
+    if (ln.leistungszeit_von && ln.leistungszeit_bis) {
+      doc.text(`Leistungszeit: ${ln.leistungszeit_von} - ${ln.leistungszeit_bis}`);
+    } else if (ln.leistungsdauer_minuten) {
+      const stunden = Math.floor(ln.leistungsdauer_minuten / 60);
+      const minuten = ln.leistungsdauer_minuten % 60;
+      doc.text(`Leistungsdauer: ${stunden}h ${minuten}min`);
+    }
+    doc.moveDown(0.5);
+
+    // Mitarbeiter
+    if (ln.mitarbeiter && ln.mitarbeiter.length > 0) {
+      doc.text(`Beteiligte Mitarbeiter: ${ln.mitarbeiter.map(m => m.name).join(', ')}`);
+      doc.moveDown(0.5);
+    }
+
+    doc.moveDown();
+
+    // Beschreibung
+    doc.fontSize(12).text('Leistungsbeschreibung:', { underline: true });
+    doc.fontSize(11).text(ln.beschreibung);
+    doc.moveDown();
+
+    // Notizen
+    if (ln.notizen) {
+      doc.fontSize(12).text('Notizen:', { underline: true });
+      doc.fontSize(11).text(ln.notizen);
+      doc.moveDown();
+    }
+
+    // Trennlinie
+    doc.moveTo(50, doc.y).lineTo(545, doc.y).stroke();
+    doc.moveDown();
+
+    // Unterschrift
+    if (ln.status === 'unterschrieben' && ln.unterschrift_daten) {
+      doc.fontSize(12).text('Kundenunterschrift:', { underline: true });
+      doc.moveDown(0.5);
+
+      // Unterschrift als Bild einfügen (Base64)
+      try {
+        const imgData = ln.unterschrift_daten.replace(/^data:image\/\w+;base64,/, '');
+        const imgBuffer = Buffer.from(imgData, 'base64');
+        doc.image(imgBuffer, { width: 200, height: 80 });
+      } catch (imgErr) {
+        doc.text('[Unterschrift konnte nicht geladen werden]');
+      }
+
+      doc.moveDown(0.5);
+      doc.fontSize(10).text(`Unterzeichnet von: ${ln.unterschrift_name}`);
+      doc.text(`Zeitpunkt: ${ln.unterschrift_zeitpunkt}`);
+    } else if (ln.status === 'storniert') {
+      doc.fontSize(12).fillColor('red').text('STORNIERT', { align: 'center' });
+      doc.fillColor('black');
+      doc.fontSize(10).text(`Storniert am: ${ln.storniert_am}`);
+      if (ln.storniert_von_name) {
+        doc.text(`Storniert von: ${ln.storniert_von_name}`);
+      }
+      if (ln.storno_grund) {
+        doc.text(`Grund: ${ln.storno_grund}`);
+      }
+    } else {
+      doc.fontSize(10).text('Unterschriftsfeld:', { underline: true });
+      doc.moveDown(2);
+      doc.moveTo(50, doc.y).lineTo(250, doc.y).stroke();
+      doc.moveDown(0.5);
+      doc.text('Datum, Unterschrift Kunde');
+    }
+
+    // Footer
+    doc.moveDown(2);
+    doc.fontSize(8).fillColor('gray');
+    doc.text(`Erstellt von: ${ln.ersteller_name} am ${ln.erstellt_am}`, { align: 'left' });
+    doc.text(`Leistungsnachweis-Nr: LN-${String(ln.id).padStart(6, '0')}`, { align: 'right' });
+
+    doc.end();
+  } catch (err) {
+    console.error('Fehler beim PDF-Export:', err);
+    res.status(500).json({ error: 'Fehler beim PDF-Export' });
+  }
+});
+
 // ==================== START ====================
 
 app.listen(PORT, () => {

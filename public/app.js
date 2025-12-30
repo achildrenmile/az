@@ -619,6 +619,17 @@ document.querySelectorAll('.tab').forEach(tab => {
         if (arrow) arrow.textContent = '▾';
       }
     }
+
+    // Leistungsnachweise-spezifische Initialisierung
+    const tabName = tab.dataset.tab;
+    if (tabName === 'leistungsnachweise' || tabName === 'leistungsnachweis-neu') {
+      if (typeof initLeistungsnachweisForm === 'function') {
+        initLeistungsnachweisForm();
+      }
+      if (tabName === 'leistungsnachweise' && typeof loadLeistungsnachweise === 'function') {
+        loadLeistungsnachweise();
+      }
+    }
   });
 });
 
@@ -3821,3 +3832,532 @@ function formatDateDisplay(dateStr) {
 
 // Event-Listener für Retention-Form
 document.getElementById('retention-form')?.addEventListener('submit', saveRetentionKonfig);
+
+// Globale switchTab Funktion für programmatischen Tab-Wechsel
+function switchTab(tabName) {
+  // Remove active from all tabs
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.tab-content').forEach(c => c.classList.add('hidden'));
+
+  // Set active tab content
+  const tabContent = document.getElementById('tab-' + tabName);
+  if (tabContent) {
+    tabContent.classList.remove('hidden');
+  }
+
+  // Set active tab button
+  const tabButton = document.querySelector('[data-tab="' + tabName + '"]');
+  if (tabButton) {
+    tabButton.classList.add('active');
+
+    // Update group header
+    document.querySelectorAll('.nav-group-header').forEach(h => h.classList.remove('active'));
+    const parentGroup = tabButton.closest('.nav-group');
+    if (parentGroup) {
+      parentGroup.querySelector('.nav-group-header').classList.add('active');
+      // Open the group
+      const items = parentGroup.querySelector('.nav-group-items');
+      const arrow = parentGroup.querySelector('.nav-group-arrow');
+      if (items) items.classList.add('open');
+      if (arrow) arrow.textContent = '▾';
+    }
+  }
+
+  // Leistungsnachweise-spezifische Initialisierung
+  if (tabName === 'leistungsnachweise' || tabName === 'leistungsnachweis-neu' || tabName === 'leistungsnachweis-detail') {
+    if (typeof initLeistungsnachweisForm === 'function') {
+      initLeistungsnachweisForm();
+    }
+    if (tabName === 'leistungsnachweise' && typeof loadLeistungsnachweise === 'function') {
+      loadLeistungsnachweise();
+    }
+  }
+}
+
+// ==================== LEISTUNGSNACHWEISE ====================
+
+let currentLeistungsnachweisId = null;
+let isDrawing = false;
+
+// Leistungsnachweise laden
+async function loadLeistungsnachweise(page = 1) {
+  try {
+    const params = new URLSearchParams();
+    params.append('page', page);
+
+    const filterVon = document.getElementById('ln-filter-von')?.value;
+    const filterBis = document.getElementById('ln-filter-bis')?.value;
+    const filterStatus = document.getElementById('ln-filter-status')?.value;
+    const filterKunde = document.getElementById('ln-filter-kunde')?.value;
+
+    if (filterVon) params.append('datum_von', formatDateForAPI(filterVon));
+    if (filterBis) params.append('datum_bis', formatDateForAPI(filterBis));
+    if (filterStatus) params.append('status', filterStatus);
+    if (filterKunde) params.append('kunde_id', filterKunde);
+
+    const result = await api('/leistungsnachweise?' + params.toString(), 'GET', null, false);
+
+    const tbody = document.querySelector('#leistungsnachweise-table tbody');
+    const emptyMsg = document.getElementById('ln-empty');
+
+    if (result.data && result.data.length > 0) {
+      emptyMsg.classList.add('hidden');
+      tbody.innerHTML = result.data.map(function(ln) {
+        const nr = 'LN-' + String(ln.id).padStart(6, '0');
+        const statusClass = 'status-badge status-' + ln.status;
+        let actions = '<button class="btn btn-secondary btn-sm" onclick="viewLeistungsnachweis(' + ln.id + ')">Ansehen</button>';
+        if (ln.status === 'entwurf') {
+          actions += ' <button class="btn btn-primary btn-sm" onclick="editLeistungsnachweis(' + ln.id + ')">Bearbeiten</button>';
+        }
+        return '<tr>' +
+          '<td>' + nr + '</td>' +
+          '<td>' + formatDateDisplay(ln.datum) + '</td>' +
+          '<td>' + (ln.kunde_name || ln.kunde_freitext || '-') + '</td>' +
+          '<td>' + (ln.baustelle_name || ln.baustelle_freitext || '-') + '</td>' +
+          '<td>' + (ln.mitarbeiter_namen || '-') + '</td>' +
+          '<td><span class="' + statusClass + '">' + ln.status + '</span></td>' +
+          '<td>' + actions + '</td>' +
+          '</tr>';
+      }).join('');
+
+      renderLnPagination('ln-pagination', result.page, result.totalPages);
+    } else {
+      tbody.innerHTML = '';
+      emptyMsg.classList.remove('hidden');
+      document.getElementById('ln-pagination').innerHTML = '';
+    }
+  } catch (error) {
+    console.error('Leistungsnachweise laden fehlgeschlagen:', error);
+  }
+}
+
+// Pagination rendern
+function renderLnPagination(containerId, currentPage, totalPages) {
+  const container = document.getElementById(containerId);
+  if (!container || totalPages <= 1) {
+    if (container) container.innerHTML = '';
+    return;
+  }
+
+  let html = '';
+  html += '<button ' + (currentPage === 1 ? 'disabled' : '') + ' onclick="loadLeistungsnachweise(' + (currentPage - 1) + ')">Zurück</button>';
+
+  for (let i = 1; i <= totalPages; i++) {
+    if (i === 1 || i === totalPages || (i >= currentPage - 2 && i <= currentPage + 2)) {
+      html += '<button class="' + (i === currentPage ? 'active' : '') + '" onclick="loadLeistungsnachweise(' + i + ')">' + i + '</button>';
+    } else if (i === currentPage - 3 || i === currentPage + 3) {
+      html += '<span style="padding:8px;">...</span>';
+    }
+  }
+
+  html += '<button ' + (currentPage === totalPages ? 'disabled' : '') + ' onclick="loadLeistungsnachweise(' + (currentPage + 1) + ')">Weiter</button>';
+
+  container.innerHTML = html;
+}
+
+// Leistungsnachweis-Form initialisieren
+async function initLeistungsnachweisForm() {
+  try {
+    // Kunden laden (bestehender Endpunkt)
+    const kundenData = await api('/kunden', 'GET', null, false);
+    const kundeSelect = document.getElementById('ln-kunde-select');
+    const filterKunde = document.getElementById('ln-filter-kunde');
+
+    // Handle both array and {data: []} response formats
+    const kunden = Array.isArray(kundenData) ? kundenData : (kundenData.data || []);
+    if (kunden.length > 0) {
+      const options = kunden.filter(k => k.aktiv !== 0).map(function(k) {
+        return '<option value="' + k.id + '">' + k.name + '</option>';
+      }).join('');
+      if (kundeSelect) kundeSelect.innerHTML = '<option value="">-- Auswählen --</option>' + options;
+      if (filterKunde) filterKunde.innerHTML = '<option value="">Alle</option>' + options;
+    }
+
+    // Baustellen laden (bestehender Endpunkt)
+    const baustellenData = await api('/baustellen', 'GET', null, false);
+    const baustelleSelect = document.getElementById('ln-baustelle-select');
+
+    const baustellen = Array.isArray(baustellenData) ? baustellenData : (baustellenData.data || []);
+    if (baustellen.length > 0 && baustelleSelect) {
+      baustelleSelect.innerHTML = '<option value="">-- Auswählen --</option>' +
+        baustellen.filter(b => b.aktiv !== 0).map(function(b) {
+          return '<option value="' + b.id + '">' + b.name + '</option>';
+        }).join('');
+    }
+
+    // Mitarbeiter laden (Admin-Endpunkt)
+    const mitarbeiterData = await api('/admin/mitarbeiter?limit=100', 'GET', null, false);
+    const checkboxContainer = document.getElementById('ln-mitarbeiter-checkboxes');
+
+    const mitarbeiter = Array.isArray(mitarbeiterData) ? mitarbeiterData : (mitarbeiterData.data || []);
+    if (mitarbeiter.length > 0 && checkboxContainer) {
+      checkboxContainer.innerHTML = mitarbeiter.filter(m => m.aktiv !== 0).map(function(m) {
+        return '<label><input type="checkbox" name="ln-mitarbeiter" value="' + m.id + '"><span>' + m.name + '</span></label>';
+      }).join('');
+    }
+
+    // Datepicker initialisieren
+    if (typeof flatpickr !== 'undefined') {
+      flatpickr('#ln-datum', { dateFormat: 'd.m.Y', locale: 'de', defaultDate: new Date() });
+      flatpickr('#ln-filter-von', { dateFormat: 'd.m.Y', locale: 'de' });
+      flatpickr('#ln-filter-bis', { dateFormat: 'd.m.Y', locale: 'de' });
+    }
+  } catch (error) {
+    console.error('Formular initialisieren fehlgeschlagen:', error);
+  }
+}
+
+// Leistungsnachweis-Formular absenden
+document.getElementById('leistungsnachweis-form')?.addEventListener('submit', async function(e) {
+  e.preventDefault();
+
+  const editId = document.getElementById('ln-edit-id')?.value;
+  const mitarbeiterCheckboxes = document.querySelectorAll('input[name="ln-mitarbeiter"]:checked');
+  const mitarbeiterIds = Array.from(mitarbeiterCheckboxes).map(function(cb) { return parseInt(cb.value); });
+
+  const data = {
+    datum: formatDateForAPI(document.getElementById('ln-datum').value),
+    kunde_id: document.getElementById('ln-kunde-select').value || null,
+    kunde_freitext: document.getElementById('ln-kunde-freitext').value || null,
+    baustelle_id: document.getElementById('ln-baustelle-select').value || null,
+    baustelle_freitext: document.getElementById('ln-baustelle-freitext').value || null,
+    leistungszeit_von: document.getElementById('ln-zeit-von').value || null,
+    leistungszeit_bis: document.getElementById('ln-zeit-bis').value || null,
+    leistungsdauer_minuten: document.getElementById('ln-dauer').value || null,
+    beschreibung: document.getElementById('ln-beschreibung').value,
+    notizen: document.getElementById('ln-notizen').value || null,
+    mitarbeiter_ids: mitarbeiterIds
+  };
+
+  try {
+    const endpoint = editId ? '/leistungsnachweise/' + editId : '/leistungsnachweise';
+    const method = editId ? 'PUT' : 'POST';
+
+    const result = await api(endpoint, method, data, false);
+
+    if (result.success || result.id) {
+      showLnMessage('ln-form-message', editId ? 'Leistungsnachweis aktualisiert!' : 'Leistungsnachweis erstellt!', 'success');
+      setTimeout(function() {
+        resetLeistungsnachweisForm();
+        switchTab('leistungsnachweise');
+        loadLeistungsnachweise();
+      }, 1000);
+    } else {
+      showLnMessage('ln-form-message', result.error || 'Fehler beim Speichern', 'error');
+    }
+  } catch (error) {
+    console.error('Speichern fehlgeschlagen:', error);
+    showLnMessage('ln-form-message', 'Fehler beim Speichern', 'error');
+  }
+});
+
+// Formular zurücksetzen
+function resetLeistungsnachweisForm() {
+  const form = document.getElementById('leistungsnachweis-form');
+  if (form) form.reset();
+  const editIdField = document.getElementById('ln-edit-id');
+  if (editIdField) editIdField.value = '';
+  const titleField = document.getElementById('ln-form-title');
+  if (titleField) titleField.textContent = 'Neuen Leistungsnachweis erstellen';
+  document.querySelectorAll('input[name="ln-mitarbeiter"]').forEach(function(cb) { cb.checked = false; });
+}
+
+// Leistungsnachweis bearbeiten
+async function editLeistungsnachweis(id) {
+  try {
+    const ln = await api('/leistungsnachweise/' + id, 'GET', null, false);
+
+    if (ln.status !== 'entwurf') {
+      alert('Nur Entwürfe können bearbeitet werden.');
+      return;
+    }
+
+    document.getElementById('ln-edit-id').value = ln.id;
+    document.getElementById('ln-form-title').textContent = 'Leistungsnachweis bearbeiten';
+    document.getElementById('ln-datum').value = formatDateForDisplay(ln.datum);
+    document.getElementById('ln-kunde-select').value = ln.kunde_id || '';
+    document.getElementById('ln-kunde-freitext').value = ln.kunde_freitext || '';
+    document.getElementById('ln-baustelle-select').value = ln.baustelle_id || '';
+    document.getElementById('ln-baustelle-freitext').value = ln.baustelle_freitext || '';
+    document.getElementById('ln-zeit-von').value = ln.leistungszeit_von || '';
+    document.getElementById('ln-zeit-bis').value = ln.leistungszeit_bis || '';
+    document.getElementById('ln-dauer').value = ln.leistungsdauer_minuten || '';
+    document.getElementById('ln-beschreibung').value = ln.beschreibung || '';
+    document.getElementById('ln-notizen').value = ln.notizen || '';
+
+    // Mitarbeiter-Checkboxen setzen
+    document.querySelectorAll('input[name="ln-mitarbeiter"]').forEach(function(cb) {
+      cb.checked = ln.mitarbeiter && ln.mitarbeiter.some(function(m) { return m.id === parseInt(cb.value); });
+    });
+
+    switchTab('leistungsnachweis-neu');
+  } catch (error) {
+    console.error('Leistungsnachweis laden fehlgeschlagen:', error);
+  }
+}
+
+// Leistungsnachweis ansehen
+async function viewLeistungsnachweis(id) {
+  try {
+    const ln = await api('/leistungsnachweise/' + id, 'GET', null, false);
+
+    currentLeistungsnachweisId = id;
+
+    // Detail-Inhalt rendern
+    let html = '';
+    html += '<div class="ln-detail-row"><div class="ln-detail-label">Status:</div><div class="ln-detail-value"><span class="status-badge status-' + ln.status + '">' + ln.status.toUpperCase() + '</span></div></div>';
+    html += '<div class="ln-detail-row"><div class="ln-detail-label">Nachweis-Nr:</div><div class="ln-detail-value">LN-' + String(ln.id).padStart(6, '0') + '</div></div>';
+    html += '<div class="ln-detail-row"><div class="ln-detail-label">Datum:</div><div class="ln-detail-value">' + formatDateDisplay(ln.datum) + '</div></div>';
+    html += '<div class="ln-detail-row"><div class="ln-detail-label">Kunde:</div><div class="ln-detail-value">' + (ln.kunde_name || ln.kunde_freitext || '-') + '</div></div>';
+    html += '<div class="ln-detail-row"><div class="ln-detail-label">Projekt/Baustelle:</div><div class="ln-detail-value">' + (ln.baustelle_name || ln.baustelle_freitext || '-') + '</div></div>';
+
+    if (ln.leistungszeit_von && ln.leistungszeit_bis) {
+      html += '<div class="ln-detail-row"><div class="ln-detail-label">Leistungszeit:</div><div class="ln-detail-value">' + ln.leistungszeit_von + ' - ' + ln.leistungszeit_bis + '</div></div>';
+    } else if (ln.leistungsdauer_minuten) {
+      html += '<div class="ln-detail-row"><div class="ln-detail-label">Leistungsdauer:</div><div class="ln-detail-value">' + Math.floor(ln.leistungsdauer_minuten / 60) + 'h ' + (ln.leistungsdauer_minuten % 60) + 'min</div></div>';
+    }
+
+    if (ln.mitarbeiter && ln.mitarbeiter.length > 0) {
+      html += '<div class="ln-detail-row"><div class="ln-detail-label">Mitarbeiter:</div><div class="ln-detail-value">' + ln.mitarbeiter.map(function(m) { return m.name; }).join(', ') + '</div></div>';
+    }
+
+    html += '<div class="ln-detail-row"><div class="ln-detail-label">Beschreibung:</div><div class="ln-detail-value">' + ln.beschreibung + '</div></div>';
+
+    if (ln.notizen) {
+      html += '<div class="ln-detail-row"><div class="ln-detail-label">Notizen:</div><div class="ln-detail-value">' + ln.notizen + '</div></div>';
+    }
+
+    html += '<div class="ln-detail-row"><div class="ln-detail-label">Erstellt von:</div><div class="ln-detail-value">' + ln.ersteller_name + ' am ' + formatDateTimeDisplay(ln.erstellt_am) + '</div></div>';
+
+    // Unterschrift anzeigen wenn vorhanden
+    if (ln.status === 'unterschrieben' && ln.unterschrift_daten) {
+      html += '<div class="signature-display"><h4>Kundenunterschrift</h4><img src="' + ln.unterschrift_daten + '" alt="Unterschrift"><div class="signature-info"><strong>' + ln.unterschrift_name + '</strong><br>' + formatDateTimeDisplay(ln.unterschrift_zeitpunkt) + '</div></div>';
+    }
+
+    // Storno-Info anzeigen wenn storniert
+    if (ln.status === 'storniert') {
+      html += '<div class="storno-section" style="margin-top:20px;"><h4>Storniert</h4><p>Storniert am: ' + formatDateTimeDisplay(ln.storniert_am) + '</p>';
+      if (ln.storniert_von_name) html += '<p>Storniert von: ' + ln.storniert_von_name + '</p>';
+      if (ln.storno_grund) html += '<p>Grund: ' + ln.storno_grund + '</p>';
+      html += '</div>';
+    }
+
+    document.getElementById('ln-detail-content').innerHTML = html;
+    document.getElementById('ln-detail-title').textContent = 'Leistungsnachweis LN-' + String(ln.id).padStart(6, '0');
+
+    // Unterschrift-Bereich anzeigen wenn Entwurf
+    const signatureSection = document.getElementById('ln-signature-section');
+    const stornoSection = document.getElementById('ln-storno-section');
+
+    if (ln.status === 'entwurf') {
+      signatureSection.classList.remove('hidden');
+      stornoSection.classList.add('hidden');
+      initSignaturePad();
+    } else if (ln.status === 'unterschrieben') {
+      signatureSection.classList.add('hidden');
+      stornoSection.classList.remove('hidden');
+    } else {
+      signatureSection.classList.add('hidden');
+      stornoSection.classList.add('hidden');
+    }
+
+    switchTab('leistungsnachweis-detail');
+  } catch (error) {
+    console.error('Leistungsnachweis laden fehlgeschlagen:', error);
+  }
+}
+
+// Signature Pad initialisieren
+function initSignaturePad() {
+  const canvas = document.getElementById('signature-canvas');
+  if (!canvas) return;
+
+  const ctx = canvas.getContext('2d');
+
+  // Canvas leeren
+  ctx.fillStyle = 'white';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  // Event-Listener für Touch und Maus
+  let lastX = 0, lastY = 0;
+
+  function getPos(e) {
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+
+    if (e.touches) {
+      return { x: (e.touches[0].clientX - rect.left) * scaleX, y: (e.touches[0].clientY - rect.top) * scaleY };
+    }
+    return { x: (e.clientX - rect.left) * scaleX, y: (e.clientY - rect.top) * scaleY };
+  }
+
+  function startDrawing(e) {
+    e.preventDefault();
+    isDrawing = true;
+    const pos = getPos(e);
+    lastX = pos.x;
+    lastY = pos.y;
+  }
+
+  function draw(e) {
+    if (!isDrawing) return;
+    e.preventDefault();
+
+    const pos = getPos(e);
+    ctx.beginPath();
+    ctx.moveTo(lastX, lastY);
+    ctx.lineTo(pos.x, pos.y);
+    ctx.strokeStyle = '#000';
+    ctx.lineWidth = 2;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.stroke();
+
+    lastX = pos.x;
+    lastY = pos.y;
+  }
+
+  function stopDrawing() {
+    isDrawing = false;
+  }
+
+  // Entferne vorherige Event-Listener (falls vorhanden)
+  canvas.replaceWith(canvas.cloneNode(true));
+  const newCanvas = document.getElementById('signature-canvas');
+  const newCtx = newCanvas.getContext('2d');
+  newCtx.fillStyle = 'white';
+  newCtx.fillRect(0, 0, newCanvas.width, newCanvas.height);
+
+  // Maus-Events
+  newCanvas.addEventListener('mousedown', startDrawing);
+  newCanvas.addEventListener('mousemove', draw);
+  newCanvas.addEventListener('mouseup', stopDrawing);
+  newCanvas.addEventListener('mouseout', stopDrawing);
+
+  // Touch-Events
+  newCanvas.addEventListener('touchstart', startDrawing, { passive: false });
+  newCanvas.addEventListener('touchmove', draw, { passive: false });
+  newCanvas.addEventListener('touchend', stopDrawing);
+}
+
+// Unterschrift löschen
+function clearSignature() {
+  const canvas = document.getElementById('signature-canvas');
+  if (!canvas) return;
+
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = 'white';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+}
+
+// Unterschrift prüfen ob leer
+function isSignatureEmpty() {
+  const canvas = document.getElementById('signature-canvas');
+  if (!canvas) return true;
+
+  const ctx = canvas.getContext('2d');
+  const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  const data = imageData.data;
+
+  for (let i = 0; i < data.length; i += 4) {
+    if (data[i] !== 255 || data[i + 1] !== 255 || data[i + 2] !== 255) {
+      return false;
+    }
+  }
+  return true;
+}
+
+// Unterschrift absenden
+async function submitSignature() {
+  const unterschriftName = document.getElementById('ln-unterschrift-name').value.trim();
+
+  if (!unterschriftName) {
+    alert('Bitte geben Sie den Namen des Unterzeichners ein.');
+    return;
+  }
+
+  if (isSignatureEmpty()) {
+    alert('Bitte unterschreiben Sie im Unterschriftsfeld.');
+    return;
+  }
+
+  const canvas = document.getElementById('signature-canvas');
+  const unterschriftDaten = canvas.toDataURL('image/png');
+
+  try {
+    const result = await api('/leistungsnachweise/' + currentLeistungsnachweisId + '/unterschreiben', 'POST',
+      { unterschrift_daten: unterschriftDaten, unterschrift_name: unterschriftName }, false);
+
+    if (result.success) {
+      alert('Leistungsnachweis erfolgreich unterschrieben!');
+      viewLeistungsnachweis(currentLeistungsnachweisId);
+    } else {
+      alert(result.error || 'Fehler beim Unterschreiben');
+    }
+  } catch (error) {
+    console.error('Unterschreiben fehlgeschlagen:', error);
+    alert('Fehler beim Unterschreiben');
+  }
+}
+
+// Leistungsnachweis stornieren
+async function storniereLeistungsnachweis() {
+  if (!confirm('Möchten Sie diesen Leistungsnachweis wirklich stornieren?')) {
+    return;
+  }
+
+  const grundField = document.getElementById('ln-storno-grund');
+  const grund = grundField ? grundField.value : '';
+
+  try {
+    const result = await api('/leistungsnachweise/' + currentLeistungsnachweisId + '/stornieren', 'POST',
+      { grund: grund }, false);
+
+    if (result.success) {
+      alert('Leistungsnachweis storniert.');
+      viewLeistungsnachweis(currentLeistungsnachweisId);
+    } else {
+      alert(result.error || 'Fehler beim Stornieren');
+    }
+  } catch (error) {
+    console.error('Stornieren fehlgeschlagen:', error);
+    alert('Fehler beim Stornieren');
+  }
+}
+
+// PDF herunterladen
+function downloadLeistungsnachweisePDF() {
+  if (!currentLeistungsnachweisId) return;
+  window.open('/api/leistungsnachweise/' + currentLeistungsnachweisId + '/pdf', '_blank');
+}
+
+// Datum formatieren für API (DD.MM.YYYY -> YYYY-MM-DD)
+function formatDateForAPI(dateStr) {
+  if (!dateStr) return null;
+  const parts = dateStr.split('.');
+  if (parts.length !== 3) return dateStr;
+  return parts[2] + '-' + parts[1].padStart(2, '0') + '-' + parts[0].padStart(2, '0');
+}
+
+// Datum formatieren für Anzeige (YYYY-MM-DD -> DD.MM.YYYY)
+function formatDateForDisplay(dateStr) {
+  if (!dateStr) return '';
+  const parts = dateStr.split('-');
+  if (parts.length !== 3) return dateStr;
+  return parts[2] + '.' + parts[1] + '.' + parts[0];
+}
+
+// Message anzeigen für Leistungsnachweise
+function showLnMessage(elementId, message, type) {
+  const el = document.getElementById(elementId);
+  if (!el) return;
+
+  el.textContent = message;
+  el.className = 'message ' + type;
+  el.classList.remove('hidden');
+
+  setTimeout(function() {
+    el.classList.add('hidden');
+  }, 5000);
+}

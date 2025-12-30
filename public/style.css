@@ -1505,3 +1505,253 @@ td[title] {
     flex-direction: column;
   }
 }
+
+/* ==================== LEISTUNGSNACHWEISE ==================== */
+
+/* Checkbox-Gruppe für Mitarbeiterauswahl */
+.checkbox-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 10px;
+  background: var(--bg-light);
+  border-radius: 8px;
+  border: 1px solid var(--border);
+}
+
+.checkbox-group label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: white;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  cursor: pointer;
+  transition: all 0.2s;
+  font-size: 0.9rem;
+}
+
+.checkbox-group label:hover {
+  border-color: var(--primary);
+  background: #f0fdf4;
+}
+
+.checkbox-group input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--primary);
+}
+
+.checkbox-group input[type="checkbox"]:checked + span {
+  color: var(--primary-dark);
+  font-weight: 500;
+}
+
+/* Signature Pad */
+.signature-section {
+  margin-top: 30px;
+  padding-top: 30px;
+  border-top: 2px solid var(--border);
+}
+
+.signature-section h3 {
+  margin: 0 0 10px;
+  color: var(--primary-dark);
+}
+
+.signature-pad-container {
+  border: 2px dashed var(--border);
+  border-radius: 8px;
+  padding: 15px;
+  background: #fafafa;
+  text-align: center;
+}
+
+#signature-canvas {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: white;
+  cursor: crosshair;
+  touch-action: none;
+  max-width: 100%;
+}
+
+.signature-actions {
+  margin-top: 10px;
+}
+
+/* Storno Section */
+.storno-section {
+  margin-top: 30px;
+  padding: 20px;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+}
+
+.storno-section h3 {
+  color: #dc2626;
+  margin: 0 0 15px;
+}
+
+.btn-danger {
+  background: #dc2626;
+  color: white;
+  border: none;
+}
+
+.btn-danger:hover {
+  background: #b91c1c;
+}
+
+/* Leistungsnachweis Detail Content */
+.ln-detail-content {
+  background: var(--bg-light);
+  border-radius: 8px;
+  padding: 20px;
+}
+
+.ln-detail-row {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.ln-detail-row:last-child {
+  border-bottom: none;
+  margin-bottom: 0;
+  padding-bottom: 0;
+}
+
+.ln-detail-label {
+  font-weight: 600;
+  color: var(--text-secondary);
+  min-width: 150px;
+}
+
+.ln-detail-value {
+  color: var(--text-primary);
+  flex: 1;
+}
+
+/* Status Badges */
+.status-badge {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.status-entwurf {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.status-unterschrieben {
+  background: #d1fae5;
+  color: #065f46;
+}
+
+.status-storniert {
+  background: #fee2e2;
+  color: #991b1b;
+  text-decoration: line-through;
+}
+
+/* Signature Display */
+.signature-display {
+  margin-top: 20px;
+  padding: 15px;
+  background: white;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.signature-display img {
+  max-width: 300px;
+  max-height: 100px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+
+.signature-info {
+  margin-top: 10px;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+
+/* Form Actions */
+.form-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 20px;
+}
+
+/* Large button */
+.btn-lg {
+  padding: 14px 24px;
+  font-size: 1.1rem;
+}
+
+/* Mobile Responsive for Signature */
+@media (max-width: 768px) {
+  #signature-canvas {
+    width: 100%;
+    height: 120px;
+  }
+  
+  .ln-detail-row {
+    flex-direction: column;
+    gap: 4px;
+  }
+  
+  .ln-detail-label {
+    min-width: auto;
+  }
+  
+  .checkbox-group {
+    flex-direction: column;
+  }
+  
+  .checkbox-group label {
+    width: 100%;
+  }
+}
+
+/* Pagination */
+.pagination {
+  display: flex;
+  justify-content: center;
+  gap: 5px;
+  margin-top: 20px;
+}
+
+.pagination button {
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  background: white;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.pagination button:hover {
+  background: var(--bg-light);
+  border-color: var(--primary);
+}
+
+.pagination button.active {
+  background: var(--primary);
+  color: white;
+  border-color: var(--primary);
+}
+
+.pagination button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

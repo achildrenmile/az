@@ -222,6 +222,53 @@ db.exec(`
   );
 
   CREATE INDEX IF NOT EXISTS idx_loeschprotokoll_datum ON loeschprotokoll(ausgefuehrt_am);
+
+  -- Leistungsnachweise-Tabelle (separates Modul, nicht AZ-relevant)
+  CREATE TABLE IF NOT EXISTS leistungsnachweise (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    datum DATE NOT NULL,
+    kunde_id INTEGER,
+    baustelle_id INTEGER,
+    kunde_freitext TEXT,
+    baustelle_freitext TEXT,
+    beschreibung TEXT NOT NULL,
+    leistungszeit_von TIME,
+    leistungszeit_bis TIME,
+    leistungsdauer_minuten INTEGER,
+    notizen TEXT,
+    ersteller_id INTEGER NOT NULL,
+    erstellt_am DATETIME DEFAULT CURRENT_TIMESTAMP,
+    unterschrift_daten TEXT,
+    unterschrift_name TEXT,
+    unterschrift_zeitpunkt DATETIME,
+    status TEXT DEFAULT 'entwurf' CHECK(status IN ('entwurf', 'unterschrieben', 'storniert')),
+    storniert_am DATETIME,
+    storniert_von INTEGER,
+    storno_grund TEXT,
+    FOREIGN KEY (kunde_id) REFERENCES kunden(id),
+    FOREIGN KEY (baustelle_id) REFERENCES baustellen(id),
+    FOREIGN KEY (ersteller_id) REFERENCES mitarbeiter(id),
+    FOREIGN KEY (storniert_von) REFERENCES mitarbeiter(id)
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_leistungsnachweise_datum ON leistungsnachweise(datum);
+  CREATE INDEX IF NOT EXISTS idx_leistungsnachweise_kunde ON leistungsnachweise(kunde_id);
+  CREATE INDEX IF NOT EXISTS idx_leistungsnachweise_baustelle ON leistungsnachweise(baustelle_id);
+  CREATE INDEX IF NOT EXISTS idx_leistungsnachweise_status ON leistungsnachweise(status);
+  CREATE INDEX IF NOT EXISTS idx_leistungsnachweise_ersteller ON leistungsnachweise(ersteller_id);
+
+  -- Leistungsnachweis-Mitarbeiter-Zuordnung (mehrere Mitarbeiter pro Nachweis)
+  CREATE TABLE IF NOT EXISTS leistungsnachweis_mitarbeiter (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    leistungsnachweis_id INTEGER NOT NULL,
+    mitarbeiter_id INTEGER NOT NULL,
+    FOREIGN KEY (leistungsnachweis_id) REFERENCES leistungsnachweise(id) ON DELETE CASCADE,
+    FOREIGN KEY (mitarbeiter_id) REFERENCES mitarbeiter(id),
+    UNIQUE(leistungsnachweis_id, mitarbeiter_id)
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_ln_mitarbeiter_nachweis ON leistungsnachweis_mitarbeiter(leistungsnachweis_id);
+  CREATE INDEX IF NOT EXISTS idx_ln_mitarbeiter_ma ON leistungsnachweis_mitarbeiter(mitarbeiter_id);
 `);
 
 // Standard-Pausenregeln einfügen falls nicht vorhanden (AZG §11)
@@ -2712,5 +2759,254 @@ module.exports = {
     }
 
     return created;
+  },
+
+  // ==================== LEISTUNGSNACHWEISE FUNKTIONEN ====================
+
+  // Leistungsnachweis erstellen
+  createLeistungsnachweis: (data) => {
+    const result = db.prepare(`
+      INSERT INTO leistungsnachweise (
+        datum, kunde_id, baustelle_id, kunde_freitext, baustelle_freitext,
+        beschreibung, leistungszeit_von, leistungszeit_bis, leistungsdauer_minuten,
+        notizen, ersteller_id, status
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'entwurf')
+    `).run(
+      data.datum,
+      data.kunde_id || null,
+      data.baustelle_id || null,
+      data.kunde_freitext || null,
+      data.baustelle_freitext || null,
+      data.beschreibung,
+      data.leistungszeit_von || null,
+      data.leistungszeit_bis || null,
+      data.leistungsdauer_minuten || null,
+      data.notizen || null,
+      data.ersteller_id
+    );
+
+    // Mitarbeiter zuordnen
+    if (data.mitarbeiter_ids && data.mitarbeiter_ids.length > 0) {
+      const insertMa = db.prepare(`
+        INSERT INTO leistungsnachweis_mitarbeiter (leistungsnachweis_id, mitarbeiter_id)
+        VALUES (?, ?)
+      `);
+      data.mitarbeiter_ids.forEach(maId => {
+        insertMa.run(result.lastInsertRowid, maId);
+      });
+    }
+
+    return { id: result.lastInsertRowid };
+  },
+
+  // Leistungsnachweis aktualisieren (nur wenn status = 'entwurf')
+  updateLeistungsnachweis: (id, data) => {
+    // Prüfen ob editierbar
+    const existing = db.prepare('SELECT status FROM leistungsnachweise WHERE id = ?').get(id);
+    if (!existing) {
+      return { success: false, error: 'Leistungsnachweis nicht gefunden' };
+    }
+    if (existing.status !== 'entwurf') {
+      return { success: false, error: 'Nur Entwürfe können bearbeitet werden' };
+    }
+
+    db.prepare(`
+      UPDATE leistungsnachweise SET
+        datum = ?, kunde_id = ?, baustelle_id = ?, kunde_freitext = ?, baustelle_freitext = ?,
+        beschreibung = ?, leistungszeit_von = ?, leistungszeit_bis = ?, leistungsdauer_minuten = ?,
+        notizen = ?
+      WHERE id = ?
+    `).run(
+      data.datum,
+      data.kunde_id || null,
+      data.baustelle_id || null,
+      data.kunde_freitext || null,
+      data.baustelle_freitext || null,
+      data.beschreibung,
+      data.leistungszeit_von || null,
+      data.leistungszeit_bis || null,
+      data.leistungsdauer_minuten || null,
+      data.notizen || null,
+      id
+    );
+
+    // Mitarbeiter-Zuordnungen aktualisieren
+    if (data.mitarbeiter_ids) {
+      db.prepare('DELETE FROM leistungsnachweis_mitarbeiter WHERE leistungsnachweis_id = ?').run(id);
+      const insertMa = db.prepare(`
+        INSERT INTO leistungsnachweis_mitarbeiter (leistungsnachweis_id, mitarbeiter_id)
+        VALUES (?, ?)
+      `);
+      data.mitarbeiter_ids.forEach(maId => {
+        insertMa.run(id, maId);
+      });
+    }
+
+    return { success: true };
+  },
+
+  // Leistungsnachweis unterschreiben
+  signLeistungsnachweis: (id, unterschriftDaten, unterschriftName) => {
+    const existing = db.prepare('SELECT status FROM leistungsnachweise WHERE id = ?').get(id);
+    if (!existing) {
+      return { success: false, error: 'Leistungsnachweis nicht gefunden' };
+    }
+    if (existing.status !== 'entwurf') {
+      return { success: false, error: 'Nur Entwürfe können unterschrieben werden' };
+    }
+
+    const zeitpunkt = new Date().toISOString().replace('T', ' ').substring(0, 19);
+
+    db.prepare(`
+      UPDATE leistungsnachweise SET
+        unterschrift_daten = ?,
+        unterschrift_name = ?,
+        unterschrift_zeitpunkt = ?,
+        status = 'unterschrieben'
+      WHERE id = ?
+    `).run(unterschriftDaten, unterschriftName, zeitpunkt, id);
+
+    return { success: true, unterschrift_zeitpunkt: zeitpunkt };
+  },
+
+  // Leistungsnachweis stornieren
+  storniereLeistungsnachweis: (id, storniertVon, grund) => {
+    const existing = db.prepare('SELECT status FROM leistungsnachweise WHERE id = ?').get(id);
+    if (!existing) {
+      return { success: false, error: 'Leistungsnachweis nicht gefunden' };
+    }
+    if (existing.status === 'storniert') {
+      return { success: false, error: 'Bereits storniert' };
+    }
+
+    const zeitpunkt = new Date().toISOString().replace('T', ' ').substring(0, 19);
+
+    db.prepare(`
+      UPDATE leistungsnachweise SET
+        status = 'storniert',
+        storniert_am = ?,
+        storniert_von = ?,
+        storno_grund = ?
+      WHERE id = ?
+    `).run(zeitpunkt, storniertVon, grund, id);
+
+    return { success: true };
+  },
+
+  // Leistungsnachweis abrufen
+  getLeistungsnachweis: (id) => {
+    const ln = db.prepare(`
+      SELECT ln.*,
+        k.name as kunde_name,
+        b.name as baustelle_name,
+        e.name as ersteller_name,
+        s.name as storniert_von_name
+      FROM leistungsnachweise ln
+      LEFT JOIN kunden k ON ln.kunde_id = k.id
+      LEFT JOIN baustellen b ON ln.baustelle_id = b.id
+      LEFT JOIN mitarbeiter e ON ln.ersteller_id = e.id
+      LEFT JOIN mitarbeiter s ON ln.storniert_von = s.id
+      WHERE ln.id = ?
+    `).get(id);
+
+    if (!ln) return null;
+
+    // Zugeordnete Mitarbeiter laden
+    const mitarbeiter = db.prepare(`
+      SELECT m.id, m.mitarbeiter_nr, m.name
+      FROM leistungsnachweis_mitarbeiter lm
+      JOIN mitarbeiter m ON lm.mitarbeiter_id = m.id
+      WHERE lm.leistungsnachweis_id = ?
+      ORDER BY m.name
+    `).all(id);
+
+    return { ...ln, mitarbeiter };
+  },
+
+  // Leistungsnachweise auflisten (mit Filtern)
+  getLeistungsnachweise: (filter = {}) => {
+    let where = ['1=1'];
+    const params = [];
+
+    if (filter.status) {
+      where.push('ln.status = ?');
+      params.push(filter.status);
+    }
+    if (filter.kunde_id) {
+      where.push('ln.kunde_id = ?');
+      params.push(filter.kunde_id);
+    }
+    if (filter.baustelle_id) {
+      where.push('ln.baustelle_id = ?');
+      params.push(filter.baustelle_id);
+    }
+    if (filter.datum_von) {
+      where.push('ln.datum >= ?');
+      params.push(filter.datum_von);
+    }
+    if (filter.datum_bis) {
+      where.push('ln.datum <= ?');
+      params.push(filter.datum_bis);
+    }
+    if (filter.ersteller_id) {
+      where.push('ln.ersteller_id = ?');
+      params.push(filter.ersteller_id);
+    }
+    if (filter.mitarbeiter_id) {
+      where.push('EXISTS (SELECT 1 FROM leistungsnachweis_mitarbeiter lm WHERE lm.leistungsnachweis_id = ln.id AND lm.mitarbeiter_id = ?)');
+      params.push(filter.mitarbeiter_id);
+    }
+
+    const page = filter.page || 1;
+    const limit = filter.limit || 20;
+    const offset = (page - 1) * limit;
+
+    const data = db.prepare(`
+      SELECT ln.*,
+        k.name as kunde_name,
+        b.name as baustelle_name,
+        e.name as ersteller_name,
+        (SELECT GROUP_CONCAT(m.name, ', ')
+         FROM leistungsnachweis_mitarbeiter lm
+         JOIN mitarbeiter m ON lm.mitarbeiter_id = m.id
+         WHERE lm.leistungsnachweis_id = ln.id) as mitarbeiter_namen
+      FROM leistungsnachweise ln
+      LEFT JOIN kunden k ON ln.kunde_id = k.id
+      LEFT JOIN baustellen b ON ln.baustelle_id = b.id
+      LEFT JOIN mitarbeiter e ON ln.ersteller_id = e.id
+      WHERE ${where.join(' AND ')}
+      ORDER BY ln.datum DESC, ln.erstellt_am DESC
+      LIMIT ? OFFSET ?
+    `).all(...params, limit, offset);
+
+    const total = db.prepare(`
+      SELECT COUNT(*) as count
+      FROM leistungsnachweise ln
+      WHERE ${where.join(' AND ')}
+    `).get(...params).count;
+
+    return {
+      data,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit)
+    };
+  },
+
+  // Leistungsnachweis löschen (nur Entwürfe)
+  deleteLeistungsnachweis: (id) => {
+    const existing = db.prepare('SELECT status FROM leistungsnachweise WHERE id = ?').get(id);
+    if (!existing) {
+      return { success: false, error: 'Leistungsnachweis nicht gefunden' };
+    }
+    if (existing.status !== 'entwurf') {
+      return { success: false, error: 'Nur Entwürfe können gelöscht werden. Unterschriebene Nachweise müssen storniert werden.' };
+    }
+
+    db.prepare('DELETE FROM leistungsnachweis_mitarbeiter WHERE leistungsnachweis_id = ?').run(id);
+    db.prepare('DELETE FROM leistungsnachweise WHERE id = ?').run(id);
+
+    return { success: true };
   }
 };

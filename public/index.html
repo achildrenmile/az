@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>AZ - Arbeitszeiterfassung</title>
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="style.css?v=20251230">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -343,6 +343,18 @@
             <button class="tab" data-tab="bestaetigungen">Bestätigungen</button>
             <button class="tab" data-tab="gleitzeit">Gleitzeit</button>
             <button class="tab" data-tab="verstoesse">Verstöße</button>
+          </div>
+        </div>
+
+        <div class="nav-group" data-group="leistung">
+          <button class="nav-group-header">
+            <svg class="nav-group-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+            <span class="nav-group-title">Leistungsnachweise</span>
+            <span class="nav-group-arrow">▸</span>
+          </button>
+          <div class="nav-group-items">
+            <button class="tab" data-tab="leistungsnachweise">Übersicht</button>
+            <button class="tab" data-tab="leistungsnachweis-neu">Neuer Nachweis</button>
           </div>
         </div>
 
@@ -700,6 +712,202 @@
           <p id="verstoesse-empty" class="empty-message hidden" style="text-align:center; color:var(--success); padding:40px;">
             Keine AZG-Verstöße im gewählten Zeitraum gefunden.
           </p>
+        </div>
+      </div>
+
+      <!-- Leistungsnachweise Übersicht Tab -->
+      <div id="tab-leistungsnachweise" class="tab-content hidden">
+        <div class="card">
+          <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom:20px;">
+            <div>
+              <h2 style="margin:0">Leistungsnachweise</h2>
+              <p style="color: var(--text-secondary); margin:8px 0 0;">Übersicht aller Leistungsnachweise mit Kundenunterschrift</p>
+            </div>
+            <button class="btn btn-primary" onclick="switchTab('leistungsnachweis-neu')">+ Neuer Nachweis</button>
+          </div>
+
+          <!-- Filter -->
+          <div class="filter-row" style="margin-bottom:20px;">
+            <div class="form-group">
+              <label for="ln-filter-von">Von</label>
+              <input type="text" id="ln-filter-von" class="datepicker" placeholder="TT.MM.JJJJ">
+            </div>
+            <div class="form-group">
+              <label for="ln-filter-bis">Bis</label>
+              <input type="text" id="ln-filter-bis" class="datepicker" placeholder="TT.MM.JJJJ">
+            </div>
+            <div class="form-group">
+              <label for="ln-filter-status">Status</label>
+              <select id="ln-filter-status">
+                <option value="">Alle</option>
+                <option value="entwurf">Entwurf</option>
+                <option value="unterschrieben">Unterschrieben</option>
+                <option value="storniert">Storniert</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="ln-filter-kunde">Kunde</label>
+              <select id="ln-filter-kunde">
+                <option value="">Alle</option>
+              </select>
+            </div>
+            <button class="btn btn-primary" onclick="loadLeistungsnachweise()">Filtern</button>
+          </div>
+
+          <!-- Tabelle -->
+          <div class="table-container">
+            <table id="leistungsnachweise-table">
+              <thead>
+                <tr>
+                  <th>Nr.</th>
+                  <th>Datum</th>
+                  <th>Kunde</th>
+                  <th>Projekt</th>
+                  <th>Mitarbeiter</th>
+                  <th>Status</th>
+                  <th>Aktionen</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+          <p id="ln-empty" class="empty-message hidden" style="text-align:center; color:var(--text-secondary); padding:40px;">
+            Keine Leistungsnachweise vorhanden.
+          </p>
+          <div id="ln-pagination" class="pagination"></div>
+        </div>
+      </div>
+
+      <!-- Neuer Leistungsnachweis Tab -->
+      <div id="tab-leistungsnachweis-neu" class="tab-content hidden">
+        <div class="card">
+          <h2 id="ln-form-title">Neuen Leistungsnachweis erstellen</h2>
+          <p style="color: var(--text-secondary); margin-bottom:20px;">Erstellen Sie einen Leistungsnachweis für Kundenbestätigungen vor Ort.</p>
+
+          <form id="leistungsnachweis-form">
+            <input type="hidden" id="ln-edit-id">
+
+            <div class="form-row">
+              <div class="form-group">
+                <label for="ln-datum">Datum *</label>
+                <input type="text" id="ln-datum" class="datepicker" placeholder="TT.MM.JJJJ" required>
+              </div>
+            </div>
+
+            <div class="form-row">
+              <div class="form-group">
+                <label for="ln-kunde-select">Kunde (aus Stammdaten)</label>
+                <select id="ln-kunde-select">
+                  <option value="">-- Auswählen --</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label for="ln-kunde-freitext">oder Freitext</label>
+                <input type="text" id="ln-kunde-freitext" placeholder="Kundenname eingeben">
+              </div>
+            </div>
+
+            <div class="form-row">
+              <div class="form-group">
+                <label for="ln-baustelle-select">Projekt/Baustelle (aus Stammdaten)</label>
+                <select id="ln-baustelle-select">
+                  <option value="">-- Auswählen --</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label for="ln-baustelle-freitext">oder Freitext</label>
+                <input type="text" id="ln-baustelle-freitext" placeholder="Projektname eingeben">
+              </div>
+            </div>
+
+            <div class="form-row">
+              <div class="form-group">
+                <label for="ln-zeit-von">Leistungszeit von</label>
+                <input type="text" id="ln-zeit-von" placeholder="HH:MM" pattern="\d{2}:\d{2}">
+              </div>
+              <div class="form-group">
+                <label for="ln-zeit-bis">Leistungszeit bis</label>
+                <input type="text" id="ln-zeit-bis" placeholder="HH:MM" pattern="\d{2}:\d{2}">
+              </div>
+              <div class="form-group">
+                <label for="ln-dauer">oder Dauer (Minuten)</label>
+                <input type="number" id="ln-dauer" placeholder="z.B. 120" min="0">
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label for="ln-mitarbeiter">Beteiligte Mitarbeiter</label>
+              <div id="ln-mitarbeiter-checkboxes" class="checkbox-group"></div>
+            </div>
+
+            <div class="form-group">
+              <label for="ln-beschreibung">Leistungsbeschreibung *</label>
+              <textarea id="ln-beschreibung" rows="4" required placeholder="Beschreiben Sie die erbrachte Leistung..."></textarea>
+            </div>
+
+            <div class="form-group">
+              <label for="ln-notizen">Notizen (intern)</label>
+              <textarea id="ln-notizen" rows="2" placeholder="Interne Anmerkungen..."></textarea>
+            </div>
+
+            <div class="form-actions">
+              <button type="submit" class="btn btn-primary">Entwurf speichern</button>
+              <button type="button" class="btn btn-secondary" onclick="resetLeistungsnachweisForm()">Abbrechen</button>
+            </div>
+            <div id="ln-form-message" class="message"></div>
+          </form>
+        </div>
+      </div>
+
+      <!-- Leistungsnachweis Detail/Unterschrift Tab -->
+      <div id="tab-leistungsnachweis-detail" class="tab-content hidden">
+        <div class="card">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+            <h2 id="ln-detail-title">Leistungsnachweis</h2>
+            <div style="display:flex; gap:10px;">
+              <button class="btn btn-secondary" onclick="switchTab('leistungsnachweise')">← Zurück zur Übersicht</button>
+              <button id="ln-pdf-btn" class="btn btn-primary" onclick="downloadLeistungsnachweisePDF()">PDF herunterladen</button>
+            </div>
+          </div>
+
+          <div id="ln-detail-content" class="ln-detail-content">
+            <!-- Dynamisch befüllt -->
+          </div>
+
+          <!-- Unterschrift-Bereich (nur für Entwürfe) -->
+          <div id="ln-signature-section" class="signature-section hidden">
+            <h3>Kundenunterschrift</h3>
+            <p style="color: var(--text-secondary); margin-bottom:15px;">Bitte unterschreiben Sie unten, um den Leistungsnachweis zu bestätigen.</p>
+
+            <div class="form-group">
+              <label for="ln-unterschrift-name">Name des Unterzeichners *</label>
+              <input type="text" id="ln-unterschrift-name" placeholder="Vor- und Nachname" required>
+            </div>
+
+            <div class="signature-pad-container">
+              <canvas id="signature-canvas" width="400" height="150"></canvas>
+              <div class="signature-actions">
+                <button type="button" class="btn btn-secondary" onclick="clearSignature()">Löschen</button>
+              </div>
+            </div>
+
+            <button type="button" class="btn btn-primary btn-lg" onclick="submitSignature()" style="width:100%; margin-top:15px;">
+              Leistungsnachweis unterschreiben
+            </button>
+            <p style="color: var(--text-secondary); font-size:0.85rem; margin-top:10px;">
+              Nach der Unterschrift kann der Leistungsnachweis nicht mehr bearbeitet werden.
+            </p>
+          </div>
+
+          <!-- Stornieren-Bereich (für unterschriebene Nachweise) -->
+          <div id="ln-storno-section" class="storno-section hidden">
+            <h3>Leistungsnachweis stornieren</h3>
+            <div class="form-group">
+              <label for="ln-storno-grund">Stornierungsgrund</label>
+              <textarea id="ln-storno-grund" rows="2" placeholder="Grund für die Stornierung..."></textarea>
+            </div>
+            <button type="button" class="btn btn-danger" onclick="storniereLeistungsnachweis()">Stornieren</button>
+          </div>
         </div>
       </div>
 
@@ -1476,6 +1684,6 @@
 
   <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
   <script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/de.js"></script>
-  <script src="app.js"></script>
+  <script src="app.js?v=20251230d"></script>
 </body>
 </html>
