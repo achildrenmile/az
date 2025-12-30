@@ -281,6 +281,23 @@ async function loadBaustellenListe() {
   }
 }
 
+// Arbeitstypenliste für Dropdowns laden
+async function loadArbeitstypListe() {
+  try {
+    const arbeitstypen = await api('/arbeitstypen');
+    const selectMain = document.getElementById('arbeitstyp');
+    const selectEdit = document.getElementById('edit-arbeitstyp');
+
+    const options = '<option value="">-- Auswählen --</option>' +
+      arbeitstypen.map(a => `<option value="${a.name}" style="color: ${a.farbe}">${a.name}</option>`).join('');
+
+    if (selectMain) selectMain.innerHTML = options;
+    if (selectEdit) selectEdit.innerHTML = options;
+  } catch (error) {
+    console.error('Arbeitstypen laden fehlgeschlagen:', error);
+  }
+}
+
 function initErfassungView() {
   document.getElementById('user-name').textContent = `Hallo, ${userName}`;
   document.getElementById('show-admin-btn').classList.toggle('hidden', !isAdmin);
@@ -295,6 +312,7 @@ function initErfassungView() {
   // Listen laden
   loadKundenListe();
   loadBaustellenListe();
+  loadArbeitstypListe();
 
   // Einträge und Statistik laden
   loadHistory();
@@ -316,6 +334,8 @@ document.getElementById('zeit-form').addEventListener('submit', async (e) => {
     baustelle: document.getElementById('baustelle').value,
     kunde: document.getElementById('kunde').value,
     anfahrt: document.getElementById('anfahrt').value,
+    standort: document.getElementById('standort').value,
+    arbeitstyp: document.getElementById('arbeitstyp').value,
     notizen: document.getElementById('notizen').value
   };
 
@@ -341,6 +361,8 @@ document.getElementById('zeit-form').addEventListener('submit', async (e) => {
     document.getElementById('baustelle').value = '';
     document.getElementById('kunde').value = '';
     document.getElementById('anfahrt').value = '';
+    document.getElementById('standort').value = '';
+    document.getElementById('arbeitstyp').value = '';
     document.getElementById('notizen').value = '';
 
     // History aktualisieren
@@ -382,6 +404,8 @@ async function loadHistory(page = 1) {
         <td>${e.pause_minuten} Min.</td>
         <td>${calculateNetto(e.arbeitsbeginn, e.arbeitsende, e.pause_minuten)}</td>
         <td>${e.baustelle || '-'}</td>
+        <td>${e.standort || '-'}</td>
+        <td>${e.arbeitstyp || '-'}</td>
         <td class="action-btns">
           <button class="btn btn-small btn-icon" onclick="printEinzelnerEintrag(${e.id})" title="Drucken">🖨</button>
           <button class="btn btn-small btn-icon" onclick="openEditModal(${e.id})" title="Bearbeiten">✎</button>
@@ -414,6 +438,8 @@ window.openEditModal = async (id) => {
     document.getElementById('edit-baustelle').value = eintrag.baustelle || '';
     document.getElementById('edit-kunde').value = eintrag.kunde || '';
     document.getElementById('edit-anfahrt').value = eintrag.anfahrt || '';
+    document.getElementById('edit-standort').value = eintrag.standort || '';
+    document.getElementById('edit-arbeitstyp').value = eintrag.arbeitstyp || '';
     document.getElementById('edit-notizen').value = eintrag.notizen || '';
 
     // Datepicker für Modal initialisieren
@@ -451,6 +477,8 @@ document.getElementById('edit-form').addEventListener('submit', async (e) => {
     baustelle: document.getElementById('edit-baustelle').value,
     kunde: document.getElementById('edit-kunde').value,
     anfahrt: document.getElementById('edit-anfahrt').value,
+    standort: document.getElementById('edit-standort').value,
+    arbeitstyp: document.getElementById('edit-arbeitstyp').value,
     notizen: document.getElementById('edit-notizen').value
   };
 
@@ -677,7 +705,7 @@ async function loadEintraege(page = 1) {
     const tbody = document.querySelector('#eintraege-table tbody');
 
     if (eintraege.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:var(--text-secondary);padding:40px;">Keine Einträge gefunden</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="11" style="text-align:center;color:var(--text-secondary);padding:40px;">Keine Einträge gefunden</td></tr>';
       renderPagination('admin-pagination', 1, 1, 0, 'goToAdminPage');
       return;
     }
@@ -692,6 +720,8 @@ async function loadEintraege(page = 1) {
         <td>${calculateNetto(e.arbeitsbeginn, e.arbeitsende, e.pause_minuten)}</td>
         <td title="${e.baustelle || '-'}">${e.baustelle || '-'}</td>
         <td title="${e.kunde || '-'}">${e.kunde || '-'}</td>
+        <td title="${e.standort || '-'}">${e.standort || '-'}</td>
+        <td title="${e.arbeitstyp || '-'}">${e.arbeitstyp || '-'}</td>
         <td class="action-btns">
           <button class="btn btn-small btn-icon" onclick="printEinzelnerEintrag(${e.id})" title="Drucken">🖨</button>
           <button class="btn btn-small btn-danger btn-icon" onclick="deleteEintrag(${e.id})" title="Löschen">✕</button>

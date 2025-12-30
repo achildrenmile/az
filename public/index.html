@@ -107,6 +107,19 @@
             <input type="text" id="anfahrt" placeholder="z.B. 45 min von Firma">
           </div>
 
+          <div class="form-row">
+            <div class="form-group">
+              <label for="standort">Standort</label>
+              <input type="text" id="standort" placeholder="z.B. Wien, Graz, Linz">
+            </div>
+            <div class="form-group">
+              <label for="arbeitstyp">Arbeitstyp</label>
+              <select id="arbeitstyp">
+                <option value="">-- Auswählen --</option>
+              </select>
+            </div>
+          </div>
+
           <div class="form-group">
             <label for="notizen">Notizen</label>
             <textarea id="notizen" rows="3" placeholder="Weitere Informationen..."></textarea>
@@ -139,6 +152,8 @@
                 <th>Pause</th>
                 <th>Netto</th>
                 <th>Projekt / Baustelle</th>
+                <th>Standort</th>
+                <th>Typ</th>
                 <th>Aktionen</th>
               </tr>
             </thead>
@@ -218,6 +233,18 @@
         <div class="form-group">
           <label for="edit-anfahrt">Anfahrt</label>
           <input type="text" id="edit-anfahrt">
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="edit-standort">Standort</label>
+            <input type="text" id="edit-standort" placeholder="z.B. Wien, Graz, Linz">
+          </div>
+          <div class="form-group">
+            <label for="edit-arbeitstyp">Arbeitstyp</label>
+            <select id="edit-arbeitstyp">
+              <option value="">-- Auswählen --</option>
+            </select>
+          </div>
         </div>
         <div class="form-group">
           <label for="edit-notizen">Notizen</label>
@@ -407,6 +434,8 @@
                   <th>Netto</th>
                   <th>Projekt / Baustelle</th>
                   <th>Kunde</th>
+                  <th>Standort</th>
+                  <th>Typ</th>
                   <th></th>
                 </tr>
               </thead>

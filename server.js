@@ -160,7 +160,7 @@ app.get('/api/session', checkSession, (req, res) => {
 
 // Neuen Zeiteintrag erstellen
 app.post('/api/zeiteintraege', checkSession, (req, res) => {
-  const { datum, arbeitsbeginn, arbeitsende, pause_minuten, baustelle, kunde, anfahrt, notizen } = req.body;
+  const { datum, arbeitsbeginn, arbeitsende, pause_minuten, baustelle, kunde, anfahrt, notizen, standort, arbeitstyp } = req.body;
 
   if (!datum || !arbeitsbeginn || !arbeitsende) {
     return res.status(400).json({ error: 'Datum, Beginn und Ende sind erforderlich' });
@@ -213,7 +213,9 @@ app.post('/api/zeiteintraege', checkSession, (req, res) => {
       baustelle,
       kunde,
       anfahrt,
-      notizen
+      notizen,
+      standort,
+      arbeitstyp
     };
 
     const result = db.createZeiteintrag(neueWerte);
@@ -277,7 +279,7 @@ app.get('/api/zeiteintraege/:id', checkSession, (req, res) => {
 
 // Zeiteintrag aktualisieren (eigene oder Admin)
 app.put('/api/zeiteintraege/:id', checkSession, (req, res) => {
-  const { datum, arbeitsbeginn, arbeitsende, pause_minuten, baustelle, kunde, anfahrt, notizen } = req.body;
+  const { datum, arbeitsbeginn, arbeitsende, pause_minuten, baustelle, kunde, anfahrt, notizen, standort, arbeitstyp } = req.body;
 
   // Alten Eintrag laden
   const alterEintrag = db.getZeiteintragById(req.params.id);
@@ -331,7 +333,9 @@ app.put('/api/zeiteintraege/:id', checkSession, (req, res) => {
     baustelle: baustelle || '',
     kunde: kunde || '',
     anfahrt: anfahrt || '',
-    notizen: notizen || ''
+    notizen: notizen || '',
+    standort: standort || '',
+    arbeitstyp: arbeitstyp || ''
   };
 
   try {
@@ -1085,6 +1089,86 @@ app.delete('/api/admin/baustellen/:id', checkSession, checkAdmin, (req, res) => 
   }
 });
 
+// ==================== ARBEITSTYPEN ROUTES ====================
+
+// Alle aktiven Arbeitstypen abrufen (für Dropdown - alle Benutzer)
+app.get('/api/arbeitstypen', checkSession, (req, res) => {
+  const arbeitstypen = db.getAllArbeitstypen(true);
+  res.json(arbeitstypen);
+});
+
+// Alle Arbeitstypen abrufen (Admin - inkl. inaktive)
+app.get('/api/admin/arbeitstypen', checkSession, checkAdmin, (req, res) => {
+  const arbeitstypen = db.getAllArbeitstypen(false);
+  res.json(arbeitstypen);
+});
+
+// Einzelnen Arbeitstyp abrufen (Admin)
+app.get('/api/admin/arbeitstypen/:id', checkSession, checkAdmin, (req, res) => {
+  const arbeitstyp = db.getArbeitstyp(req.params.id);
+  if (!arbeitstyp) {
+    return res.status(404).json({ error: 'Arbeitstyp nicht gefunden' });
+  }
+  res.json(arbeitstyp);
+});
+
+// Neuen Arbeitstyp anlegen (Admin)
+app.post('/api/admin/arbeitstypen', checkSession, checkAdmin, (req, res) => {
+  const { name, beschreibung, farbe } = req.body;
+
+  if (!name || !name.trim()) {
+    return res.status(400).json({ error: 'Name erforderlich' });
+  }
+
+  try {
+    db.createArbeitstyp({
+      name: name.trim(),
+      beschreibung,
+      farbe: farbe || '#6b7280'
+    });
+    res.json({ success: true });
+  } catch (error) {
+    if (error.message.includes('UNIQUE')) {
+      return res.status(400).json({ error: 'Arbeitstyp existiert bereits' });
+    }
+    res.status(500).json({ error: 'Fehler beim Erstellen' });
+  }
+});
+
+// Arbeitstyp bearbeiten (Admin)
+app.put('/api/admin/arbeitstypen/:id', checkSession, checkAdmin, (req, res) => {
+  const { name, beschreibung, farbe, aktiv } = req.body;
+
+  if (!name || !name.trim()) {
+    return res.status(400).json({ error: 'Name erforderlich' });
+  }
+
+  try {
+    db.updateArbeitstyp(req.params.id, {
+      name: name.trim(),
+      beschreibung,
+      farbe: farbe || '#6b7280',
+      aktiv: aktiv !== undefined ? aktiv : 1
+    });
+    res.json({ success: true });
+  } catch (error) {
+    if (error.message.includes('UNIQUE')) {
+      return res.status(400).json({ error: 'Name existiert bereits' });
+    }
+    res.status(500).json({ error: 'Fehler beim Aktualisieren' });
+  }
+});
+
+// Arbeitstyp löschen (Admin)
+app.delete('/api/admin/arbeitstypen/:id', checkSession, checkAdmin, (req, res) => {
+  try {
+    db.deleteArbeitstyp(req.params.id);
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: 'Fehler beim Löschen' });
+  }
+});
+
 // ==================== PAUSENREGELN ROUTES ====================
 
 // Alle Pausenregeln abrufen (Admin)
@@ -1792,7 +1876,7 @@ app.get('/api/admin/export/csv', checkSession, checkAdmin, (req, res) => {
 
   // Abschnitt 1: Tägliche Aufzeichnungen
   csv += '=== TÄGLICHE AUFZEICHNUNGEN ===\n';
-  csv += 'Datum;Mitarbeiter-Nr;Name;Beginn;Ende;Pause (Min);Netto (Std);Normalstd;Überstd;Baustelle;Kunde;Anfahrt;Notizen\n';
+  csv += 'Datum;Mitarbeiter-Nr;Name;Beginn;Ende;Pause (Min);Netto (Std);Normalstd;Überstd;Baustelle;Kunde;Standort;Arbeitstyp;Anfahrt;Notizen\n';
 
   eintraege.forEach(e => {
     const beginnMin = parseInt(e.arbeitsbeginn.split(':')[0]) * 60 + parseInt(e.arbeitsbeginn.split(':')[1]);
@@ -1815,6 +1899,8 @@ app.get('/api/admin/export/csv', checkSession, checkAdmin, (req, res) => {
       tagesUeber.toFixed(2).replace('.', ','),
       `"${e.baustelle || ''}"`,
       `"${e.kunde || ''}"`,
+      `"${e.standort || ''}"`,
+      `"${e.arbeitstyp || ''}"`,
       `"${e.anfahrt || ''}"`,
       `"${(e.notizen || '').replace(/"/g, '""')}"`
     ].join(';') + '\n';
@@ -2011,10 +2097,10 @@ app.get('/api/admin/export/pdf', checkSession, checkAdmin, (req, res) => {
 
   if (eintraege.length > 0) {
     const tableTop2 = doc.y;
-    const colWidths2 = [65, 55, 85, 40, 40, 35, 40, 90];
-    const headers2 = ['Datum', 'MA-Nr', 'Name', 'Von', 'Bis', 'Pause', 'Netto', 'Baustelle'];
+    const colWidths2 = [55, 45, 70, 35, 35, 30, 35, 70, 55, 55];
+    const headers2 = ['Datum', 'MA-Nr', 'Name', 'Von', 'Bis', 'Pause', 'Netto', 'Baustelle', 'Standort', 'Typ'];
 
-    doc.fontSize(8).font('Helvetica-Bold');
+    doc.fontSize(7).font('Helvetica-Bold');
     let x2 = 40;
     headers2.forEach((h, i) => {
       doc.text(h, x2, tableTop2, { width: colWidths2[i], align: 'left' });
@@ -2023,7 +2109,7 @@ app.get('/api/admin/export/pdf', checkSession, checkAdmin, (req, res) => {
 
     doc.moveTo(40, tableTop2 + 10).lineTo(555, tableTop2 + 10).stroke();
 
-    doc.font('Helvetica').fontSize(7);
+    doc.font('Helvetica').fontSize(6);
     let y2 = tableTop2 + 14;
 
     eintraege.forEach(e => {
@@ -2039,12 +2125,14 @@ app.get('/api/admin/export/pdf', checkSession, checkAdmin, (req, res) => {
       x2 = 40;
       doc.text(formatDateAT(e.datum), x2, y2, { width: colWidths2[0] }); x2 += colWidths2[0];
       doc.text(e.mitarbeiter_nr, x2, y2, { width: colWidths2[1] }); x2 += colWidths2[1];
-      doc.text(e.mitarbeiter_name.substring(0, 12), x2, y2, { width: colWidths2[2] }); x2 += colWidths2[2];
+      doc.text(e.mitarbeiter_name.substring(0, 10), x2, y2, { width: colWidths2[2] }); x2 += colWidths2[2];
       doc.text(e.arbeitsbeginn, x2, y2, { width: colWidths2[3] }); x2 += colWidths2[3];
       doc.text(e.arbeitsende, x2, y2, { width: colWidths2[4] }); x2 += colWidths2[4];
       doc.text(`${e.pause_minuten}`, x2, y2, { width: colWidths2[5] }); x2 += colWidths2[5];
       doc.text(formatStunden(nettoMinuten).replace(',', '.'), x2, y2, { width: colWidths2[6] }); x2 += colWidths2[6];
-      doc.text((e.baustelle || '-').substring(0, 15), x2, y2, { width: colWidths2[7] });
+      doc.text((e.baustelle || '-').substring(0, 10), x2, y2, { width: colWidths2[7] }); x2 += colWidths2[7];
+      doc.text((e.standort || '-').substring(0, 8), x2, y2, { width: colWidths2[8] }); x2 += colWidths2[8];
+      doc.text((e.arbeitstyp || '-').substring(0, 8), x2, y2, { width: colWidths2[9] });
 
       y2 += 11;
     });
@@ -2070,7 +2158,7 @@ app.get('/api/admin/export', checkSession, checkAdmin, (req, res) => {
   const result = db.getAllZeiteintraege(von, bis, 1, 10000);
   const eintraege = result.data || result;
 
-  let csv = 'Datum;Mitarbeiter-Nr;Name;Beginn;Ende;Pause (Min.);Netto (Std.);Baustelle;Kunde;Anfahrt;Notizen\n';
+  let csv = 'Datum;Mitarbeiter-Nr;Name;Beginn;Ende;Pause (Min.);Netto (Std.);Baustelle;Kunde;Standort;Arbeitstyp;Anfahrt;Notizen\n';
 
   eintraege.forEach(e => {
     const beginnMin = parseInt(e.arbeitsbeginn.split(':')[0]) * 60 + parseInt(e.arbeitsbeginn.split(':')[1]);
@@ -2087,6 +2175,8 @@ app.get('/api/admin/export', checkSession, checkAdmin, (req, res) => {
       nettoStunden,
       `"${e.baustelle || ''}"`,
       `"${e.kunde || ''}"`,
+      `"${e.standort || ''}"`,
+      `"${e.arbeitstyp || ''}"`,
       `"${e.anfahrt || ''}"`,
       `"${(e.notizen || '').replace(/"/g, '""')}"`
     ].join(';') + '\n';

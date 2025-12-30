@@ -322,6 +322,44 @@ try {
   db.exec(`ALTER TABLE mitarbeiter ADD COLUMN kv_gruppe_id INTEGER REFERENCES kv_gruppen(id)`);
 } catch (e) {}
 
+// Migration: Standort und Arbeitstyp zu Zeiteinträgen hinzufügen
+try {
+  db.exec(`ALTER TABLE zeiteintraege ADD COLUMN standort TEXT`);
+} catch (e) {}
+try {
+  db.exec(`ALTER TABLE zeiteintraege ADD COLUMN arbeitstyp TEXT`);
+} catch (e) {}
+
+// Arbeitstypen-Tabelle erstellen
+db.exec(`
+  CREATE TABLE IF NOT EXISTS arbeitstypen (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL UNIQUE,
+    beschreibung TEXT,
+    farbe TEXT DEFAULT '#6b7280',
+    aktiv INTEGER DEFAULT 1,
+    sortierung INTEGER DEFAULT 0,
+    erstellt_am DATETIME DEFAULT CURRENT_TIMESTAMP
+  )
+`);
+
+// Standard-Arbeitstypen einfügen
+const defaultArbeitstypen = [
+  { name: 'Büro', beschreibung: 'Büroarbeit am Firmenstandort', farbe: '#3b82f6' },
+  { name: 'Baustelle', beschreibung: 'Arbeit auf der Baustelle', farbe: '#f59e0b' },
+  { name: 'Außendienst', beschreibung: 'Kundenbesuche und Außentermine', farbe: '#10b981' },
+  { name: 'Homeoffice', beschreibung: 'Arbeit von zu Hause', farbe: '#8b5cf6' },
+  { name: 'Schulung', beschreibung: 'Weiterbildung und Schulungen', farbe: '#ec4899' },
+  { name: 'Montage', beschreibung: 'Montagearbeiten beim Kunden', farbe: '#ef4444' }
+];
+
+defaultArbeitstypen.forEach((typ, index) => {
+  const exists = db.prepare('SELECT id FROM arbeitstypen WHERE name = ?').get(typ.name);
+  if (!exists) {
+    db.prepare('INSERT INTO arbeitstypen (name, beschreibung, farbe, sortierung) VALUES (?, ?, ?, ?)').run(typ.name, typ.beschreibung, typ.farbe, index);
+  }
+});
+
 // Bestehende Audit-Einträge mit Hash versehen (falls noch ohne)
 const crypto = require('crypto');
 try {
@@ -397,8 +435,8 @@ module.exports = {
   // Zeiteintrag-Funktionen
   createZeiteintrag: (data) => {
     return db.prepare(`
-      INSERT INTO zeiteintraege (mitarbeiter_id, datum, arbeitsbeginn, arbeitsende, pause_minuten, baustelle, kunde, anfahrt, notizen)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO zeiteintraege (mitarbeiter_id, datum, arbeitsbeginn, arbeitsende, pause_minuten, baustelle, kunde, anfahrt, notizen, standort, arbeitstyp)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       data.mitarbeiter_id,
       data.datum,
@@ -408,7 +446,9 @@ module.exports = {
       data.baustelle || '',
       data.kunde || '',
       data.anfahrt || '',
-      data.notizen || ''
+      data.notizen || '',
+      data.standort || '',
+      data.arbeitstyp || ''
     );
   },
 
@@ -724,7 +764,7 @@ module.exports = {
     return db.prepare(`
       UPDATE zeiteintraege
       SET datum = ?, arbeitsbeginn = ?, arbeitsende = ?, pause_minuten = ?,
-          baustelle = ?, kunde = ?, anfahrt = ?, notizen = ?
+          baustelle = ?, kunde = ?, anfahrt = ?, notizen = ?, standort = ?, arbeitstyp = ?
       WHERE id = ?
     `).run(
       data.datum,
@@ -735,8 +775,41 @@ module.exports = {
       data.kunde || '',
       data.anfahrt || '',
       data.notizen || '',
+      data.standort || '',
+      data.arbeitstyp || '',
       id
     );
+  },
+
+  // Arbeitstypen-Funktionen
+  getAllArbeitstypen: (nurAktive = true) => {
+    if (nurAktive) {
+      return db.prepare('SELECT * FROM arbeitstypen WHERE aktiv = 1 ORDER BY sortierung, name').all();
+    }
+    return db.prepare('SELECT * FROM arbeitstypen ORDER BY sortierung, name').all();
+  },
+
+  getArbeitstyp: (id) => {
+    return db.prepare('SELECT * FROM arbeitstypen WHERE id = ?').get(id);
+  },
+
+  createArbeitstyp: (data) => {
+    const maxSort = db.prepare('SELECT MAX(sortierung) as max FROM arbeitstypen').get();
+    return db.prepare(`
+      INSERT INTO arbeitstypen (name, beschreibung, farbe, sortierung)
+      VALUES (?, ?, ?, ?)
+    `).run(data.name, data.beschreibung || '', data.farbe || '#6b7280', (maxSort.max || 0) + 1);
+  },
+
+  updateArbeitstyp: (id, data) => {
+    return db.prepare(`
+      UPDATE arbeitstypen SET name = ?, beschreibung = ?, farbe = ?, aktiv = ?
+      WHERE id = ?
+    `).run(data.name, data.beschreibung || '', data.farbe || '#6b7280', data.aktiv ? 1 : 0, id);
+  },
+
+  deleteArbeitstyp: (id) => {
+    return db.prepare('DELETE FROM arbeitstypen WHERE id = ?').run(id);
   },
 
   // Audit-Log Funktionen (unveränderlich, hash-verkettet)
