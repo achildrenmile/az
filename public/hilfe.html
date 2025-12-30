@@ -340,6 +340,14 @@
           <li>Übersicht aller Mitarbeiter-Salden</li>
         </ul>
 
+        <h3>Kollektivverträge (KV)</h3>
+        <ul>
+          <li>Branchenspezifische Regelwerke anlegen (z.B. Baugewerbe, Handel)</li>
+          <li>Mitarbeiter-Gruppen pro KV (z.B. Arbeiter, Angestellte)</li>
+          <li>Konfigurierbare Regeln für Zuschläge</li>
+          <li>Mitarbeiter den Gruppen zuordnen</li>
+        </ul>
+
         <h3>Audit-Log</h3>
         <ul>
           <li>Unveränderliches Protokoll aller Änderungen</li>
@@ -382,6 +390,40 @@
 
         <div class="help-tip">
           <strong>Sicherheit:</strong> Die Inspektions-Ansicht ist vollständig schreibgeschützt. Inspektoren können nur lesen und exportieren, aber keine Daten ändern. Der Zugang funktioniert nur mit dem korrekten Inspektions-Code.
+        </div>
+      </div>
+
+      <div class="help-section">
+        <h2>Kollektivverträge (KV)</h2>
+        <p>Mit der KV-Funktion können branchenspezifische Regelwerke für Arbeitszeiten und Zuschläge konfiguriert werden:</p>
+
+        <h3>Kollektivvertrag anlegen</h3>
+        <ul>
+          <li>Gehe zu Admin &rarr; Kollektivverträge</li>
+          <li>Klicke auf "Neuer KV"</li>
+          <li>Gib Name, Branche und optional Gültigkeitszeitraum ein</li>
+        </ul>
+
+        <h3>Mitarbeiter-Gruppen</h3>
+        <p>Jeder KV kann mehrere Gruppen haben (z.B. Arbeiter, Angestellte, Lehrlinge):</p>
+        <ul>
+          <li>Klicke auf das Detail-Symbol eines KV</li>
+          <li>Erstelle Gruppen mit eigenen Soll-Wochenstunden</li>
+          <li>Ordne Mitarbeiter den Gruppen zu</li>
+        </ul>
+
+        <h3>Zuschlagsregeln</h3>
+        <p>Folgende Regeltypen werden unterstützt:</p>
+        <ul>
+          <li><strong>Überstunden:</strong> Zuschlag nach X Stunden pro Tag (z.B. 50% nach 8h)</li>
+          <li><strong>Nachtarbeit:</strong> Zuschlag für Arbeitszeit zwischen konfigurierbaren Uhrzeiten (z.B. 22:00-06:00)</li>
+          <li><strong>Samstag:</strong> Zuschlag für Samstagsarbeit</li>
+          <li><strong>Sonntag:</strong> Zuschlag für Sonntagsarbeit</li>
+          <li><strong>Feiertag:</strong> Zuschlag für Feiertagsarbeit</li>
+        </ul>
+
+        <div class="help-tip">
+          <strong>Beispiel:</strong> Ein Baugewerbe-KV könnte folgende Regeln haben: 50% Überstundenzuschlag nach 8h/Tag, 25% Nachtzuschlag (22:00-06:00), 50% Samstagszuschlag, 100% Sonntagszuschlag.
         </div>
       </div>
 
