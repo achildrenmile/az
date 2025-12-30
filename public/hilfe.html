@@ -351,6 +351,38 @@
         <div class="help-tip">
           <strong>Audit-Trail:</strong> Jede Änderung an Zeiteinträgen (Erstellen, Bearbeiten, Löschen) wird mit Zeitstempel, Benutzer und IP-Adresse protokolliert. Die Hash-Verkettung stellt sicher, dass keine nachträglichen Manipulationen möglich sind.
         </div>
+
+        <h3>Arbeitsinspektions-Zugang</h3>
+        <ul>
+          <li>Separater Inspektions-Code für Behörden (in Einstellungen konfigurierbar)</li>
+          <li>Schreibgeschützte Ansicht des gesamten Audit-Logs</li>
+          <li>Link zur Inspektions-Ansicht: <span class="kbd">/inspektion.html</span></li>
+        </ul>
+      </div>
+
+      <div class="help-section">
+        <h2>Arbeitsinspektions-Ansicht</h2>
+        <p>Für Prüfungen durch Behörden (z.B. Arbeitsinspektorat) steht eine separate, schreibgeschützte Ansicht zur Verfügung:</p>
+
+        <h3>Zugang einrichten (Admin)</h3>
+        <ul>
+          <li>Gehe zu Admin &rarr; Einstellungen</li>
+          <li>Setze einen Inspektions-Code (z.B. für eine anstehende Prüfung)</li>
+          <li>Teile den Code und die URL <span class="kbd">/inspektion.html</span> dem Inspektor mit</li>
+          <li>Nach der Prüfung: Code löschen um den Zugang zu deaktivieren</li>
+        </ul>
+
+        <h3>Funktionen der Inspektions-Ansicht</h3>
+        <ul>
+          <li><strong>Statistik-Übersicht:</strong> Gesamtzahl der Einträge, Mitarbeiter, Aktionen</li>
+          <li><strong>Hash-Integritätsprüfung:</strong> Automatische Anzeige ob die Daten manipulationsfrei sind</li>
+          <li><strong>Filter:</strong> Nach Datum, Mitarbeiter, Tabelle und Aktion filtern</li>
+          <li><strong>CSV-Export:</strong> Ein-Klick-Export aller gefilterten Daten mit Integritätsnachweis</li>
+        </ul>
+
+        <div class="help-tip">
+          <strong>Sicherheit:</strong> Die Inspektions-Ansicht ist vollständig schreibgeschützt. Inspektoren können nur lesen und exportieren, aber keine Daten ändern. Der Zugang funktioniert nur mit dem korrekten Inspektions-Code.
+        </div>
       </div>
 
       <div class="help-section">
