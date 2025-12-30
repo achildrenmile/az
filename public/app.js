@@ -505,15 +505,108 @@ async function logout() {
 
 // ==================== ADMIN ====================
 
-// Tabs
+// Admin Navigation - Grouped
+const adminNav = document.getElementById('admin-nav');
+const adminMenuToggle = document.getElementById('admin-menu-toggle');
+const menuCurrentTab = document.getElementById('menu-current-tab');
+
+// Mobile menu toggle
+adminMenuToggle?.addEventListener('click', () => {
+  adminNav.classList.toggle('open');
+});
+
+// Close mobile menu when clicking backdrop
+adminNav?.addEventListener('click', (e) => {
+  if (e.target === adminNav) {
+    adminNav.classList.remove('open');
+  }
+});
+
+// Group header click - toggle group expansion
+document.querySelectorAll('.nav-group-header').forEach(header => {
+  header.addEventListener('click', (e) => {
+    const group = header.closest('.nav-group');
+    const items = group.querySelector('.nav-group-items');
+    const arrow = header.querySelector('.nav-group-arrow');
+    const isMobile = window.innerWidth <= 768;
+
+    // On mobile, toggle current group; on desktop, close others first
+    if (!isMobile) {
+      // Close all other groups
+      document.querySelectorAll('.nav-group-items.open').forEach(openItems => {
+        if (openItems !== items) {
+          openItems.classList.remove('open');
+          const otherArrow = openItems.closest('.nav-group').querySelector('.nav-group-arrow');
+          if (otherArrow) otherArrow.textContent = '▸';
+        }
+      });
+    }
+
+    // Toggle current group
+    items.classList.toggle('open');
+    arrow.textContent = items.classList.contains('open') ? '▾' : '▸';
+  });
+});
+
+// Tab click - switch content
 document.querySelectorAll('.tab').forEach(tab => {
   tab.addEventListener('click', () => {
+    // Remove active from all tabs
     document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
     document.querySelectorAll('.tab-content').forEach(c => c.classList.add('hidden'));
 
+    // Set active tab
     tab.classList.add('active');
     document.getElementById('tab-' + tab.dataset.tab).classList.remove('hidden');
+
+    // Update group header active states
+    document.querySelectorAll('.nav-group-header').forEach(h => h.classList.remove('active'));
+    const parentGroup = tab.closest('.nav-group');
+    if (parentGroup) {
+      parentGroup.querySelector('.nav-group-header').classList.add('active');
+    }
+
+    // Update mobile menu current tab label
+    if (menuCurrentTab) {
+      menuCurrentTab.textContent = tab.textContent;
+    }
+
+    // Close mobile menu after selection
+    if (window.innerWidth <= 768 && adminNav) {
+      adminNav.classList.remove('open');
+    }
+
+    // Close desktop dropdowns after selection
+    if (window.innerWidth > 768) {
+      document.querySelectorAll('.nav-group-items.open').forEach(items => {
+        items.classList.remove('open');
+        const arrow = items.closest('.nav-group').querySelector('.nav-group-arrow');
+        if (arrow) arrow.textContent = '▸';
+      });
+      // Re-open the parent group of the active tab
+      if (parentGroup) {
+        const items = parentGroup.querySelector('.nav-group-items');
+        const arrow = parentGroup.querySelector('.nav-group-arrow');
+        items.classList.add('open');
+        if (arrow) arrow.textContent = '▾';
+      }
+    }
   });
+});
+
+// Close dropdowns when clicking outside (desktop)
+document.addEventListener('click', (e) => {
+  if (window.innerWidth > 768 && !e.target.closest('.admin-nav')) {
+    document.querySelectorAll('.nav-group-items.open').forEach(items => {
+      // Keep the active group open
+      const group = items.closest('.nav-group');
+      if (!group.querySelector('.tab.active')) {
+        items.classList.remove('open');
+        const arrow = group.querySelector('.nav-group-arrow');
+        if (arrow) arrow.textContent = '▸';
+      }
+    });
+  }
 });
 
 // Zurück zur Erfassung

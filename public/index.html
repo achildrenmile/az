@@ -295,22 +295,68 @@
     </nav>
 
     <div class="container">
-      <!-- Tabs -->
-      <div class="tabs">
-        <button class="tab active" data-tab="eintraege">Zeiteinträge</button>
-        <button class="tab" data-tab="statistik">Statistik</button>
-        <button class="tab" data-tab="bestaetigungen">Bestätigungen</button>
-        <button class="tab" data-tab="gleitzeit">Gleitzeit</button>
-        <button class="tab" data-tab="verstoesse">Verstöße</button>
-        <button class="tab" data-tab="mitarbeiter">Mitarbeiter</button>
-        <button class="tab" data-tab="kunden">Kunden</button>
-        <button class="tab" data-tab="baustellen">Projekte / Baustellen</button>
-        <button class="tab" data-tab="pausenregeln">Pausenregeln</button>
-        <button class="tab" data-tab="kollektivvertrag">Kollektivverträge</button>
-        <button class="tab" data-tab="einstellungen">Einstellungen</button>
-        <button class="tab" data-tab="retention">Datenaufbewahrung</button>
-        <button class="tab" data-tab="audit">Audit-Log</button>
-      </div>
+      <!-- Mobile Menu Toggle -->
+      <button class="admin-menu-toggle" id="admin-menu-toggle">
+        <span class="menu-icon">☰</span>
+        <span class="menu-label">Navigation</span>
+        <span class="menu-current" id="menu-current-tab">Zeiteinträge</span>
+      </button>
+
+      <!-- Grouped Navigation -->
+      <nav class="admin-nav" id="admin-nav">
+        <div class="nav-group" data-group="zeit">
+          <button class="nav-group-header active">
+            <span class="nav-group-icon">🕐</span>
+            <span class="nav-group-title">Zeit & Auswertung</span>
+            <span class="nav-group-arrow">▾</span>
+          </button>
+          <div class="nav-group-items open">
+            <button class="tab active" data-tab="eintraege">Zeiteinträge</button>
+            <button class="tab" data-tab="statistik">Statistik</button>
+            <button class="tab" data-tab="bestaetigungen">Bestätigungen</button>
+            <button class="tab" data-tab="gleitzeit">Gleitzeit</button>
+            <button class="tab" data-tab="verstoesse">Verstöße</button>
+          </div>
+        </div>
+
+        <div class="nav-group" data-group="organisation">
+          <button class="nav-group-header">
+            <span class="nav-group-icon">👥</span>
+            <span class="nav-group-title">Organisation</span>
+            <span class="nav-group-arrow">▸</span>
+          </button>
+          <div class="nav-group-items">
+            <button class="tab" data-tab="mitarbeiter">Mitarbeiter</button>
+            <button class="tab" data-tab="kunden">Kunden</button>
+            <button class="tab" data-tab="baustellen">Projekte / Baustellen</button>
+          </div>
+        </div>
+
+        <div class="nav-group" data-group="regeln">
+          <button class="nav-group-header">
+            <span class="nav-group-icon">📋</span>
+            <span class="nav-group-title">Regeln & Verträge</span>
+            <span class="nav-group-arrow">▸</span>
+          </button>
+          <div class="nav-group-items">
+            <button class="tab" data-tab="pausenregeln">Pausenregeln</button>
+            <button class="tab" data-tab="kollektivvertrag">Kollektivverträge</button>
+          </div>
+        </div>
+
+        <div class="nav-group" data-group="system">
+          <button class="nav-group-header">
+            <span class="nav-group-icon">⚙️</span>
+            <span class="nav-group-title">System</span>
+            <span class="nav-group-arrow">▸</span>
+          </button>
+          <div class="nav-group-items">
+            <button class="tab" data-tab="einstellungen">Einstellungen</button>
+            <button class="tab" data-tab="retention">Datenaufbewahrung</button>
+            <button class="tab" data-tab="audit">Audit-Log</button>
+          </div>
+        </div>
+      </nav>
 
       <!-- Zeiteinträge Tab -->
       <div id="tab-eintraege" class="tab-content">

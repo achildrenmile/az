@@ -584,36 +584,126 @@ td[title] {
   cursor: default;
 }
 
-/* Tabs */
-.tabs {
-  display: flex;
-  gap: 4px;
-  margin-bottom: 24px;
-  background: #f4f4f5;
-  padding: 4px;
+/* Admin Navigation - Grouped */
+.admin-menu-toggle {
+  display: none;
+  width: 100%;
+  padding: 14px 16px;
+  background: var(--primary);
+  color: white;
+  border: none;
   border-radius: 10px;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  margin-bottom: 16px;
+  text-align: left;
+  align-items: center;
+  gap: 10px;
 }
 
-.tab {
-  padding: 10px 18px;
+.admin-menu-toggle .menu-icon {
+  font-size: 18px;
+}
+
+.admin-menu-toggle .menu-label {
+  flex: 1;
+}
+
+.admin-menu-toggle .menu-current {
+  font-weight: 400;
+  opacity: 0.9;
+  font-size: 13px;
+}
+
+.admin-nav {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 24px;
+  flex-wrap: wrap;
+}
+
+.nav-group {
+  position: relative;
+}
+
+.nav-group-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  background: #f4f4f5;
   border: none;
-  background: transparent;
+  border-radius: 10px;
   cursor: pointer;
   font-size: 14px;
   font-weight: 600;
   color: var(--text-secondary);
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+
+.nav-group-header:hover {
+  background: #e4e4e7;
+  color: var(--text-primary);
+}
+
+.nav-group-header.active {
+  background: var(--primary);
+  color: white;
+}
+
+.nav-group-icon {
+  font-size: 16px;
+}
+
+.nav-group-arrow {
+  font-size: 12px;
+  transition: transform 0.2s;
+}
+
+.nav-group-items {
+  display: none;
+  position: absolute;
+  top: 100%;
+  left: 0;
+  min-width: 200px;
+  background: white;
+  border-radius: 10px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+  padding: 8px;
+  margin-top: 4px;
+  z-index: 100;
+}
+
+.nav-group-items.open {
+  display: block;
+}
+
+.nav-group-items .tab {
+  display: block;
+  width: 100%;
+  padding: 10px 14px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-secondary);
   border-radius: 6px;
   transition: all 0.15s;
+  text-align: left;
 }
 
-.tab.active {
-  background: white;
-  color: var(--primary);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-}
-
-.tab:hover:not(.active) {
+.nav-group-items .tab:hover {
+  background: #f4f4f5;
   color: var(--text-primary);
+}
+
+.nav-group-items .tab.active {
+  background: var(--primary-light);
+  color: var(--primary);
+  font-weight: 600;
 }
 
 .tab-content.hidden {
@@ -789,15 +879,101 @@ td[title] {
     width: 100%;
   }
 
-  .tabs {
-    flex-wrap: wrap;
+  /* Mobile Admin Navigation */
+  .admin-menu-toggle {
+    display: flex;
   }
 
-  .tab {
-    flex: 1;
-    text-align: center;
-    padding: 10px 12px;
-    font-size: 13px;
+  .admin-nav {
+    display: none;
+    flex-direction: column;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 1000;
+    padding: 20px;
+    overflow-y: auto;
+  }
+
+  .admin-nav.open {
+    display: flex;
+  }
+
+  .admin-nav::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+  }
+
+  .admin-nav > .nav-group {
+    position: relative;
+    z-index: 1;
+  }
+
+  .nav-group {
+    background: white;
+    border-radius: 12px;
+    overflow: hidden;
+  }
+
+  .nav-group:first-child {
+    border-top-left-radius: 12px;
+    border-top-right-radius: 12px;
+  }
+
+  .nav-group:last-child {
+    border-bottom-left-radius: 12px;
+    border-bottom-right-radius: 12px;
+  }
+
+  .nav-group + .nav-group {
+    margin-top: 2px;
+  }
+
+  .nav-group-header {
+    width: 100%;
+    border-radius: 0;
+    padding: 16px 20px;
+    justify-content: flex-start;
+  }
+
+  .nav-group-header .nav-group-arrow {
+    margin-left: auto;
+  }
+
+  .nav-group-items {
+    position: static;
+    box-shadow: none;
+    margin-top: 0;
+    padding: 0 8px 8px;
+    border-radius: 0;
+    background: #fafafa;
+  }
+
+  .nav-group-items .tab {
+    padding: 12px 16px;
+  }
+
+  .admin-nav-close {
+    display: block;
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    width: 44px;
+    height: 44px;
+    background: white;
+    border: none;
+    border-radius: 50%;
+    font-size: 24px;
+    cursor: pointer;
+    z-index: 1001;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
   }
 
   th, td {
