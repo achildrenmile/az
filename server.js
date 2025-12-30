@@ -1382,6 +1382,90 @@ app.post('/api/kv/berechne', checkSession, (req, res) => {
   res.json(result);
 });
 
+// ==================== DATENAUFBEWAHRUNG (RETENTION) ROUTES ====================
+
+// Retention-Konfiguration abrufen
+app.get('/api/admin/retention/konfig', checkSession, checkAdmin, (req, res) => {
+  const konfig = db.getRetentionKonfig();
+  res.json(konfig);
+});
+
+// Retention-Analyse abrufen (was würde gelöscht werden)
+app.get('/api/admin/retention/analyse', checkSession, checkAdmin, (req, res) => {
+  const analyse = db.analyzeRetentionData();
+  const konfig = db.getRetentionKonfig();
+  res.json({ analyse, konfig });
+});
+
+// Retention ausführen (Daten löschen)
+app.post('/api/admin/retention/execute', checkSession, checkAdmin, (req, res) => {
+  const { tabelle } = req.body;
+
+  if (!tabelle || !['zeiteintraege', 'audit_log'].includes(tabelle)) {
+    return res.status(400).json({ error: 'Gültige Tabelle erforderlich (zeiteintraege oder audit_log)' });
+  }
+
+  const mitarbeiter = req.session.mitarbeiter;
+  const result = db.executeRetention(tabelle, `${mitarbeiter.name} (${mitarbeiter.mitarbeiter_nr})`);
+
+  if (result.success) {
+    // Benachrichtigung erstellen
+    db.createBenachrichtigung(
+      'RETENTION_AUSGEFUEHRT',
+      `Datenlöschung: ${tabelle}`,
+      `${result.geloescht} Einträge wurden gelöscht. Ältester Eintrag: ${result.aeltestes}`,
+      { tabelle, geloescht: result.geloescht, aeltestes: result.aeltestes }
+    );
+  }
+
+  res.json(result);
+});
+
+// Löschprotokoll abrufen
+app.get('/api/admin/retention/protokoll', checkSession, checkAdmin, (req, res) => {
+  const limit = parseInt(req.query.limit) || 50;
+  const protokoll = db.getLoeschprotokoll(limit);
+  res.json(protokoll);
+});
+
+// ==================== ADMIN-BENACHRICHTIGUNGEN ROUTES ====================
+
+// Ungelesene Anzahl abrufen
+app.get('/api/admin/benachrichtigungen/anzahl', checkSession, checkAdmin, (req, res) => {
+  const anzahl = db.getUngeleseneAnzahl();
+  res.json({ anzahl });
+});
+
+// Alle Benachrichtigungen abrufen
+app.get('/api/admin/benachrichtigungen', checkSession, checkAdmin, (req, res) => {
+  const limit = parseInt(req.query.limit) || 50;
+  const nurUngelesen = req.query.ungelesen === 'true';
+
+  const benachrichtigungen = nurUngelesen
+    ? db.getUngeleseneBenachrichtigungen()
+    : db.getAlleBenachrichtigungen(limit);
+
+  res.json(benachrichtigungen);
+});
+
+// Benachrichtigung als gelesen markieren
+app.put('/api/admin/benachrichtigungen/:id/gelesen', checkSession, checkAdmin, (req, res) => {
+  db.markBenachrichtigungGelesen(parseInt(req.params.id));
+  res.json({ success: true });
+});
+
+// Alle als gelesen markieren
+app.put('/api/admin/benachrichtigungen/alle-gelesen', checkSession, checkAdmin, (req, res) => {
+  db.markAlleBenachrichtigungenGelesen();
+  res.json({ success: true });
+});
+
+// Retention-Warnungen prüfen und erstellen
+app.post('/api/admin/retention/check-warnings', checkSession, checkAdmin, (req, res) => {
+  const created = db.checkAndCreateRetentionWarnung();
+  res.json({ created });
+});
+
 // ==================== EINSTELLUNGEN ROUTES ====================
 
 // Alle Einstellungen abrufen (Admin)

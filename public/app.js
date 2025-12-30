@@ -2085,6 +2085,11 @@ document.addEventListener('DOMContentLoaded', () => {
       if (tab.dataset.tab === 'verstoesse') {
         loadVerstoesse();
       }
+      if (tab.dataset.tab === 'retention') {
+        loadRetentionKonfig();
+        loadRetentionAnalyse();
+        loadLoeschprotokoll();
+      }
     });
   });
 });
@@ -3518,3 +3523,178 @@ function parseDateInput(dateStr) {
   if (parts.length !== 3) return dateStr;
   return `${parts[2]}-${parts[1]}-${parts[0]}`;
 }
+
+// ========================================
+// DATENAUFBEWAHRUNG (RETENTION) FUNKTIONEN
+// ========================================
+
+async function loadRetentionKonfig() {
+  try {
+    const konfig = await api('/admin/retention/konfig');
+    document.getElementById('retention-zeiteintraege').value = konfig.zeiteintraege_monate || 84;
+    document.getElementById('retention-audit').value = konfig.audit_monate || 120;
+    document.getElementById('retention-warnung').value = konfig.warnung_tage || 30;
+    document.getElementById('retention-auto').checked = konfig.auto_loeschen === '1' || konfig.auto_loeschen === 1;
+  } catch (error) {
+    console.error('Retention-Konfiguration laden fehlgeschlagen:', error);
+  }
+}
+
+async function saveRetentionKonfig(event) {
+  event.preventDefault();
+
+  const data = {
+    zeiteintraege_monate: parseInt(document.getElementById('retention-zeiteintraege').value) || 84,
+    audit_monate: parseInt(document.getElementById('retention-audit').value) || 120,
+    warnung_tage: parseInt(document.getElementById('retention-warnung').value) || 30,
+    auto_loeschen: document.getElementById('retention-auto').checked ? '1' : '0'
+  };
+
+  try {
+    await api('/admin/einstellungen', {
+      method: 'PUT',
+      body: JSON.stringify({
+        retention_zeiteintraege_monate: String(data.zeiteintraege_monate),
+        retention_audit_monate: String(data.audit_monate),
+        retention_warnung_tage: String(data.warnung_tage),
+        retention_auto_loeschen: data.auto_loeschen
+      })
+    });
+    showMessage('retention-message', 'Einstellungen gespeichert', 'success');
+    loadRetentionAnalyse();
+  } catch (error) {
+    showMessage('retention-message', 'Fehler: ' + error.message, 'error');
+  }
+}
+
+async function loadRetentionAnalyse() {
+  const loadingEl = document.getElementById('retention-analyse-loading');
+  const detailsEl = document.getElementById('retention-details');
+
+  try {
+    loadingEl.classList.remove('hidden');
+
+    const analyse = await api('/admin/retention/analyse');
+
+    // Zeiteinträge
+    document.getElementById('retention-total-zeiteintraege').textContent = analyse.zeiteintraege.gesamt;
+    document.getElementById('retention-loeschbar-zeiteintraege').textContent = analyse.zeiteintraege.loeschbar;
+
+    // Audit
+    document.getElementById('retention-total-audit').textContent = analyse.audit.gesamt;
+    document.getElementById('retention-loeschbar-audit').textContent = analyse.audit.loeschbar;
+
+    // Details
+    if (analyse.zeiteintraege.aeltester || analyse.audit.aeltester) {
+      detailsEl.classList.remove('hidden');
+      document.getElementById('retention-aeltester-ze').textContent = analyse.zeiteintraege.aeltester
+        ? `Ältester Zeiteintrag: ${formatDateDisplay(analyse.zeiteintraege.aeltester)}`
+        : 'Keine Zeiteinträge vorhanden';
+      document.getElementById('retention-aeltester-audit').textContent = analyse.audit.aeltester
+        ? `Ältester Audit-Eintrag: ${formatDateTimeDisplay(analyse.audit.aeltester)}`
+        : 'Keine Audit-Einträge vorhanden';
+    } else {
+      detailsEl.classList.add('hidden');
+    }
+
+    // Löschbuttons aktivieren/deaktivieren
+    document.getElementById('btn-loeschen-zeiteintraege').disabled = analyse.zeiteintraege.loeschbar === 0;
+    document.getElementById('btn-loeschen-audit').disabled = analyse.audit.loeschbar === 0;
+
+  } catch (error) {
+    console.error('Retention-Analyse fehlgeschlagen:', error);
+  } finally {
+    loadingEl.classList.add('hidden');
+  }
+}
+
+async function executeRetention(tabelle) {
+  const tabelleLabel = tabelle === 'zeiteintraege' ? 'Zeiteinträge' : 'Audit-Einträge';
+
+  if (!confirm(`Möchten Sie wirklich alte ${tabelleLabel} löschen?\n\nDieser Vorgang kann NICHT rückgängig gemacht werden!`)) {
+    return;
+  }
+
+  const messageEl = document.getElementById('retention-execute-message');
+
+  try {
+    const result = await api('/admin/retention/execute', {
+      method: 'POST',
+      body: JSON.stringify({ tabelle })
+    });
+
+    if (result.geloescht > 0) {
+      showMessage('retention-execute-message', `${result.geloescht} ${tabelleLabel} wurden gelöscht.`, 'success');
+    } else {
+      showMessage('retention-execute-message', 'Keine Einträge zum Löschen gefunden.', 'success');
+    }
+
+    // Analyse und Protokoll neu laden
+    loadRetentionAnalyse();
+    loadLoeschprotokoll();
+
+  } catch (error) {
+    showMessage('retention-execute-message', 'Fehler: ' + error.message, 'error');
+  }
+}
+
+async function loadLoeschprotokoll() {
+  try {
+    const protokoll = await api('/admin/retention/protokoll');
+    const tbody = document.querySelector('#loeschprotokoll-table tbody');
+    const emptyEl = document.getElementById('loeschprotokoll-empty');
+
+    if (!protokoll || protokoll.length === 0) {
+      tbody.innerHTML = '';
+      emptyEl.classList.remove('hidden');
+      return;
+    }
+
+    emptyEl.classList.add('hidden');
+
+    tbody.innerHTML = protokoll.map(p => {
+      const tabelleLabel = p.tabelle === 'zeiteintraege' ? 'Zeiteinträge' :
+                           p.tabelle === 'audit_log' ? 'Audit-Log' : p.tabelle;
+      return `
+        <tr>
+          <td>${formatDateTimeDisplay(p.ausgefuehrt_am)}</td>
+          <td>${escapeHtml(tabelleLabel)}</td>
+          <td style="text-align:right"><strong>${p.anzahl_geloescht}</strong></td>
+          <td>${p.aeltester_eintrag ? formatDateDisplay(p.aeltester_eintrag) : '-'}</td>
+          <td>${escapeHtml(p.loeschgrund || '-')}</td>
+          <td>${escapeHtml(p.ausgefuehrt_von || '-')}</td>
+        </tr>
+      `;
+    }).join('');
+
+  } catch (error) {
+    console.error('Löschprotokoll laden fehlgeschlagen:', error);
+  }
+}
+
+function formatDateTimeDisplay(dateStr) {
+  if (!dateStr) return '-';
+  const date = new Date(dateStr);
+  if (isNaN(date.getTime())) return dateStr;
+  return date.toLocaleString('de-AT', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  });
+}
+
+function formatDateDisplay(dateStr) {
+  if (!dateStr) return '-';
+  const date = new Date(dateStr);
+  if (isNaN(date.getTime())) return dateStr;
+  return date.toLocaleDateString('de-AT', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric'
+  });
+}
+
+// Event-Listener für Retention-Form
+document.getElementById('retention-form')?.addEventListener('submit', saveRetentionKonfig);

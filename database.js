@@ -195,6 +195,33 @@ db.exec(`
   );
 
   CREATE INDEX IF NOT EXISTS idx_kv_gruppen_kv ON kv_gruppen(kv_id);
+
+  -- Admin-Benachrichtigungen
+  CREATE TABLE IF NOT EXISTS admin_benachrichtigungen (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    typ TEXT NOT NULL,
+    titel TEXT NOT NULL,
+    nachricht TEXT NOT NULL,
+    daten TEXT,
+    gelesen INTEGER DEFAULT 0,
+    erstellt_am DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_benachrichtigung_typ ON admin_benachrichtigungen(typ);
+  CREATE INDEX IF NOT EXISTS idx_benachrichtigung_gelesen ON admin_benachrichtigungen(gelesen);
+
+  -- Löschprotokoll (DSGVO-konform)
+  CREATE TABLE IF NOT EXISTS loeschprotokoll (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    tabelle TEXT NOT NULL,
+    anzahl_geloescht INTEGER NOT NULL,
+    aeltester_eintrag DATE,
+    loeschgrund TEXT,
+    ausgefuehrt_von TEXT,
+    ausgefuehrt_am DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_loeschprotokoll_datum ON loeschprotokoll(ausgefuehrt_am);
 `);
 
 // Standard-Pausenregeln einfügen falls nicht vorhanden (AZG §11)
@@ -236,7 +263,12 @@ const defaultSettings = [
   { key: 'gleitzeit_uebertrag_max', value: '20', desc: 'Maximaler Übertrag am Periodenende (Stunden)' },
   { key: 'gleitzeit_verfall_monate', value: '0', desc: 'Verfall nach X Monaten (0=kein Verfall)' },
   // Inspektions-Einstellungen
-  { key: 'inspektion_code', value: '', desc: 'Zugangscode für Arbeitsinspektions-Ansicht (leer = deaktiviert)' }
+  { key: 'inspektion_code', value: '', desc: 'Zugangscode für Arbeitsinspektions-Ansicht (leer = deaktiviert)' },
+  // Datenaufbewahrung (DSGVO)
+  { key: 'retention_zeiteintraege_monate', value: '84', desc: 'Aufbewahrungsfrist Zeiteinträge in Monaten (84 = 7 Jahre, 0 = unbegrenzt)' },
+  { key: 'retention_audit_monate', value: '120', desc: 'Aufbewahrungsfrist Audit-Log in Monaten (120 = 10 Jahre, 0 = unbegrenzt)' },
+  { key: 'retention_warnung_tage', value: '30', desc: 'Tage vor Löschung: Admin-Benachrichtigung' },
+  { key: 'retention_auto_loeschen', value: '0', desc: 'Automatische Löschung aktiviert (1=ja, 0=nein - nur Warnung)' }
 ];
 
 defaultSettings.forEach(s => {
@@ -2384,5 +2416,228 @@ module.exports = {
       zuschlaege,
       gesamt_zuschlag_stunden: zuschlaege.reduce((sum, z) => sum + z.zuschlag_stunden, 0)
     };
+  },
+
+  // ==================== DATENAUFBEWAHRUNG (RETENTION) FUNKTIONEN ====================
+
+  // Retention-Konfiguration abrufen
+  getRetentionKonfig: () => {
+    const keys = [
+      'retention_zeiteintraege_monate',
+      'retention_audit_monate',
+      'retention_warnung_tage',
+      'retention_auto_loeschen'
+    ];
+    const konfig = {};
+    keys.forEach(key => {
+      const row = db.prepare('SELECT wert FROM einstellungen WHERE schluessel = ?').get(key);
+      konfig[key] = row ? parseInt(row.wert) : 0;
+    });
+    return konfig;
+  },
+
+  // Daten analysieren die zur Löschung anstehen
+  analyzeRetentionData: () => {
+    const konfig = module.exports.getRetentionKonfig();
+    const heute = new Date();
+    const results = {
+      zeiteintraege: { zuLoeschen: 0, warnungAnzahl: 0, aeltestes: null },
+      audit: { zuLoeschen: 0, warnungAnzahl: 0, aeltestes: null }
+    };
+
+    // Zeiteinträge analysieren
+    if (konfig.retention_zeiteintraege_monate > 0) {
+      const loeschDatum = new Date(heute);
+      loeschDatum.setMonth(loeschDatum.getMonth() - konfig.retention_zeiteintraege_monate);
+      const loeschDatumStr = loeschDatum.toISOString().split('T')[0];
+
+      const warnDatum = new Date(loeschDatum);
+      warnDatum.setDate(warnDatum.getDate() + konfig.retention_warnung_tage);
+      const warnDatumStr = warnDatum.toISOString().split('T')[0];
+
+      const zuLoeschen = db.prepare('SELECT COUNT(*) as count, MIN(datum) as aeltestes FROM zeiteintraege WHERE datum < ?').get(loeschDatumStr);
+      const warnung = db.prepare('SELECT COUNT(*) as count FROM zeiteintraege WHERE datum >= ? AND datum < ?').get(loeschDatumStr, warnDatumStr);
+
+      results.zeiteintraege = {
+        zuLoeschen: zuLoeschen.count,
+        aeltestes: zuLoeschen.aeltestes,
+        warnungAnzahl: warnung.count,
+        loeschDatum: loeschDatumStr,
+        warnDatum: warnDatumStr
+      };
+    }
+
+    // Audit-Log analysieren
+    if (konfig.retention_audit_monate > 0) {
+      const loeschDatum = new Date(heute);
+      loeschDatum.setMonth(loeschDatum.getMonth() - konfig.retention_audit_monate);
+      const loeschDatumStr = loeschDatum.toISOString().split('T')[0];
+
+      const warnDatum = new Date(loeschDatum);
+      warnDatum.setDate(warnDatum.getDate() + konfig.retention_warnung_tage);
+      const warnDatumStr = warnDatum.toISOString().split('T')[0];
+
+      const zuLoeschen = db.prepare('SELECT COUNT(*) as count, MIN(DATE(zeitpunkt)) as aeltestes FROM audit_log WHERE DATE(zeitpunkt) < ?').get(loeschDatumStr);
+      const warnung = db.prepare('SELECT COUNT(*) as count FROM audit_log WHERE DATE(zeitpunkt) >= ? AND DATE(zeitpunkt) < ?').get(loeschDatumStr, warnDatumStr);
+
+      results.audit = {
+        zuLoeschen: zuLoeschen.count,
+        aeltestes: zuLoeschen.aeltestes,
+        warnungAnzahl: warnung.count,
+        loeschDatum: loeschDatumStr,
+        warnDatum: warnDatumStr
+      };
+    }
+
+    return results;
+  },
+
+  // Alte Daten löschen (mit Protokollierung)
+  executeRetention: (tabelle, ausfuehrender = 'SYSTEM') => {
+    const konfig = module.exports.getRetentionKonfig();
+    const heute = new Date();
+    let result = { success: false, geloescht: 0 };
+
+    if (tabelle === 'zeiteintraege' && konfig.retention_zeiteintraege_monate > 0) {
+      const loeschDatum = new Date(heute);
+      loeschDatum.setMonth(loeschDatum.getMonth() - konfig.retention_zeiteintraege_monate);
+      const loeschDatumStr = loeschDatum.toISOString().split('T')[0];
+
+      // Anzahl und ältesten Eintrag ermitteln
+      const info = db.prepare('SELECT COUNT(*) as count, MIN(datum) as aeltestes FROM zeiteintraege WHERE datum < ?').get(loeschDatumStr);
+
+      if (info.count > 0) {
+        // Löschen
+        db.prepare('DELETE FROM zeiteintraege WHERE datum < ?').run(loeschDatumStr);
+
+        // Protokollieren
+        db.prepare(`
+          INSERT INTO loeschprotokoll (tabelle, anzahl_geloescht, aeltester_eintrag, loeschgrund, ausgefuehrt_von)
+          VALUES (?, ?, ?, ?, ?)
+        `).run('zeiteintraege', info.count, info.aeltestes, `Retention: ${konfig.retention_zeiteintraege_monate} Monate`, ausfuehrender);
+
+        result = { success: true, geloescht: info.count, aeltestes: info.aeltestes };
+      }
+    }
+
+    if (tabelle === 'audit_log' && konfig.retention_audit_monate > 0) {
+      const loeschDatum = new Date(heute);
+      loeschDatum.setMonth(loeschDatum.getMonth() - konfig.retention_audit_monate);
+      const loeschDatumStr = loeschDatum.toISOString().split('T')[0];
+
+      const info = db.prepare('SELECT COUNT(*) as count, MIN(DATE(zeitpunkt)) as aeltestes FROM audit_log WHERE DATE(zeitpunkt) < ?').get(loeschDatumStr);
+
+      if (info.count > 0) {
+        db.prepare('DELETE FROM audit_log WHERE DATE(zeitpunkt) < ?').run(loeschDatumStr);
+
+        db.prepare(`
+          INSERT INTO loeschprotokoll (tabelle, anzahl_geloescht, aeltester_eintrag, loeschgrund, ausgefuehrt_von)
+          VALUES (?, ?, ?, ?, ?)
+        `).run('audit_log', info.count, info.aeltestes, `Retention: ${konfig.retention_audit_monate} Monate`, ausfuehrender);
+
+        result = { success: true, geloescht: info.count, aeltestes: info.aeltestes };
+      }
+    }
+
+    return result;
+  },
+
+  // Löschprotokoll abrufen
+  getLoeschprotokoll: (limit = 50) => {
+    return db.prepare(`
+      SELECT * FROM loeschprotokoll
+      ORDER BY ausgefuehrt_am DESC
+      LIMIT ?
+    `).all(limit);
+  },
+
+  // ==================== ADMIN-BENACHRICHTIGUNGEN FUNKTIONEN ====================
+
+  // Benachrichtigung erstellen
+  createBenachrichtigung: (typ, titel, nachricht, daten = null) => {
+    return db.prepare(`
+      INSERT INTO admin_benachrichtigungen (typ, titel, nachricht, daten)
+      VALUES (?, ?, ?, ?)
+    `).run(typ, titel, nachricht, daten ? JSON.stringify(daten) : null);
+  },
+
+  // Ungelesene Benachrichtigungen abrufen
+  getUngeleseneBenachrichtigungen: () => {
+    return db.prepare(`
+      SELECT * FROM admin_benachrichtigungen
+      WHERE gelesen = 0
+      ORDER BY erstellt_am DESC
+    `).all();
+  },
+
+  // Alle Benachrichtigungen abrufen
+  getAlleBenachrichtigungen: (limit = 50) => {
+    return db.prepare(`
+      SELECT * FROM admin_benachrichtigungen
+      ORDER BY erstellt_am DESC
+      LIMIT ?
+    `).all(limit);
+  },
+
+  // Benachrichtigung als gelesen markieren
+  markBenachrichtigungGelesen: (id) => {
+    return db.prepare('UPDATE admin_benachrichtigungen SET gelesen = 1 WHERE id = ?').run(id);
+  },
+
+  // Alle Benachrichtigungen als gelesen markieren
+  markAlleBenachrichtigungenGelesen: () => {
+    return db.prepare('UPDATE admin_benachrichtigungen SET gelesen = 1 WHERE gelesen = 0').run();
+  },
+
+  // Anzahl ungelesener Benachrichtigungen
+  getUngeleseneAnzahl: () => {
+    const result = db.prepare('SELECT COUNT(*) as count FROM admin_benachrichtigungen WHERE gelesen = 0').get();
+    return result.count;
+  },
+
+  // Retention-Warnung erstellen (falls nötig)
+  checkAndCreateRetentionWarnung: () => {
+    const analyse = module.exports.analyzeRetentionData();
+    const konfig = module.exports.getRetentionKonfig();
+    const created = [];
+
+    // Prüfen ob bereits eine aktuelle Warnung existiert (heute)
+    const heute = new Date().toISOString().split('T')[0];
+
+    if (analyse.zeiteintraege.zuLoeschen > 0 || analyse.zeiteintraege.warnungAnzahl > 0) {
+      const existing = db.prepare(`
+        SELECT id FROM admin_benachrichtigungen
+        WHERE typ = 'RETENTION_WARNUNG' AND DATE(erstellt_am) = ? AND nachricht LIKE '%Zeiteinträge%'
+      `).get(heute);
+
+      if (!existing) {
+        module.exports.createBenachrichtigung(
+          'RETENTION_WARNUNG',
+          'Datenaufbewahrung: Zeiteinträge',
+          `${analyse.zeiteintraege.zuLoeschen} Zeiteinträge zur Löschung bereit, ${analyse.zeiteintraege.warnungAnzahl} weitere in den nächsten ${konfig.retention_warnung_tage} Tagen.`,
+          { analyse: analyse.zeiteintraege, autoLoeschen: konfig.retention_auto_loeschen === 1 }
+        );
+        created.push('zeiteintraege');
+      }
+    }
+
+    if (analyse.audit.zuLoeschen > 0 || analyse.audit.warnungAnzahl > 0) {
+      const existing = db.prepare(`
+        SELECT id FROM admin_benachrichtigungen
+        WHERE typ = 'RETENTION_WARNUNG' AND DATE(erstellt_am) = ? AND nachricht LIKE '%Audit%'
+      `).get(heute);
+
+      if (!existing) {
+        module.exports.createBenachrichtigung(
+          'RETENTION_WARNUNG',
+          'Datenaufbewahrung: Audit-Log',
+          `${analyse.audit.zuLoeschen} Audit-Einträge zur Löschung bereit, ${analyse.audit.warnungAnzahl} weitere in den nächsten ${konfig.retention_warnung_tage} Tagen.`,
+          { analyse: analyse.audit, autoLoeschen: konfig.retention_auto_loeschen === 1 }
+        );
+        created.push('audit');
+      }
+    }
+
+    return created;
   }
 };
