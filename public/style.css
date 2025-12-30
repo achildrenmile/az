@@ -259,6 +259,14 @@ body {
   font-size: 18px;
   color: white;
   box-shadow: 0 2px 8px rgba(5, 150, 105, 0.3);
+  text-decoration: none;
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.logo-icon:hover {
+  transform: scale(1.05);
+  box-shadow: 0 4px 12px rgba(5, 150, 105, 0.4);
 }
 
 .logo-login {
@@ -311,6 +319,18 @@ body {
   align-items: center;
   flex-wrap: wrap;
   gap: 12px;
+  cursor: default;
+  user-select: none;
+}
+
+.navbar * {
+  cursor: inherit;
+}
+
+.navbar a,
+.navbar button,
+.navbar .btn {
+  cursor: pointer;
 }
 
 .navbar-user {
@@ -621,6 +641,8 @@ td[title] {
   gap: 8px;
   margin-bottom: 24px;
   flex-wrap: wrap;
+  cursor: default;
+  user-select: none;
 }
 
 .nav-group {
