@@ -1,0 +1,537 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AZ - Arbeitsinspektions-Ansicht</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%23059669'/><text x='50' y='68' font-family='Arial' font-size='50' font-weight='bold' fill='white' text-anchor='middle'>AZ</text></svg>">
+  <style>
+    .inspektion-header {
+      background: linear-gradient(135deg, #1e40af 0%, #3730a3 100%);
+      color: white;
+      padding: 20px;
+      margin-bottom: 24px;
+      border-radius: 12px;
+    }
+    .inspektion-header h1 {
+      margin: 0;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .inspektion-badge {
+      background: rgba(255,255,255,0.2);
+      padding: 4px 12px;
+      border-radius: 20px;
+      font-size: 0.75rem;
+      font-weight: 600;
+    }
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+    .stat-card {
+      background: var(--bg-light);
+      padding: 16px;
+      border-radius: 8px;
+      text-align: center;
+      border: 1px solid var(--border);
+    }
+    .stat-card .value {
+      font-size: 1.75rem;
+      font-weight: 700;
+      color: var(--primary);
+    }
+    .stat-card .label {
+      font-size: 0.85rem;
+      color: var(--text-secondary);
+      margin-top: 4px;
+    }
+    .stat-card.integrity-ok { border-left: 4px solid #10b981; }
+    .stat-card.integrity-fail { border-left: 4px solid #ef4444; }
+    .filter-bar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      align-items: flex-end;
+      padding: 16px;
+      background: var(--bg-light);
+      border-radius: 8px;
+      margin-bottom: 20px;
+    }
+    .filter-group {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .filter-group label {
+      font-size: 0.85rem;
+      font-weight: 500;
+      color: var(--text-secondary);
+    }
+    .filter-group input, .filter-group select {
+      padding: 8px 12px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-size: 0.9rem;
+    }
+    .readonly-notice {
+      background: #fef3c7;
+      border: 1px solid #f59e0b;
+      color: #92400e;
+      padding: 12px 16px;
+      border-radius: 8px;
+      margin-bottom: 20px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .readonly-notice svg {
+      flex-shrink: 0;
+    }
+    .export-btn {
+      background: #059669;
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 6px;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .export-btn:hover {
+      background: #047857;
+    }
+    #audit-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.9rem;
+    }
+    #audit-table th, #audit-table td {
+      padding: 10px 12px;
+      text-align: left;
+      border-bottom: 1px solid var(--border);
+    }
+    #audit-table th {
+      background: var(--bg-light);
+      font-weight: 600;
+      position: sticky;
+      top: 0;
+    }
+    #audit-table tr:hover {
+      background: var(--bg-light);
+    }
+    .action-badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 0.75rem;
+      font-weight: 600;
+    }
+    .action-CREATE { background: #d1fae5; color: #065f46; }
+    .action-UPDATE { background: #dbeafe; color: #1e40af; }
+    .action-DELETE { background: #fee2e2; color: #991b1b; }
+    .action-CONFIRM { background: #e0e7ff; color: #3730a3; }
+    .action-VALIDATION { background: #fef3c7; color: #92400e; }
+    .table-container {
+      max-height: 600px;
+      overflow: auto;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+    }
+    .no-data {
+      text-align: center;
+      padding: 40px;
+      color: var(--text-secondary);
+    }
+    .loading {
+      text-align: center;
+      padding: 40px;
+      color: var(--text-secondary);
+    }
+  </style>
+</head>
+<body>
+  <!-- LOGIN VIEW -->
+  <div id="login-view" class="view">
+    <div class="card login-card">
+      <div class="logo-icon logo-login" style="background: linear-gradient(135deg, #1e40af 0%, #3730a3 100%);">AI</div>
+      <h1>Arbeitsinspektions-Ansicht</h1>
+      <p class="subtitle">Geben Sie den Inspektions-Code ein, um das Audit-Log einzusehen</p>
+      <form id="inspektion-login-form">
+        <div class="form-group">
+          <label for="inspektion-code">Inspektions-Code</label>
+          <input type="password" id="inspektion-code" required autofocus placeholder="Code eingeben">
+        </div>
+        <button type="submit" class="btn btn-primary" style="background: linear-gradient(135deg, #1e40af 0%, #3730a3 100%);">Zugang anfordern</button>
+        <div id="login-error" class="error"></div>
+      </form>
+      <div style="margin-top: 24px; text-align: center;">
+        <a href="/" style="color: var(--text-secondary); font-size: 0.9rem;">Zurück zur Anmeldung</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- AUDIT VIEW -->
+  <div id="audit-view" class="view hidden">
+    <div class="container" style="max-width: 1400px; padding: 24px;">
+      <div class="inspektion-header">
+        <h1>
+          <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
+          </svg>
+          Arbeitsinspektions-Ansicht
+          <span class="inspektion-badge">SCHREIBGESCHÜTZT</span>
+        </h1>
+        <button id="logout-btn" class="btn btn-secondary" style="position:absolute;right:20px;top:20px;background:rgba(255,255,255,0.2);border:none;">Abmelden</button>
+      </div>
+
+      <div class="readonly-notice">
+        <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+        </svg>
+        <span>Diese Ansicht ist schreibgeschützt. Alle angezeigten Daten sind unveränderlich und kryptografisch gesichert (Hash-Kette).</span>
+      </div>
+
+      <!-- Statistiken -->
+      <div class="stats-grid" id="stats-grid">
+        <div class="stat-card">
+          <div class="value" id="stat-total">-</div>
+          <div class="label">Einträge gesamt</div>
+        </div>
+        <div class="stat-card">
+          <div class="value" id="stat-mitarbeiter">-</div>
+          <div class="label">Mitarbeiter</div>
+        </div>
+        <div class="stat-card">
+          <div class="value" id="stat-erstellt">-</div>
+          <div class="label">Erstellt</div>
+        </div>
+        <div class="stat-card">
+          <div class="value" id="stat-geaendert">-</div>
+          <div class="label">Geändert</div>
+        </div>
+        <div class="stat-card">
+          <div class="value" id="stat-geloescht">-</div>
+          <div class="label">Gelöscht</div>
+        </div>
+        <div class="stat-card" id="stat-integrity-card">
+          <div class="value" id="stat-integrity">-</div>
+          <div class="label">Hash-Integrität</div>
+        </div>
+      </div>
+
+      <!-- Filter -->
+      <div class="card">
+        <h2 style="margin-bottom: 16px;">Audit-Log durchsuchen</h2>
+        <div class="filter-bar">
+          <div class="filter-group">
+            <label for="filter-von">Von</label>
+            <input type="date" id="filter-von">
+          </div>
+          <div class="filter-group">
+            <label for="filter-bis">Bis</label>
+            <input type="date" id="filter-bis">
+          </div>
+          <div class="filter-group">
+            <label for="filter-mitarbeiter">Mitarbeiter</label>
+            <select id="filter-mitarbeiter">
+              <option value="">Alle</option>
+            </select>
+          </div>
+          <div class="filter-group">
+            <label for="filter-tabelle">Tabelle</label>
+            <select id="filter-tabelle">
+              <option value="">Alle</option>
+              <option value="zeiteintraege">Zeiteinträge</option>
+              <option value="monatsbestaetigung">Bestätigungen</option>
+            </select>
+          </div>
+          <div class="filter-group">
+            <label for="filter-aktion">Aktion</label>
+            <select id="filter-aktion">
+              <option value="">Alle</option>
+              <option value="CREATE">Erstellt</option>
+              <option value="UPDATE">Geändert</option>
+              <option value="DELETE">Gelöscht</option>
+              <option value="CONFIRM">Bestätigt</option>
+              <option value="VALIDATION">Validierung</option>
+            </select>
+          </div>
+          <div class="filter-group" style="flex-direction: row; gap: 8px; align-self: flex-end;">
+            <button id="filter-btn" class="btn btn-primary">Filtern</button>
+            <button id="filter-reset" class="btn btn-secondary">Zurücksetzen</button>
+          </div>
+          <div style="margin-left: auto;">
+            <button id="export-btn" class="export-btn">
+              <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <path d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+              </svg>
+              CSV Export
+            </button>
+          </div>
+        </div>
+
+        <div id="result-count" style="margin-bottom: 12px; color: var(--text-secondary); font-size: 0.9rem;"></div>
+
+        <div class="table-container">
+          <table id="audit-table">
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Zeitpunkt</th>
+                <th>Mitarbeiter</th>
+                <th>Aktion</th>
+                <th>Tabelle</th>
+                <th>Alte Werte</th>
+                <th>Neue Werte</th>
+                <th>Hash (gekürzt)</th>
+              </tr>
+            </thead>
+            <tbody id="audit-tbody">
+              <tr><td colspan="8" class="loading">Daten werden geladen...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div style="margin-top: 20px; text-align: center; color: var(--text-secondary); font-size: 0.85rem;">
+        <p>Audit-Log gemäß AZG (Arbeitszeitgesetz) - Alle Einträge sind unveränderlich und hash-verkettet</p>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let inspektionCode = '';
+
+    // DOM Elements
+    const loginView = document.getElementById('login-view');
+    const auditView = document.getElementById('audit-view');
+    const loginForm = document.getElementById('inspektion-login-form');
+    const loginError = document.getElementById('login-error');
+    const filterBtn = document.getElementById('filter-btn');
+    const filterReset = document.getElementById('filter-reset');
+    const exportBtn = document.getElementById('export-btn');
+    const logoutBtn = document.getElementById('logout-btn');
+
+    // Login
+    loginForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      loginError.textContent = '';
+
+      const code = document.getElementById('inspektion-code').value;
+
+      try {
+        const res = await fetch('/api/inspektion/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ code })
+        });
+
+        if (!res.ok) {
+          const data = await res.json();
+          throw new Error(data.error || 'Ungültiger Code');
+        }
+
+        inspektionCode = code;
+        sessionStorage.setItem('inspektionCode', code);
+        showAuditView();
+      } catch (err) {
+        loginError.textContent = err.message;
+      }
+    });
+
+    // Logout
+    logoutBtn.addEventListener('click', () => {
+      inspektionCode = '';
+      sessionStorage.removeItem('inspektionCode');
+      loginView.classList.remove('hidden');
+      auditView.classList.add('hidden');
+    });
+
+    // Show Audit View
+    async function showAuditView() {
+      loginView.classList.add('hidden');
+      auditView.classList.remove('hidden');
+
+      await Promise.all([
+        loadStats(),
+        loadMitarbeiter(),
+        loadAuditLog()
+      ]);
+    }
+
+    // API Helper
+    async function apiCall(endpoint, params = {}) {
+      const url = new URL(endpoint, window.location.origin);
+      url.searchParams.set('code', inspektionCode);
+      Object.entries(params).forEach(([k, v]) => {
+        if (v) url.searchParams.set(k, v);
+      });
+
+      const res = await fetch(url);
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || 'Fehler beim Laden');
+      }
+      return res.json();
+    }
+
+    // Load Stats
+    async function loadStats() {
+      try {
+        const data = await apiCall('/api/inspektion/stats');
+
+        document.getElementById('stat-total').textContent = data.stats.total_eintraege || 0;
+        document.getElementById('stat-mitarbeiter').textContent = data.stats.mitarbeiter_count || 0;
+        document.getElementById('stat-erstellt').textContent = data.stats.erstellt || 0;
+        document.getElementById('stat-geaendert').textContent = data.stats.geaendert || 0;
+        document.getElementById('stat-geloescht').textContent = data.stats.geloescht || 0;
+
+        const integrityCard = document.getElementById('stat-integrity-card');
+        const integrityEl = document.getElementById('stat-integrity');
+
+        if (data.integrity.chainBroken) {
+          integrityEl.textContent = 'FEHLER';
+          integrityCard.classList.add('integrity-fail');
+          integrityCard.classList.remove('integrity-ok');
+        } else {
+          integrityEl.textContent = 'OK';
+          integrityCard.classList.add('integrity-ok');
+          integrityCard.classList.remove('integrity-fail');
+        }
+      } catch (err) {
+        console.error('Stats error:', err);
+      }
+    }
+
+    // Load Mitarbeiter for filter
+    async function loadMitarbeiter() {
+      try {
+        const data = await apiCall('/api/inspektion/mitarbeiter');
+        const select = document.getElementById('filter-mitarbeiter');
+
+        data.forEach(m => {
+          const option = document.createElement('option');
+          option.value = m.id;
+          option.textContent = `${m.mitarbeiter_nr} - ${m.name}`;
+          select.appendChild(option);
+        });
+      } catch (err) {
+        console.error('Mitarbeiter error:', err);
+      }
+    }
+
+    // Load Audit Log
+    async function loadAuditLog() {
+      const tbody = document.getElementById('audit-tbody');
+      tbody.innerHTML = '<tr><td colspan="8" class="loading">Daten werden geladen...</td></tr>';
+
+      try {
+        const params = getFilterParams();
+        const data = await apiCall('/api/inspektion/audit', params);
+
+        document.getElementById('result-count').textContent = `${data.total} Einträge gefunden`;
+
+        if (data.data.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="8" class="no-data">Keine Einträge gefunden</td></tr>';
+          return;
+        }
+
+        tbody.innerHTML = data.data.map(row => `
+          <tr>
+            <td>${row.id}</td>
+            <td>${formatDateTime(row.zeitpunkt)}</td>
+            <td>${row.mitarbeiter_nr} - ${escapeHtml(row.mitarbeiter_name)}</td>
+            <td><span class="action-badge action-${row.aktion}">${row.aktion}</span></td>
+            <td>${row.tabelle}</td>
+            <td><small>${formatJson(row.alte_werte)}</small></td>
+            <td><small>${formatJson(row.neue_werte)}</small></td>
+            <td><code title="${row.eintrag_hash || ''}">${(row.eintrag_hash || '').substring(0, 12)}...</code></td>
+          </tr>
+        `).join('');
+      } catch (err) {
+        tbody.innerHTML = `<tr><td colspan="8" class="no-data">Fehler: ${err.message}</td></tr>`;
+      }
+    }
+
+    // Get filter params
+    function getFilterParams() {
+      return {
+        von: document.getElementById('filter-von').value,
+        bis: document.getElementById('filter-bis').value,
+        mitarbeiter_id: document.getElementById('filter-mitarbeiter').value,
+        tabelle: document.getElementById('filter-tabelle').value,
+        aktion: document.getElementById('filter-aktion').value
+      };
+    }
+
+    // Filter button
+    filterBtn.addEventListener('click', loadAuditLog);
+
+    // Reset filters
+    filterReset.addEventListener('click', () => {
+      document.getElementById('filter-von').value = '';
+      document.getElementById('filter-bis').value = '';
+      document.getElementById('filter-mitarbeiter').value = '';
+      document.getElementById('filter-tabelle').value = '';
+      document.getElementById('filter-aktion').value = '';
+      loadAuditLog();
+    });
+
+    // Export CSV
+    exportBtn.addEventListener('click', () => {
+      const params = getFilterParams();
+      const url = new URL('/api/inspektion/export', window.location.origin);
+      url.searchParams.set('code', inspektionCode);
+      Object.entries(params).forEach(([k, v]) => {
+        if (v) url.searchParams.set(k, v);
+      });
+      window.location.href = url.toString();
+    });
+
+    // Helper functions
+    function formatDateTime(dt) {
+      if (!dt) return '-';
+      const d = new Date(dt.replace(' ', 'T'));
+      return d.toLocaleDateString('de-AT') + ' ' + d.toLocaleTimeString('de-AT', { hour: '2-digit', minute: '2-digit' });
+    }
+
+    function formatJson(json) {
+      if (!json) return '-';
+      try {
+        const obj = JSON.parse(json);
+        return Object.entries(obj)
+          .map(([k, v]) => `${k}: ${v}`)
+          .join(', ')
+          .substring(0, 100);
+      } catch {
+        return json.substring(0, 100);
+      }
+    }
+
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    // Check for stored code on load
+    document.addEventListener('DOMContentLoaded', () => {
+      const storedCode = sessionStorage.getItem('inspektionCode');
+      if (storedCode) {
+        inspektionCode = storedCode;
+        showAuditView();
+      }
+    });
+  </script>
+</body>
+</html>

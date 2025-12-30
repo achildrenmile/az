@@ -748,6 +748,126 @@ app.get('/api/admin/audit/export', checkSession, checkAdmin, (req, res) => {
   res.send('\ufeff' + csv);
 });
 
+// ==================== INSPEKTIONS-ROUTES (Read-only für Behörden) ====================
+
+// Middleware: Inspektionscode prüfen
+const checkInspektionCode = (req, res, next) => {
+  const code = req.query.code || req.headers['x-inspektion-code'];
+  const validCode = db.getEinstellung('inspektion_code');
+
+  if (!validCode || validCode === '') {
+    return res.status(403).json({ error: 'Inspektions-Zugang ist nicht aktiviert' });
+  }
+
+  if (code !== validCode) {
+    return res.status(401).json({ error: 'Ungültiger Inspektions-Code' });
+  }
+
+  next();
+};
+
+// Inspektion: Login validieren
+app.post('/api/inspektion/login', (req, res) => {
+  const { code } = req.body;
+  const validCode = db.getEinstellung('inspektion_code');
+
+  if (!validCode || validCode === '') {
+    return res.status(403).json({ error: 'Inspektions-Zugang ist nicht aktiviert' });
+  }
+
+  if (code !== validCode) {
+    return res.status(401).json({ error: 'Ungültiger Inspektions-Code' });
+  }
+
+  res.json({ success: true });
+});
+
+// Inspektion: Statistiken abrufen
+app.get('/api/inspektion/stats', checkInspektionCode, (req, res) => {
+  const stats = db.getInspektionStats();
+  const integrity = db.verifyAuditIntegrity();
+
+  res.json({
+    stats,
+    integrity: {
+      total: integrity.total,
+      valid: integrity.valid,
+      chainBroken: integrity.chainBroken
+    }
+  });
+});
+
+// Inspektion: Mitarbeiterliste (nur ID, Name, Nr)
+app.get('/api/inspektion/mitarbeiter', checkInspektionCode, (req, res) => {
+  const mitarbeiter = db.getAllMitarbeiter(false, 1, 1000);
+  res.json(mitarbeiter.data.map(m => ({
+    id: m.id,
+    name: m.name,
+    mitarbeiter_nr: m.mitarbeiter_nr
+  })));
+});
+
+// Inspektion: Audit-Log abrufen (read-only mit Filtern)
+app.get('/api/inspektion/audit', checkInspektionCode, (req, res) => {
+  const { von, bis, mitarbeiter_id, tabelle, aktion } = req.query;
+
+  const filter = {};
+  if (von) filter.von = von;
+  if (bis) filter.bis = bis;
+  if (mitarbeiter_id) filter.mitarbeiterId = parseInt(mitarbeiter_id);
+  if (tabelle) filter.tabelle = tabelle;
+  if (aktion) filter.aktion = aktion;
+
+  const data = db.getInspektionAudit(filter);
+  res.json({ data, total: data.length });
+});
+
+// Inspektion: CSV-Export
+app.get('/api/inspektion/export', checkInspektionCode, (req, res) => {
+  const { von, bis, mitarbeiter_id, tabelle, aktion } = req.query;
+
+  const filter = {};
+  if (von) filter.von = von;
+  if (bis) filter.bis = bis;
+  if (mitarbeiter_id) filter.mitarbeiterId = parseInt(mitarbeiter_id);
+  if (tabelle) filter.tabelle = tabelle;
+  if (aktion) filter.aktion = aktion;
+
+  const data = db.getInspektionAudit(filter);
+  const integrity = db.verifyAuditIntegrity();
+
+  // CSV erstellen
+  let csv = 'ID;Zeitpunkt;Mitarbeiter-Nr;Mitarbeiter;Aktion;Tabelle;Datensatz-ID;Alte Werte;Neue Werte;Hash\n';
+
+  data.forEach(row => {
+    csv += `${row.id};`;
+    csv += `${row.zeitpunkt};`;
+    csv += `${row.mitarbeiter_nr};`;
+    csv += `"${row.mitarbeiter_name}";`;
+    csv += `${row.aktion};`;
+    csv += `${row.tabelle};`;
+    csv += `${row.datensatz_id};`;
+    csv += `"${(row.alte_werte || '').replace(/"/g, '""')}";`;
+    csv += `"${(row.neue_werte || '').replace(/"/g, '""')}";`;
+    csv += `${row.eintrag_hash || ''}\n`;
+  });
+
+  // Fußzeile mit Integritätsinformationen
+  csv += '\n\n';
+  csv += `Integritätsprüfung\n`;
+  csv += `Geprüfte Einträge;${integrity.total}\n`;
+  csv += `Gültige Einträge;${integrity.valid}\n`;
+  csv += `Hash-Kette intakt;${!integrity.chainBroken ? 'JA' : 'NEIN'}\n`;
+  csv += `Exportiert am;${new Date().toLocaleString('de-AT')}\n`;
+
+  const datumVon = von || 'Anfang';
+  const datumBis = bis || 'Ende';
+  const filename = `arbeitszeit_audit_${datumVon}_${datumBis}.csv`;
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+  res.send('\ufeff' + csv);
+});
+
 // ==================== AZG-VERSTÖSSE ROUTES ====================
 
 // AZG-Verstöße abrufen (Admin) - erweitert mit Warnungen und Verletzungen

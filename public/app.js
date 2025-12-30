@@ -2004,6 +2004,11 @@ async function loadEinstellungen() {
     document.getElementById('setting-monatsstunden').value = konfig.standardMonatsstunden || 173;
     document.getElementById('setting-max-tag').value = konfig.maxTagesstunden || 10;
     document.getElementById('setting-max-woche').value = konfig.maxWochenstunden || 50;
+
+    // Inspektions-Code laden
+    const einstellungen = await api('/admin/einstellungen');
+    const inspektionCode = einstellungen.find(e => e.schluessel === 'inspektion_code');
+    document.getElementById('setting-inspektion-code').value = inspektionCode?.wert || '';
   } catch (error) {
     console.error('Einstellungen laden fehlgeschlagen:', error);
     showMessage('einstellungen-message', 'Einstellungen konnten nicht geladen werden', 'error');
@@ -2036,6 +2041,8 @@ async function saveEinstellungen(event) {
     return;
   }
 
+  const inspektionCode = document.getElementById('setting-inspektion-code').value.trim();
+
   try {
     await api('/admin/einstellungen', {
       method: 'PUT',
@@ -2043,7 +2050,8 @@ async function saveEinstellungen(event) {
         standard_wochenstunden: wochenstunden.toString(),
         standard_monatsstunden: monatsstunden.toString(),
         max_tagesstunden: maxTag.toString(),
-        max_wochenstunden: maxWoche.toString()
+        max_wochenstunden: maxWoche.toString(),
+        inspektion_code: inspektionCode
       })
     });
 

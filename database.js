@@ -186,7 +186,9 @@ const defaultSettings = [
   { key: 'gleitzeit_max_plus', value: '40', desc: 'Maximales Plus-Saldo (Stunden)' },
   { key: 'gleitzeit_max_minus', value: '20', desc: 'Maximales Minus-Saldo (Stunden)' },
   { key: 'gleitzeit_uebertrag_max', value: '20', desc: 'Maximaler Übertrag am Periodenende (Stunden)' },
-  { key: 'gleitzeit_verfall_monate', value: '0', desc: 'Verfall nach X Monaten (0=kein Verfall)' }
+  { key: 'gleitzeit_verfall_monate', value: '0', desc: 'Verfall nach X Monaten (0=kein Verfall)' },
+  // Inspektions-Einstellungen
+  { key: 'inspektion_code', value: '', desc: 'Zugangscode für Arbeitsinspektions-Ansicht (leer = deaktiviert)' }
 ];
 
 defaultSettings.forEach(s => {
@@ -798,6 +800,58 @@ module.exports = {
       ${whereClause}
       ORDER BY a.zeitpunkt ASC
     `).all(...params);
+  },
+
+  // Inspektion: Erweiterter Audit-Export mit allen Filtern
+  getInspektionAudit: (filter = {}) => {
+    let whereClause = 'WHERE 1=1';
+    const params = [];
+
+    if (filter.von) {
+      whereClause += ' AND DATE(a.zeitpunkt) >= ?';
+      params.push(filter.von);
+    }
+    if (filter.bis) {
+      whereClause += ' AND DATE(a.zeitpunkt) <= ?';
+      params.push(filter.bis);
+    }
+    if (filter.mitarbeiterId) {
+      whereClause += ' AND a.mitarbeiter_id = ?';
+      params.push(filter.mitarbeiterId);
+    }
+    if (filter.tabelle) {
+      whereClause += ' AND a.tabelle = ?';
+      params.push(filter.tabelle);
+    }
+    if (filter.aktion) {
+      whereClause += ' AND a.aktion = ?';
+      params.push(filter.aktion);
+    }
+
+    return db.prepare(`
+      SELECT a.*, m.name as mitarbeiter_name, m.mitarbeiter_nr
+      FROM audit_log a
+      JOIN mitarbeiter m ON a.mitarbeiter_id = m.id
+      ${whereClause}
+      ORDER BY a.zeitpunkt ASC
+    `).all(...params);
+  },
+
+  // Inspektion: Statistiken für Übersicht
+  getInspektionStats: () => {
+    const stats = db.prepare(`
+      SELECT
+        COUNT(*) as total_eintraege,
+        COUNT(DISTINCT mitarbeiter_id) as mitarbeiter_count,
+        MIN(DATE(zeitpunkt)) as erster_eintrag,
+        MAX(DATE(zeitpunkt)) as letzter_eintrag,
+        SUM(CASE WHEN aktion = 'CREATE' THEN 1 ELSE 0 END) as erstellt,
+        SUM(CASE WHEN aktion = 'UPDATE' THEN 1 ELSE 0 END) as geaendert,
+        SUM(CASE WHEN aktion = 'DELETE' THEN 1 ELSE 0 END) as geloescht,
+        SUM(CASE WHEN aktion = 'CONFIRM' THEN 1 ELSE 0 END) as bestaetigt
+      FROM audit_log
+    `).get();
+    return stats;
   },
 
   // Kunden-Funktionen
