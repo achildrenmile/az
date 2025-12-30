@@ -11,3 +11,12 @@ Rules:
 - Architecture documents override issues
 - If a conflict exists, stop and ask for clarification
 - Do not proceed to the next issue without confirmation
+
+---
+
+## Architecture Decisions (ADR)
+
+- All non-trivial architectural decisions must be documented as ADRs
+- New ADRs must be created from `.claude/adr/ADR-TEMPLATE.md`
+- Claude Code must not introduce new architectural decisions without an ADR
+- If a decision is required but no ADR exists, stop and ask for clarification
