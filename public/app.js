@@ -1569,13 +1569,18 @@ initDatepickers();
 
 // Session beim Start validieren
 async function validateSession() {
+  // Loading overlay is active by default in HTML to prevent login flash
+  // We hide it only after session validation is complete
+
   if (!sessionId) {
     showView('login');
+    hideLoading();
     return;
   }
 
   try {
-    const result = await api('/session');
+    // Validate session without showing additional spinner (already showing from HTML)
+    const result = await api('/session', 'GET', null, false);
     if (result.valid) {
       userName = result.name;
       isAdmin = result.ist_admin;
@@ -1583,11 +1588,16 @@ async function validateSession() {
       localStorage.setItem('isAdmin', isAdmin);
       initErfassungView();
       showView('erfassung');
+    } else {
+      showView('login');
     }
   } catch (error) {
     // Session ungültig - Login anzeigen
     showView('login');
   }
+
+  // Hide the initial loading overlay
+  hideLoading();
 }
 
 // Beim Laden Session validieren
