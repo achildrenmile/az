@@ -604,21 +604,12 @@ document.querySelectorAll('.tab').forEach(tab => {
       adminNav.classList.remove('open');
     }
 
-    // Close desktop dropdowns after selection
-    if (window.innerWidth > 768) {
-      document.querySelectorAll('.nav-group-items.open').forEach(items => {
-        items.classList.remove('open');
-        const arrow = items.closest('.nav-group').querySelector('.nav-group-arrow');
-        if (arrow) arrow.textContent = '▸';
-      });
-      // Re-open the parent group of the active tab
-      if (parentGroup) {
-        const items = parentGroup.querySelector('.nav-group-items');
-        const arrow = parentGroup.querySelector('.nav-group-arrow');
-        items.classList.add('open');
-        if (arrow) arrow.textContent = '▾';
-      }
-    }
+    // Collapse all menu groups after selection (desktop and mobile)
+    document.querySelectorAll('.nav-group-items.open').forEach(items => {
+      items.classList.remove('open');
+      const arrow = items.closest('.nav-group').querySelector('.nav-group-arrow');
+      if (arrow) arrow.textContent = '▸';
+    });
 
     // Leistungsnachweise-spezifische Initialisierung
     const tabName = tab.dataset.tab;
@@ -3855,12 +3846,14 @@ function switchTab(tabName) {
     const parentGroup = tabButton.closest('.nav-group');
     if (parentGroup) {
       parentGroup.querySelector('.nav-group-header').classList.add('active');
-      // Open the group
-      const items = parentGroup.querySelector('.nav-group-items');
-      const arrow = parentGroup.querySelector('.nav-group-arrow');
-      if (items) items.classList.add('open');
-      if (arrow) arrow.textContent = '▾';
     }
+
+    // Collapse all menu groups after selection
+    document.querySelectorAll('.nav-group-items.open').forEach(items => {
+      items.classList.remove('open');
+      const arrow = items.closest('.nav-group').querySelector('.nav-group-arrow');
+      if (arrow) arrow.textContent = '▸';
+    });
   }
 
   // Leistungsnachweise-spezifische Initialisierung
