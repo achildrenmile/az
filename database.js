@@ -269,6 +269,41 @@ db.exec(`
 
   CREATE INDEX IF NOT EXISTS idx_ln_mitarbeiter_nachweis ON leistungsnachweis_mitarbeiter(leistungsnachweis_id);
   CREATE INDEX IF NOT EXISTS idx_ln_mitarbeiter_ma ON leistungsnachweis_mitarbeiter(mitarbeiter_id);
+
+  -- BUAK Compliance Support Module (Dokumentation & Reporting)
+  -- Schlechtwetter-Dokumentation (Witterungsbedingte Arbeitsunterbrechung)
+  CREATE TABLE IF NOT EXISTS buak_schlechtwetter (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    datum DATE NOT NULL,
+    baustelle_id INTEGER,
+    baustelle_freitext TEXT,
+    beginn TIME,
+    ende TIME,
+    dauer_minuten INTEGER,
+    grund TEXT NOT NULL CHECK(grund IN ('regen', 'schnee', 'frost', 'hitze', 'sturm', 'sonstiges')),
+    grund_details TEXT,
+    notizen TEXT,
+    ersteller_id INTEGER NOT NULL,
+    erstellt_am DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (baustelle_id) REFERENCES baustellen(id),
+    FOREIGN KEY (ersteller_id) REFERENCES mitarbeiter(id)
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_buak_sw_datum ON buak_schlechtwetter(datum);
+  CREATE INDEX IF NOT EXISTS idx_buak_sw_baustelle ON buak_schlechtwetter(baustelle_id);
+
+  -- Betroffene Mitarbeiter pro Schlechtwetter-Ereignis
+  CREATE TABLE IF NOT EXISTS buak_schlechtwetter_mitarbeiter (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    schlechtwetter_id INTEGER NOT NULL,
+    mitarbeiter_id INTEGER NOT NULL,
+    FOREIGN KEY (schlechtwetter_id) REFERENCES buak_schlechtwetter(id) ON DELETE CASCADE,
+    FOREIGN KEY (mitarbeiter_id) REFERENCES mitarbeiter(id),
+    UNIQUE(schlechtwetter_id, mitarbeiter_id)
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_buak_sw_ma_sw ON buak_schlechtwetter_mitarbeiter(schlechtwetter_id);
+  CREATE INDEX IF NOT EXISTS idx_buak_sw_ma_ma ON buak_schlechtwetter_mitarbeiter(mitarbeiter_id);
 `);
 
 // Standard-Pausenregeln einfügen falls nicht vorhanden (AZG §11)
@@ -421,6 +456,32 @@ try {
 } catch (e) {
   console.error('Audit-Hash Migration:', e.message);
 }
+
+// Migration: BUAK-Relevanz zu Baustellen hinzufügen
+try {
+  db.exec(`ALTER TABLE baustellen ADD COLUMN buak_relevant INTEGER DEFAULT 0`);
+} catch (e) {}
+
+// Migration: BUAK-Relevanz zu Mitarbeitern hinzufügen
+try {
+  db.exec(`ALTER TABLE mitarbeiter ADD COLUMN buak_relevant INTEGER DEFAULT 0`);
+} catch (e) {}
+
+// Migration: BUAK-Relevanz zu Zeiteinträgen hinzufügen
+try {
+  db.exec(`ALTER TABLE zeiteintraege ADD COLUMN buak_relevant INTEGER DEFAULT 0`);
+} catch (e) {}
+
+// BUAK-Einstellungen zu default settings hinzufügen
+const buakSettings = [
+  { key: 'buak_modul_aktiv', value: '0', desc: 'BUAK Compliance Support Modul aktiviert (1=ja, 0=nein)' }
+];
+buakSettings.forEach(s => {
+  const exists = db.prepare('SELECT schluessel FROM einstellungen WHERE schluessel = ?').get(s.key);
+  if (!exists) {
+    db.prepare('INSERT INTO einstellungen (schluessel, wert, beschreibung) VALUES (?, ?, ?)').run(s.key, s.value, s.desc);
+  }
+});
 
 // Standard-Admin erstellen falls nicht vorhanden
 const adminExists = db.prepare('SELECT id FROM mitarbeiter WHERE mitarbeiter_nr = ?').get('admin');
@@ -3008,5 +3069,301 @@ module.exports = {
     db.prepare('DELETE FROM leistungsnachweise WHERE id = ?').run(id);
 
     return { success: true };
+  },
+
+  // ==================== BUAK Compliance Support Module ====================
+
+  // Schlechtwetter-Ereignis erstellen
+  createSchlechtwetter: (data, erstellerId) => {
+    const result = db.prepare(`
+      INSERT INTO buak_schlechtwetter (
+        datum, baustelle_id, baustelle_freitext, beginn, ende, dauer_minuten,
+        grund, grund_details, notizen, ersteller_id
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      data.datum,
+      data.baustelle_id || null,
+      data.baustelle_freitext || null,
+      data.beginn || null,
+      data.ende || null,
+      data.dauer_minuten || null,
+      data.grund,
+      data.grund_details || null,
+      data.notizen || null,
+      erstellerId
+    );
+
+    const swId = result.lastInsertRowid;
+
+    // Betroffene Mitarbeiter einfügen
+    if (data.mitarbeiter_ids && data.mitarbeiter_ids.length > 0) {
+      const insertMa = db.prepare(`
+        INSERT INTO buak_schlechtwetter_mitarbeiter (schlechtwetter_id, mitarbeiter_id)
+        VALUES (?, ?)
+      `);
+      data.mitarbeiter_ids.forEach(maId => {
+        insertMa.run(swId, maId);
+      });
+    }
+
+    return { success: true, id: swId };
+  },
+
+  // Schlechtwetter-Ereignis aktualisieren
+  updateSchlechtwetter: (id, data) => {
+    db.prepare(`
+      UPDATE buak_schlechtwetter SET
+        datum = ?, baustelle_id = ?, baustelle_freitext = ?, beginn = ?, ende = ?,
+        dauer_minuten = ?, grund = ?, grund_details = ?, notizen = ?
+      WHERE id = ?
+    `).run(
+      data.datum,
+      data.baustelle_id || null,
+      data.baustelle_freitext || null,
+      data.beginn || null,
+      data.ende || null,
+      data.dauer_minuten || null,
+      data.grund,
+      data.grund_details || null,
+      data.notizen || null,
+      id
+    );
+
+    // Mitarbeiter-Zuordnungen aktualisieren
+    if (data.mitarbeiter_ids) {
+      db.prepare('DELETE FROM buak_schlechtwetter_mitarbeiter WHERE schlechtwetter_id = ?').run(id);
+      const insertMa = db.prepare(`
+        INSERT INTO buak_schlechtwetter_mitarbeiter (schlechtwetter_id, mitarbeiter_id)
+        VALUES (?, ?)
+      `);
+      data.mitarbeiter_ids.forEach(maId => {
+        insertMa.run(id, maId);
+      });
+    }
+
+    return { success: true };
+  },
+
+  // Schlechtwetter-Ereignis löschen
+  deleteSchlechtwetter: (id) => {
+    db.prepare('DELETE FROM buak_schlechtwetter_mitarbeiter WHERE schlechtwetter_id = ?').run(id);
+    db.prepare('DELETE FROM buak_schlechtwetter WHERE id = ?').run(id);
+    return { success: true };
+  },
+
+  // Schlechtwetter-Ereignis abrufen
+  getSchlechtwetter: (id) => {
+    const sw = db.prepare(`
+      SELECT sw.*,
+        b.name as baustelle_name,
+        e.name as ersteller_name
+      FROM buak_schlechtwetter sw
+      LEFT JOIN baustellen b ON sw.baustelle_id = b.id
+      LEFT JOIN mitarbeiter e ON sw.ersteller_id = e.id
+      WHERE sw.id = ?
+    `).get(id);
+
+    if (!sw) return null;
+
+    // Betroffene Mitarbeiter laden
+    const mitarbeiter = db.prepare(`
+      SELECT m.id, m.mitarbeiter_nr, m.name
+      FROM buak_schlechtwetter_mitarbeiter sm
+      JOIN mitarbeiter m ON sm.mitarbeiter_id = m.id
+      WHERE sm.schlechtwetter_id = ?
+      ORDER BY m.name
+    `).all(id);
+
+    return { ...sw, mitarbeiter };
+  },
+
+  // Schlechtwetter-Ereignisse auflisten
+  getSchlechtwetterList: (filter = {}) => {
+    let where = ['1=1'];
+    const params = [];
+
+    if (filter.datum_von) {
+      where.push('sw.datum >= ?');
+      params.push(filter.datum_von);
+    }
+    if (filter.datum_bis) {
+      where.push('sw.datum <= ?');
+      params.push(filter.datum_bis);
+    }
+    if (filter.baustelle_id) {
+      where.push('sw.baustelle_id = ?');
+      params.push(filter.baustelle_id);
+    }
+    if (filter.grund) {
+      where.push('sw.grund = ?');
+      params.push(filter.grund);
+    }
+    if (filter.mitarbeiter_id) {
+      where.push('EXISTS (SELECT 1 FROM buak_schlechtwetter_mitarbeiter sm WHERE sm.schlechtwetter_id = sw.id AND sm.mitarbeiter_id = ?)');
+      params.push(filter.mitarbeiter_id);
+    }
+
+    const page = filter.page || 1;
+    const limit = filter.limit || 20;
+    const offset = (page - 1) * limit;
+
+    const data = db.prepare(`
+      SELECT sw.*,
+        b.name as baustelle_name,
+        e.name as ersteller_name,
+        (SELECT GROUP_CONCAT(m.name, ', ')
+         FROM buak_schlechtwetter_mitarbeiter sm
+         JOIN mitarbeiter m ON sm.mitarbeiter_id = m.id
+         WHERE sm.schlechtwetter_id = sw.id) as mitarbeiter_namen,
+        (SELECT COUNT(*) FROM buak_schlechtwetter_mitarbeiter sm WHERE sm.schlechtwetter_id = sw.id) as mitarbeiter_anzahl
+      FROM buak_schlechtwetter sw
+      LEFT JOIN baustellen b ON sw.baustelle_id = b.id
+      LEFT JOIN mitarbeiter e ON sw.ersteller_id = e.id
+      WHERE ${where.join(' AND ')}
+      ORDER BY sw.datum DESC, sw.erstellt_am DESC
+      LIMIT ? OFFSET ?
+    `).all(...params, limit, offset);
+
+    const total = db.prepare(`
+      SELECT COUNT(*) as count
+      FROM buak_schlechtwetter sw
+      WHERE ${where.join(' AND ')}
+    `).get(...params).count;
+
+    return {
+      data,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit)
+    };
+  },
+
+  // BUAK-relevante Baustellen auflisten
+  getBuakBaustellen: () => {
+    return db.prepare(`
+      SELECT id, name, kunde, adresse, buak_relevant
+      FROM baustellen
+      WHERE aktiv = 1
+      ORDER BY buak_relevant DESC, name
+    `).all();
+  },
+
+  // BUAK-Relevanz für Baustelle setzen
+  setBaustelleBuakRelevant: (id, buakRelevant) => {
+    db.prepare('UPDATE baustellen SET buak_relevant = ? WHERE id = ?').run(buakRelevant ? 1 : 0, id);
+    return { success: true };
+  },
+
+  // BUAK-relevante Mitarbeiter auflisten
+  getBuakMitarbeiter: () => {
+    return db.prepare(`
+      SELECT id, mitarbeiter_nr, name, buak_relevant
+      FROM mitarbeiter
+      WHERE aktiv = 1
+      ORDER BY buak_relevant DESC, name
+    `).all();
+  },
+
+  // BUAK-Relevanz für Mitarbeiter setzen
+  setMitarbeiterBuakRelevant: (id, buakRelevant) => {
+    db.prepare('UPDATE mitarbeiter SET buak_relevant = ? WHERE id = ?').run(buakRelevant ? 1 : 0, id);
+    return { success: true };
+  },
+
+  // BUAK-Relevanz für Zeiteintrag setzen
+  setZeiteintragBuakRelevant: (id, buakRelevant) => {
+    db.prepare('UPDATE zeiteintraege SET buak_relevant = ? WHERE id = ?').run(buakRelevant ? 1 : 0, id);
+    return { success: true };
+  },
+
+  // BUAK-relevante Zeiteinträge für Berichtsperiode abrufen
+  getBuakZeiteintraege: (filter = {}) => {
+    let where = ['z.buak_relevant = 1'];
+    const params = [];
+
+    if (filter.datum_von) {
+      where.push('z.datum >= ?');
+      params.push(filter.datum_von);
+    }
+    if (filter.datum_bis) {
+      where.push('z.datum <= ?');
+      params.push(filter.datum_bis);
+    }
+    if (filter.mitarbeiter_id) {
+      where.push('z.mitarbeiter_id = ?');
+      params.push(filter.mitarbeiter_id);
+    }
+    if (filter.baustelle) {
+      where.push('z.baustelle = ?');
+      params.push(filter.baustelle);
+    }
+
+    return db.prepare(`
+      SELECT z.*,
+        m.mitarbeiter_nr, m.name as mitarbeiter_name,
+        strftime('%H', z.arbeitsende) * 60 + strftime('%M', z.arbeitsende) -
+        strftime('%H', z.arbeitsbeginn) * 60 - strftime('%M', z.arbeitsbeginn) - z.pause_minuten as netto_minuten
+      FROM zeiteintraege z
+      JOIN mitarbeiter m ON z.mitarbeiter_id = m.id
+      WHERE ${where.join(' AND ')}
+      ORDER BY z.datum DESC, m.name
+    `).all(...params);
+  },
+
+  // BUAK-Report für Periode erstellen
+  getBuakReport: (datumVon, datumBis) => {
+    // Zusammenfassung der BUAK-relevanten Arbeitszeit pro Mitarbeiter
+    const mitarbeiterSummary = db.prepare(`
+      SELECT
+        m.id, m.mitarbeiter_nr, m.name,
+        COUNT(DISTINCT z.datum) as tage,
+        SUM(
+          strftime('%H', z.arbeitsende) * 60 + strftime('%M', z.arbeitsende) -
+          strftime('%H', z.arbeitsbeginn) * 60 - strftime('%M', z.arbeitsbeginn) - z.pause_minuten
+        ) as gesamt_minuten
+      FROM zeiteintraege z
+      JOIN mitarbeiter m ON z.mitarbeiter_id = m.id
+      WHERE z.buak_relevant = 1 AND z.datum >= ? AND z.datum <= ?
+      GROUP BY m.id
+      ORDER BY m.name
+    `).all(datumVon, datumBis);
+
+    // Schlechtwetter-Zusammenfassung pro Mitarbeiter
+    const schlechtwetterSummary = db.prepare(`
+      SELECT
+        m.id, m.mitarbeiter_nr, m.name,
+        COUNT(DISTINCT sw.id) as ereignisse,
+        SUM(COALESCE(sw.dauer_minuten, 0)) as gesamt_minuten
+      FROM buak_schlechtwetter sw
+      JOIN buak_schlechtwetter_mitarbeiter sm ON sw.id = sm.schlechtwetter_id
+      JOIN mitarbeiter m ON sm.mitarbeiter_id = m.id
+      WHERE sw.datum >= ? AND sw.datum <= ?
+      GROUP BY m.id
+      ORDER BY m.name
+    `).all(datumVon, datumBis);
+
+    // Baustellen-Zusammenfassung
+    const baustellenSummary = db.prepare(`
+      SELECT
+        z.baustelle,
+        COUNT(DISTINCT z.mitarbeiter_id) as mitarbeiter_anzahl,
+        COUNT(DISTINCT z.datum) as tage,
+        SUM(
+          strftime('%H', z.arbeitsende) * 60 + strftime('%M', z.arbeitsende) -
+          strftime('%H', z.arbeitsbeginn) * 60 - strftime('%M', z.arbeitsbeginn) - z.pause_minuten
+        ) as gesamt_minuten
+      FROM zeiteintraege z
+      WHERE z.buak_relevant = 1 AND z.datum >= ? AND z.datum <= ? AND z.baustelle IS NOT NULL AND z.baustelle != ''
+      GROUP BY z.baustelle
+      ORDER BY gesamt_minuten DESC
+    `).all(datumVon, datumBis);
+
+    return {
+      periode: { von: datumVon, bis: datumBis },
+      mitarbeiter: mitarbeiterSummary,
+      schlechtwetter: schlechtwetterSummary,
+      baustellen: baustellenSummary
+    };
   }
 };

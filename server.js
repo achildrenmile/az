@@ -2560,6 +2560,375 @@ app.get('/api/leistungsnachweise/:id/pdf', checkSession, (req, res) => {
   }
 });
 
+// ==================== BUAK COMPLIANCE SUPPORT MODULE ====================
+
+// BUAK-Modul Konfiguration abrufen
+app.get('/api/buak/config', checkSession, checkAdmin, (req, res) => {
+  try {
+    const buakAktiv = db.getSetting('buak_modul_aktiv');
+    const baustellen = db.getBuakBaustellen();
+    const mitarbeiter = db.getBuakMitarbeiter();
+
+    res.json({
+      aktiv: buakAktiv === '1',
+      baustellen,
+      mitarbeiter
+    });
+  } catch (error) {
+    console.error('BUAK Config Error:', error);
+    res.status(500).json({ error: 'Fehler beim Laden der BUAK-Konfiguration' });
+  }
+});
+
+// BUAK-Modul aktivieren/deaktivieren
+app.put('/api/buak/config/aktiv', checkSession, checkAdmin, (req, res) => {
+  try {
+    const { aktiv } = req.body;
+    db.setSetting('buak_modul_aktiv', aktiv ? '1' : '0');
+    res.json({ success: true });
+  } catch (error) {
+    console.error('BUAK Config Update Error:', error);
+    res.status(500).json({ error: 'Fehler beim Speichern' });
+  }
+});
+
+// BUAK-Relevanz für Baustelle setzen
+app.put('/api/buak/baustellen/:id/relevant', checkSession, checkAdmin, (req, res) => {
+  try {
+    const { buak_relevant } = req.body;
+    db.setBaustelleBuakRelevant(parseInt(req.params.id), buak_relevant);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('BUAK Baustelle Update Error:', error);
+    res.status(500).json({ error: 'Fehler beim Speichern' });
+  }
+});
+
+// BUAK-Relevanz für Mitarbeiter setzen
+app.put('/api/buak/mitarbeiter/:id/relevant', checkSession, checkAdmin, (req, res) => {
+  try {
+    const { buak_relevant } = req.body;
+    db.setMitarbeiterBuakRelevant(parseInt(req.params.id), buak_relevant);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('BUAK Mitarbeiter Update Error:', error);
+    res.status(500).json({ error: 'Fehler beim Speichern' });
+  }
+});
+
+// BUAK-Relevanz für Zeiteintrag setzen
+app.put('/api/buak/zeiteintraege/:id/relevant', checkSession, checkAdmin, (req, res) => {
+  try {
+    const { buak_relevant } = req.body;
+    db.setZeiteintragBuakRelevant(parseInt(req.params.id), buak_relevant);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('BUAK Zeiteintrag Update Error:', error);
+    res.status(500).json({ error: 'Fehler beim Speichern' });
+  }
+});
+
+// Schlechtwetter-Ereignisse auflisten
+app.get('/api/buak/schlechtwetter', checkSession, checkAdmin, (req, res) => {
+  try {
+    const filter = {
+      datum_von: req.query.datum_von,
+      datum_bis: req.query.datum_bis,
+      baustelle_id: req.query.baustelle_id ? parseInt(req.query.baustelle_id) : null,
+      mitarbeiter_id: req.query.mitarbeiter_id ? parseInt(req.query.mitarbeiter_id) : null,
+      grund: req.query.grund,
+      page: parseInt(req.query.page) || 1,
+      limit: parseInt(req.query.limit) || 20
+    };
+    const result = db.getSchlechtwetterList(filter);
+    res.json(result);
+  } catch (error) {
+    console.error('Schlechtwetter List Error:', error);
+    res.status(500).json({ error: 'Fehler beim Laden' });
+  }
+});
+
+// Schlechtwetter-Ereignis abrufen
+app.get('/api/buak/schlechtwetter/:id', checkSession, checkAdmin, (req, res) => {
+  try {
+    const sw = db.getSchlechtwetter(parseInt(req.params.id));
+    if (!sw) {
+      return res.status(404).json({ error: 'Nicht gefunden' });
+    }
+    res.json(sw);
+  } catch (error) {
+    console.error('Schlechtwetter Get Error:', error);
+    res.status(500).json({ error: 'Fehler beim Laden' });
+  }
+});
+
+// Schlechtwetter-Ereignis erstellen
+app.post('/api/buak/schlechtwetter', checkSession, checkAdmin, (req, res) => {
+  try {
+    const { datum, baustelle_id, baustelle_freitext, beginn, ende, dauer_minuten,
+            grund, grund_details, notizen, mitarbeiter_ids } = req.body;
+
+    if (!datum || !grund) {
+      return res.status(400).json({ error: 'Datum und Grund sind erforderlich' });
+    }
+
+    const result = db.createSchlechtwetter({
+      datum,
+      baustelle_id,
+      baustelle_freitext,
+      beginn,
+      ende,
+      dauer_minuten,
+      grund,
+      grund_details,
+      notizen,
+      mitarbeiter_ids
+    }, req.session.id);
+
+    res.json(result);
+  } catch (error) {
+    console.error('Schlechtwetter Create Error:', error);
+    res.status(500).json({ error: 'Fehler beim Speichern' });
+  }
+});
+
+// Schlechtwetter-Ereignis aktualisieren
+app.put('/api/buak/schlechtwetter/:id', checkSession, checkAdmin, (req, res) => {
+  try {
+    const { datum, baustelle_id, baustelle_freitext, beginn, ende, dauer_minuten,
+            grund, grund_details, notizen, mitarbeiter_ids } = req.body;
+
+    if (!datum || !grund) {
+      return res.status(400).json({ error: 'Datum und Grund sind erforderlich' });
+    }
+
+    const result = db.updateSchlechtwetter(parseInt(req.params.id), {
+      datum,
+      baustelle_id,
+      baustelle_freitext,
+      beginn,
+      ende,
+      dauer_minuten,
+      grund,
+      grund_details,
+      notizen,
+      mitarbeiter_ids
+    });
+
+    res.json(result);
+  } catch (error) {
+    console.error('Schlechtwetter Update Error:', error);
+    res.status(500).json({ error: 'Fehler beim Speichern' });
+  }
+});
+
+// Schlechtwetter-Ereignis löschen
+app.delete('/api/buak/schlechtwetter/:id', checkSession, checkAdmin, (req, res) => {
+  try {
+    const result = db.deleteSchlechtwetter(parseInt(req.params.id));
+    res.json(result);
+  } catch (error) {
+    console.error('Schlechtwetter Delete Error:', error);
+    res.status(500).json({ error: 'Fehler beim Löschen' });
+  }
+});
+
+// BUAK-relevante Zeiteinträge abrufen
+app.get('/api/buak/zeiteintraege', checkSession, checkAdmin, (req, res) => {
+  try {
+    const filter = {
+      datum_von: req.query.datum_von,
+      datum_bis: req.query.datum_bis,
+      mitarbeiter_id: req.query.mitarbeiter_id ? parseInt(req.query.mitarbeiter_id) : null,
+      baustelle: req.query.baustelle
+    };
+    const result = db.getBuakZeiteintraege(filter);
+    res.json(result);
+  } catch (error) {
+    console.error('BUAK Zeiteintraege Error:', error);
+    res.status(500).json({ error: 'Fehler beim Laden' });
+  }
+});
+
+// BUAK-Report abrufen
+app.get('/api/buak/report', checkSession, checkAdmin, (req, res) => {
+  try {
+    const { datum_von, datum_bis } = req.query;
+    if (!datum_von || !datum_bis) {
+      return res.status(400).json({ error: 'Zeitraum erforderlich' });
+    }
+    const report = db.getBuakReport(datum_von, datum_bis);
+    res.json(report);
+  } catch (error) {
+    console.error('BUAK Report Error:', error);
+    res.status(500).json({ error: 'Fehler beim Erstellen des Reports' });
+  }
+});
+
+// BUAK-Report als CSV exportieren
+app.get('/api/buak/export/csv', checkSession, checkAdmin, (req, res) => {
+  try {
+    const { datum_von, datum_bis, typ } = req.query;
+    if (!datum_von || !datum_bis) {
+      return res.status(400).json({ error: 'Zeitraum erforderlich' });
+    }
+
+    const report = db.getBuakReport(datum_von, datum_bis);
+
+    let csv = '';
+    const filename = `buak-report-${datum_von}-${datum_bis}.csv`;
+
+    if (typ === 'mitarbeiter' || !typ) {
+      // Mitarbeiter-Arbeitszeit
+      csv = 'BUAK-relevante Arbeitszeit\n';
+      csv += 'Mitarbeiter-Nr;Name;Tage;Stunden\n';
+      report.mitarbeiter.forEach(m => {
+        const stunden = m.gesamt_minuten ? (m.gesamt_minuten / 60).toFixed(2) : '0.00';
+        csv += `${m.mitarbeiter_nr};${m.name};${m.tage};${stunden}\n`;
+      });
+      csv += '\n';
+    }
+
+    if (typ === 'schlechtwetter' || !typ) {
+      // Schlechtwetter
+      csv += 'Schlechtwetter-Ausfälle\n';
+      csv += 'Mitarbeiter-Nr;Name;Ereignisse;Stunden\n';
+      report.schlechtwetter.forEach(s => {
+        const stunden = s.gesamt_minuten ? (s.gesamt_minuten / 60).toFixed(2) : '0.00';
+        csv += `${s.mitarbeiter_nr};${s.name};${s.ereignisse};${stunden}\n`;
+      });
+      csv += '\n';
+    }
+
+    if (typ === 'baustellen' || !typ) {
+      // Baustellen
+      csv += 'Baustellen-Übersicht\n';
+      csv += 'Baustelle;Mitarbeiter;Tage;Stunden\n';
+      report.baustellen.forEach(b => {
+        const stunden = b.gesamt_minuten ? (b.gesamt_minuten / 60).toFixed(2) : '0.00';
+        csv += `${b.baustelle};${b.mitarbeiter_anzahl};${b.tage};${stunden}\n`;
+      });
+    }
+
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.send('\ufeff' + csv); // BOM for Excel
+  } catch (error) {
+    console.error('BUAK CSV Export Error:', error);
+    res.status(500).json({ error: 'Fehler beim Export' });
+  }
+});
+
+// BUAK-Report als PDF exportieren
+app.get('/api/buak/export/pdf', checkSession, checkAdmin, (req, res) => {
+  try {
+    const { datum_von, datum_bis } = req.query;
+    if (!datum_von || !datum_bis) {
+      return res.status(400).json({ error: 'Zeitraum erforderlich' });
+    }
+
+    const report = db.getBuakReport(datum_von, datum_bis);
+    const filename = `buak-report-${datum_von}-${datum_bis}.pdf`;
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+
+    const doc = new PDFDocument({ margin: 50 });
+    doc.pipe(res);
+
+    // Header
+    doc.fontSize(20).text('BUAK Compliance Report', { align: 'center' });
+    doc.moveDown(0.5);
+    doc.fontSize(12).text(`Zeitraum: ${datum_von} bis ${datum_bis}`, { align: 'center' });
+    doc.moveDown();
+
+    // Disclaimer
+    doc.fontSize(8).fillColor('gray');
+    doc.text('HINWEIS: Diese Funktion unterstützt ausschließlich die Dokumentation. Die rechtliche Beurteilung und Meldung an die BUAK obliegt dem Arbeitgeber.', { align: 'center' });
+    doc.fillColor('black');
+    doc.moveDown(2);
+
+    // Mitarbeiter-Arbeitszeit
+    doc.fontSize(14).text('BUAK-relevante Arbeitszeit', { underline: true });
+    doc.moveDown(0.5);
+
+    if (report.mitarbeiter.length === 0) {
+      doc.fontSize(10).text('Keine BUAK-relevanten Zeiteinträge im gewählten Zeitraum.');
+    } else {
+      doc.fontSize(10);
+      // Header
+      doc.text('Nr.', 50, doc.y, { continued: true, width: 60 });
+      doc.text('Name', 110, doc.y, { continued: true, width: 180 });
+      doc.text('Tage', 290, doc.y, { continued: true, width: 60 });
+      doc.text('Stunden', 350, doc.y, { width: 80 });
+      doc.moveDown(0.3);
+      doc.moveTo(50, doc.y).lineTo(430, doc.y).stroke();
+      doc.moveDown(0.3);
+
+      let totalMinuten = 0;
+      let totalTage = 0;
+      report.mitarbeiter.forEach(m => {
+        const stunden = m.gesamt_minuten ? (m.gesamt_minuten / 60).toFixed(2) : '0.00';
+        totalMinuten += m.gesamt_minuten || 0;
+        totalTage += m.tage || 0;
+
+        doc.text(m.mitarbeiter_nr, 50, doc.y, { continued: true, width: 60 });
+        doc.text(m.name, 110, doc.y, { continued: true, width: 180 });
+        doc.text(String(m.tage), 290, doc.y, { continued: true, width: 60 });
+        doc.text(stunden, 350, doc.y, { width: 80 });
+        doc.moveDown(0.3);
+      });
+
+      doc.moveDown(0.3);
+      doc.moveTo(50, doc.y).lineTo(430, doc.y).stroke();
+      doc.moveDown(0.3);
+      doc.font('Helvetica-Bold');
+      doc.text('Gesamt:', 50, doc.y, { continued: true, width: 240 });
+      doc.text(String(totalTage), 290, doc.y, { continued: true, width: 60 });
+      doc.text((totalMinuten / 60).toFixed(2), 350, doc.y, { width: 80 });
+      doc.font('Helvetica');
+    }
+
+    doc.moveDown(2);
+
+    // Schlechtwetter
+    doc.fontSize(14).text('Schlechtwetter-Dokumentation', { underline: true });
+    doc.moveDown(0.5);
+
+    if (report.schlechtwetter.length === 0) {
+      doc.fontSize(10).text('Keine Schlechtwetter-Ereignisse im gewählten Zeitraum.');
+    } else {
+      doc.fontSize(10);
+      doc.text('Nr.', 50, doc.y, { continued: true, width: 60 });
+      doc.text('Name', 110, doc.y, { continued: true, width: 180 });
+      doc.text('Ereignisse', 290, doc.y, { continued: true, width: 60 });
+      doc.text('Stunden', 350, doc.y, { width: 80 });
+      doc.moveDown(0.3);
+      doc.moveTo(50, doc.y).lineTo(430, doc.y).stroke();
+      doc.moveDown(0.3);
+
+      report.schlechtwetter.forEach(s => {
+        const stunden = s.gesamt_minuten ? (s.gesamt_minuten / 60).toFixed(2) : '0.00';
+        doc.text(s.mitarbeiter_nr, 50, doc.y, { continued: true, width: 60 });
+        doc.text(s.name, 110, doc.y, { continued: true, width: 180 });
+        doc.text(String(s.ereignisse), 290, doc.y, { continued: true, width: 60 });
+        doc.text(stunden, 350, doc.y, { width: 80 });
+        doc.moveDown(0.3);
+      });
+    }
+
+    // Footer
+    doc.moveDown(2);
+    doc.fontSize(8).fillColor('gray');
+    doc.text(`Erstellt am: ${new Date().toLocaleString('de-AT')}`, { align: 'right' });
+
+    doc.end();
+  } catch (error) {
+    console.error('BUAK PDF Export Error:', error);
+    res.status(500).json({ error: 'Fehler beim PDF-Export' });
+  }
+});
+
 // ==================== START ====================
 
 app.listen(PORT, () => {

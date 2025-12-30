@@ -3936,6 +3936,18 @@ function switchTab(tabName) {
       loadLeistungsnachweise();
     }
   }
+
+  // BUAK-spezifische Initialisierung
+  if (tabName === 'buak-config') {
+    if (typeof initBuakModule === 'function') {
+      initBuakModule();
+    }
+  }
+  if (tabName === 'buak-schlechtwetter') {
+    if (typeof loadSchlechtwetterList === 'function') {
+      loadSchlechtwetterList();
+    }
+  }
 }
 
 // ==================== LEISTUNGSNACHWEISE ====================
@@ -4424,4 +4436,410 @@ function showLnMessage(elementId, message, type) {
   setTimeout(function() {
     el.classList.add('hidden');
   }, 5000);
+}
+
+// ==================== BUAK COMPLIANCE SUPPORT MODULE ====================
+
+var buakConfig = null;
+var schlechtwetterPage = 1;
+
+// BUAK-Modul initialisieren
+async function initBuakModule() {
+  try {
+    buakConfig = await api('/buak/config', 'GET', null, false);
+
+    var checkbox = document.getElementById('buak-modul-aktiv');
+    if (checkbox) {
+      checkbox.checked = buakConfig.aktiv;
+      checkbox.onchange = toggleBuakModul;
+    }
+
+    updateBuakConfigContent();
+  } catch (error) {
+    console.error('BUAK Config Fehler:', error);
+  }
+}
+
+// BUAK-Modul aktivieren/deaktivieren
+async function toggleBuakModul() {
+  var checkbox = document.getElementById('buak-modul-aktiv');
+  var aktiv = checkbox.checked;
+
+  try {
+    await api('/buak/config/aktiv', 'PUT', { aktiv: aktiv }, false);
+    buakConfig.aktiv = aktiv;
+    updateBuakConfigContent();
+  } catch (error) {
+    console.error('BUAK Toggle Fehler:', error);
+    checkbox.checked = !aktiv;
+  }
+}
+
+// BUAK Config Content anzeigen/verbergen
+function updateBuakConfigContent() {
+  var content = document.getElementById('buak-config-content');
+  if (!content) return;
+
+  if (buakConfig && buakConfig.aktiv) {
+    content.style.display = 'block';
+    renderBuakBaustellen();
+    renderBuakMitarbeiter();
+  } else {
+    content.style.display = 'none';
+  }
+}
+
+// BUAK-Baustellen rendern
+function renderBuakBaustellen() {
+  var container = document.getElementById('buak-baustellen-list');
+  if (!container || !buakConfig) return;
+
+  if (!buakConfig.baustellen || buakConfig.baustellen.length === 0) {
+    container.innerHTML = '<p class="text-secondary">Keine Baustellen vorhanden.</p>';
+    return;
+  }
+
+  container.innerHTML = buakConfig.baustellen.map(function(b) {
+    var isActive = b.buak_relevant === 1;
+    return '<div class="buak-list-item' + (isActive ? ' buak-active' : '') + '">' +
+      '<div class="buak-list-item-info">' +
+        '<span class="buak-list-item-name">' + escapeHtml(b.name) + '</span>' +
+        (b.kunde ? '<span class="buak-list-item-detail">' + escapeHtml(b.kunde) + '</span>' : '') +
+      '</div>' +
+      '<label class="buak-toggle">' +
+        '<input type="checkbox" ' + (isActive ? 'checked' : '') + ' onchange="toggleBaustelleBuak(' + b.id + ', this.checked)">' +
+        '<span class="buak-toggle-slider"></span>' +
+      '</label>' +
+    '</div>';
+  }).join('');
+}
+
+// BUAK-Mitarbeiter rendern
+function renderBuakMitarbeiter() {
+  var container = document.getElementById('buak-mitarbeiter-list');
+  if (!container || !buakConfig) return;
+
+  if (!buakConfig.mitarbeiter || buakConfig.mitarbeiter.length === 0) {
+    container.innerHTML = '<p class="text-secondary">Keine Mitarbeiter vorhanden.</p>';
+    return;
+  }
+
+  container.innerHTML = buakConfig.mitarbeiter.map(function(m) {
+    var isActive = m.buak_relevant === 1;
+    return '<div class="buak-list-item' + (isActive ? ' buak-active' : '') + '">' +
+      '<div class="buak-list-item-info">' +
+        '<span class="buak-list-item-name">' + escapeHtml(m.name) + '</span>' +
+        '<span class="buak-list-item-detail">Nr. ' + escapeHtml(m.mitarbeiter_nr) + '</span>' +
+      '</div>' +
+      '<label class="buak-toggle">' +
+        '<input type="checkbox" ' + (isActive ? 'checked' : '') + ' onchange="toggleMitarbeiterBuak(' + m.id + ', this.checked)">' +
+        '<span class="buak-toggle-slider"></span>' +
+      '</label>' +
+    '</div>';
+  }).join('');
+}
+
+// Baustelle BUAK-Relevanz umschalten
+async function toggleBaustelleBuak(id, relevant) {
+  try {
+    await api('/buak/baustellen/' + id + '/relevant', 'PUT', { buak_relevant: relevant }, false);
+    var b = buakConfig.baustellen.find(function(x) { return x.id === id; });
+    if (b) b.buak_relevant = relevant ? 1 : 0;
+    renderBuakBaustellen();
+  } catch (error) {
+    console.error('Fehler:', error);
+    alert('Fehler beim Speichern');
+  }
+}
+
+// Mitarbeiter BUAK-Relevanz umschalten
+async function toggleMitarbeiterBuak(id, relevant) {
+  try {
+    await api('/buak/mitarbeiter/' + id + '/relevant', 'PUT', { buak_relevant: relevant }, false);
+    var m = buakConfig.mitarbeiter.find(function(x) { return x.id === id; });
+    if (m) m.buak_relevant = relevant ? 1 : 0;
+    renderBuakMitarbeiter();
+  } catch (error) {
+    console.error('Fehler:', error);
+    alert('Fehler beim Speichern');
+  }
+}
+
+// Schlechtwetter-Liste laden
+async function loadSchlechtwetterList(page) {
+  if (page) schlechtwetterPage = page;
+
+  var filter = {
+    page: schlechtwetterPage,
+    limit: 20
+  };
+
+  var vonEl = document.getElementById('sw-filter-von');
+  var bisEl = document.getElementById('sw-filter-bis');
+  var grundEl = document.getElementById('sw-filter-grund');
+
+  if (vonEl && vonEl.value) filter.datum_von = formatDateForAPI(vonEl.value);
+  if (bisEl && bisEl.value) filter.datum_bis = formatDateForAPI(bisEl.value);
+  if (grundEl && grundEl.value) filter.grund = grundEl.value;
+
+  try {
+    var queryParams = Object.keys(filter).map(function(k) {
+      return k + '=' + encodeURIComponent(filter[k]);
+    }).join('&');
+
+    var result = await api('/buak/schlechtwetter?' + queryParams, 'GET', null, false);
+    renderSchlechtwetterTable(result);
+  } catch (error) {
+    console.error('Schlechtwetter laden fehlgeschlagen:', error);
+  }
+}
+
+// Schlechtwetter-Tabelle rendern
+function renderSchlechtwetterTable(result) {
+  var tbody = document.getElementById('schlechtwetter-table-body');
+  if (!tbody) return;
+
+  if (!result.data || result.data.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="6" class="text-center">Keine Einträge vorhanden</td></tr>';
+    document.getElementById('schlechtwetter-pagination').innerHTML = '';
+    return;
+  }
+
+  var grundLabels = {
+    'regen': 'Regen',
+    'schnee': 'Schnee',
+    'frost': 'Frost',
+    'hitze': 'Hitze',
+    'sturm': 'Sturm',
+    'sonstiges': 'Sonstiges'
+  };
+
+  tbody.innerHTML = result.data.map(function(sw) {
+    var dauer = sw.dauer_minuten ? Math.floor(sw.dauer_minuten / 60) + 'h ' + (sw.dauer_minuten % 60) + 'min' : '-';
+    var grund = grundLabels[sw.grund] || sw.grund;
+
+    return '<tr>' +
+      '<td>' + formatDateForDisplay(sw.datum) + '</td>' +
+      '<td>' + escapeHtml(sw.baustelle_name || sw.baustelle_freitext || '-') + '</td>' +
+      '<td><span class="grund-badge grund-' + sw.grund + '">' + grund + '</span></td>' +
+      '<td>' + dauer + '</td>' +
+      '<td>' + escapeHtml(sw.mitarbeiter_namen || '-') + '</td>' +
+      '<td>' +
+        '<button class="btn btn-sm" onclick="editSchlechtwetter(' + sw.id + ')">Bearbeiten</button> ' +
+        '<button class="btn btn-sm btn-danger" onclick="deleteSchlechtwetter(' + sw.id + ')">Löschen</button>' +
+      '</td>' +
+    '</tr>';
+  }).join('');
+
+  var paginationEl = document.getElementById('schlechtwetter-pagination');
+  if (result.totalPages > 1) {
+    var buttons = [];
+    for (var i = 1; i <= result.totalPages; i++) {
+      buttons.push('<button class="' + (i === result.page ? 'active' : '') + '" onclick="loadSchlechtwetterList(' + i + ')">' + i + '</button>');
+    }
+    paginationEl.innerHTML = buttons.join('');
+  } else {
+    paginationEl.innerHTML = '';
+  }
+}
+
+// Schlechtwetter Modal öffnen
+async function openSchlechtwetterModal(id) {
+  document.getElementById('schlechtwetter-id').value = id || '';
+  document.getElementById('schlechtwetter-modal-title').textContent = id ? 'Schlechtwetter bearbeiten' : 'Schlechtwetter-Ereignis erfassen';
+
+  var baustellenSelect = document.getElementById('sw-baustelle');
+  try {
+    var baustellen = await api('/baustellen', 'GET', null, false);
+    baustellenSelect.innerHTML = '<option value="">Bitte wählen...</option>' +
+      (Array.isArray(baustellen) ? baustellen : (baustellen.data || [])).map(function(b) {
+        return '<option value="' + b.id + '">' + escapeHtml(b.name) + '</option>';
+      }).join('');
+  } catch (e) {}
+
+  var checkboxContainer = document.getElementById('sw-mitarbeiter-checkboxes');
+  try {
+    var mitarbeiterData = await api('/admin/mitarbeiter?limit=100', 'GET', null, false);
+    var mitarbeiter = Array.isArray(mitarbeiterData) ? mitarbeiterData : (mitarbeiterData.data || []);
+    checkboxContainer.innerHTML = mitarbeiter.map(function(m) {
+      return '<label><input type="checkbox" name="sw-ma" value="' + m.id + '"> ' + escapeHtml(m.name) + '</label>';
+    }).join('');
+  } catch (e) {}
+
+  if (id) {
+    try {
+      var sw = await api('/buak/schlechtwetter/' + id, 'GET', null, false);
+      document.getElementById('sw-datum').value = formatDateForDisplay(sw.datum);
+      document.getElementById('sw-grund').value = sw.grund;
+      document.getElementById('sw-grund-details').value = sw.grund_details || '';
+      document.getElementById('sw-baustelle').value = sw.baustelle_id || '';
+      document.getElementById('sw-beginn').value = sw.beginn || '';
+      document.getElementById('sw-ende').value = sw.ende || '';
+      document.getElementById('sw-dauer').value = sw.dauer_minuten || '';
+      document.getElementById('sw-notizen').value = sw.notizen || '';
+
+      if (sw.mitarbeiter) {
+        sw.mitarbeiter.forEach(function(m) {
+          var cb = document.querySelector('input[name="sw-ma"][value="' + m.id + '"]');
+          if (cb) cb.checked = true;
+        });
+      }
+    } catch (e) {
+      console.error('Fehler beim Laden:', e);
+    }
+  } else {
+    document.getElementById('schlechtwetter-form').reset();
+    var today = new Date();
+    document.getElementById('sw-datum').value = today.getDate().toString().padStart(2, '0') + '.' +
+      (today.getMonth() + 1).toString().padStart(2, '0') + '.' + today.getFullYear();
+  }
+
+  if (typeof flatpickr !== 'undefined') {
+    flatpickr('#sw-datum', { dateFormat: 'd.m.Y', locale: 'de', allowInput: true });
+  }
+
+  document.getElementById('schlechtwetter-modal').classList.remove('hidden');
+}
+
+function closeSchlechtwetterModal() {
+  document.getElementById('schlechtwetter-modal').classList.add('hidden');
+}
+
+function editSchlechtwetter(id) {
+  openSchlechtwetterModal(id);
+}
+
+async function deleteSchlechtwetter(id) {
+  if (!confirm('Schlechtwetter-Ereignis wirklich löschen?')) return;
+
+  try {
+    await api('/buak/schlechtwetter/' + id, 'DELETE', null, false);
+    loadSchlechtwetterList();
+  } catch (error) {
+    console.error('Löschen fehlgeschlagen:', error);
+    alert('Fehler beim Löschen');
+  }
+}
+
+// Schlechtwetter speichern
+document.addEventListener('DOMContentLoaded', function() {
+  var form = document.getElementById('schlechtwetter-form');
+  if (form) {
+    form.addEventListener('submit', async function(e) {
+      e.preventDefault();
+
+      var id = document.getElementById('schlechtwetter-id').value;
+      var mitarbeiterIds = [];
+      document.querySelectorAll('input[name="sw-ma"]:checked').forEach(function(cb) {
+        mitarbeiterIds.push(parseInt(cb.value));
+      });
+
+      var data = {
+        datum: formatDateForAPI(document.getElementById('sw-datum').value),
+        grund: document.getElementById('sw-grund').value,
+        grund_details: document.getElementById('sw-grund-details').value,
+        baustelle_id: document.getElementById('sw-baustelle').value ? parseInt(document.getElementById('sw-baustelle').value) : null,
+        beginn: document.getElementById('sw-beginn').value || null,
+        ende: document.getElementById('sw-ende').value || null,
+        dauer_minuten: document.getElementById('sw-dauer').value ? parseInt(document.getElementById('sw-dauer').value) : null,
+        notizen: document.getElementById('sw-notizen').value,
+        mitarbeiter_ids: mitarbeiterIds
+      };
+
+      if (!data.dauer_minuten && data.beginn && data.ende) {
+        var beginn = data.beginn.split(':');
+        var ende = data.ende.split(':');
+        data.dauer_minuten = (parseInt(ende[0]) * 60 + parseInt(ende[1])) - (parseInt(beginn[0]) * 60 + parseInt(beginn[1]));
+      }
+
+      try {
+        if (id) {
+          await api('/buak/schlechtwetter/' + id, 'PUT', data, false);
+        } else {
+          await api('/buak/schlechtwetter', 'POST', data, false);
+        }
+        closeSchlechtwetterModal();
+        loadSchlechtwetterList();
+      } catch (error) {
+        console.error('Speichern fehlgeschlagen:', error);
+        alert('Fehler beim Speichern');
+      }
+    });
+  }
+});
+
+// BUAK Report laden
+async function loadBuakReport() {
+  var vonEl = document.getElementById('buak-report-von');
+  var bisEl = document.getElementById('buak-report-bis');
+
+  if (!vonEl.value || !bisEl.value) {
+    alert('Bitte Zeitraum angeben');
+    return;
+  }
+
+  var datumVon = formatDateForAPI(vonEl.value);
+  var datumBis = formatDateForAPI(bisEl.value);
+
+  try {
+    var report = await api('/buak/report?datum_von=' + datumVon + '&datum_bis=' + datumBis, 'GET', null, false);
+    renderBuakReport(report);
+    document.getElementById('buak-report-content').style.display = 'block';
+  } catch (error) {
+    console.error('Report laden fehlgeschlagen:', error);
+    alert('Fehler beim Laden des Reports');
+  }
+}
+
+// BUAK Report rendern
+function renderBuakReport(report) {
+  var arbeitszeitBody = document.getElementById('buak-report-arbeitszeit');
+  var arbeitszeitTotal = document.getElementById('buak-report-arbeitszeit-total');
+
+  if (report.mitarbeiter.length === 0) {
+    arbeitszeitBody.innerHTML = '<tr><td colspan="4" class="text-center">Keine BUAK-relevanten Zeiteinträge</td></tr>';
+    arbeitszeitTotal.innerHTML = '';
+  } else {
+    var totalMinuten = 0;
+    var totalTage = 0;
+    arbeitszeitBody.innerHTML = report.mitarbeiter.map(function(m) {
+      var stunden = m.gesamt_minuten ? (m.gesamt_minuten / 60).toFixed(2) : '0.00';
+      totalMinuten += m.gesamt_minuten || 0;
+      totalTage += m.tage || 0;
+      return '<tr><td>' + escapeHtml(m.mitarbeiter_nr) + '</td><td>' + escapeHtml(m.name) + '</td><td>' + m.tage + '</td><td>' + stunden + '</td></tr>';
+    }).join('');
+    arbeitszeitTotal.innerHTML = '<tr><th colspan="2">Gesamt</th><th>' + totalTage + '</th><th>' + (totalMinuten / 60).toFixed(2) + '</th></tr>';
+  }
+
+  var swBody = document.getElementById('buak-report-schlechtwetter');
+  if (report.schlechtwetter.length === 0) {
+    swBody.innerHTML = '<tr><td colspan="4" class="text-center">Keine Schlechtwetter-Ereignisse</td></tr>';
+  } else {
+    swBody.innerHTML = report.schlechtwetter.map(function(s) {
+      var stunden = s.gesamt_minuten ? (s.gesamt_minuten / 60).toFixed(2) : '0.00';
+      return '<tr><td>' + escapeHtml(s.mitarbeiter_nr) + '</td><td>' + escapeHtml(s.name) + '</td><td>' + s.ereignisse + '</td><td>' + stunden + '</td></tr>';
+    }).join('');
+  }
+
+  var baustellenBody = document.getElementById('buak-report-baustellen');
+  if (report.baustellen.length === 0) {
+    baustellenBody.innerHTML = '<tr><td colspan="4" class="text-center">Keine Baustellen-Daten</td></tr>';
+  } else {
+    baustellenBody.innerHTML = report.baustellen.map(function(b) {
+      var stunden = b.gesamt_minuten ? (b.gesamt_minuten / 60).toFixed(2) : '0.00';
+      return '<tr><td>' + escapeHtml(b.baustelle) + '</td><td>' + b.mitarbeiter_anzahl + '</td><td>' + b.tage + '</td><td>' + stunden + '</td></tr>';
+    }).join('');
+  }
+}
+
+function exportBuakCsv() {
+  var datumVon = formatDateForAPI(document.getElementById('buak-report-von').value);
+  var datumBis = formatDateForAPI(document.getElementById('buak-report-bis').value);
+  window.open('/api/buak/export/csv?datum_von=' + datumVon + '&datum_bis=' + datumBis, '_blank');
+}
+
+function exportBuakPdf() {
+  var datumVon = formatDateForAPI(document.getElementById('buak-report-von').value);
+  var datumBis = formatDateForAPI(document.getElementById('buak-report-bis').value);
+  window.open('/api/buak/export/pdf?datum_von=' + datumVon + '&datum_bis=' + datumBis, '_blank');
 }

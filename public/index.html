@@ -383,6 +383,19 @@
           </div>
         </div>
 
+        <div class="nav-group" data-group="buak">
+          <button class="nav-group-header">
+            <svg class="nav-group-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
+            <span class="nav-group-title">BUAK</span>
+            <span class="nav-group-arrow">▸</span>
+          </button>
+          <div class="nav-group-items">
+            <button class="tab" data-tab="buak-config">Konfiguration</button>
+            <button class="tab" data-tab="buak-schlechtwetter">Schlechtwetter</button>
+            <button class="tab" data-tab="buak-report">Report</button>
+          </div>
+        </div>
+
         <div class="nav-group" data-group="system">
           <button class="nav-group-header">
             <svg class="nav-group-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
@@ -1372,6 +1385,229 @@
           </div>
         </div>
       </div>
+
+      <!-- BUAK Konfiguration Tab -->
+      <div id="tab-buak-config" class="tab-content hidden">
+        <div class="card">
+          <div class="buak-disclaimer">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+            <span>Diese Funktion unterstützt ausschließlich die Dokumentation. Die rechtliche Beurteilung und Meldung an die BUAK obliegt dem Arbeitgeber.</span>
+          </div>
+          <h2>BUAK Compliance Support</h2>
+          <p class="text-secondary">Unterstützung für die Dokumentation BUAK-relevanter Arbeitszeiten im Baugewerbe.</p>
+
+          <div class="form-group" style="margin: 20px 0;">
+            <label class="switch-label">
+              <input type="checkbox" id="buak-modul-aktiv">
+              <span>BUAK-Modul aktivieren</span>
+            </label>
+          </div>
+
+          <div id="buak-config-content" style="display: none;">
+            <h3 style="margin-top: 30px;">BUAK-relevante Baustellen</h3>
+            <p class="text-secondary" style="margin-bottom: 15px;">Markieren Sie Baustellen, die der BUAK-Meldepflicht unterliegen.</p>
+            <div id="buak-baustellen-list" class="buak-list"></div>
+
+            <h3 style="margin-top: 30px;">BUAK-relevante Mitarbeiter</h3>
+            <p class="text-secondary" style="margin-bottom: 15px;">Markieren Sie Mitarbeiter, deren Arbeitszeit BUAK-relevant ist.</p>
+            <div id="buak-mitarbeiter-list" class="buak-list"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- BUAK Schlechtwetter Tab -->
+      <div id="tab-buak-schlechtwetter" class="tab-content hidden">
+        <div class="card">
+          <div class="buak-disclaimer">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+            <span>Schlechtwetter-Dokumentation zur Unterstützung der BUAK-Meldung. Keine automatische Berechnung von Ansprüchen.</span>
+          </div>
+          <div class="flex-header">
+            <h2>Schlechtwetter-Dokumentation</h2>
+            <button class="btn btn-primary" onclick="openSchlechtwetterModal()">+ Neues Ereignis</button>
+          </div>
+
+          <div class="filter-row" style="margin-bottom: 20px;">
+            <div class="form-group">
+              <label for="sw-filter-von">Von</label>
+              <input type="text" id="sw-filter-von" class="datepicker" placeholder="TT.MM.JJJJ">
+            </div>
+            <div class="form-group">
+              <label for="sw-filter-bis">Bis</label>
+              <input type="text" id="sw-filter-bis" class="datepicker" placeholder="TT.MM.JJJJ">
+            </div>
+            <div class="form-group">
+              <label for="sw-filter-grund">Grund</label>
+              <select id="sw-filter-grund">
+                <option value="">Alle</option>
+                <option value="regen">Regen</option>
+                <option value="schnee">Schnee</option>
+                <option value="frost">Frost</option>
+                <option value="hitze">Hitze</option>
+                <option value="sturm">Sturm</option>
+                <option value="sonstiges">Sonstiges</option>
+              </select>
+            </div>
+            <div class="form-group" style="align-self: flex-end;">
+              <button class="btn btn-secondary" onclick="loadSchlechtwetterList()">Filtern</button>
+            </div>
+          </div>
+
+          <div id="schlechtwetter-list-container">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Datum</th>
+                  <th>Baustelle</th>
+                  <th>Grund</th>
+                  <th>Dauer</th>
+                  <th>Mitarbeiter</th>
+                  <th>Aktionen</th>
+                </tr>
+              </thead>
+              <tbody id="schlechtwetter-table-body"></tbody>
+            </table>
+            <div id="schlechtwetter-pagination" class="pagination"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- BUAK Report Tab -->
+      <div id="tab-buak-report" class="tab-content hidden">
+        <div class="card">
+          <div class="buak-disclaimer">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+            <span>Dieser Report dient ausschließlich der Dokumentation und Vorbereitung. Die rechtliche Beurteilung obliegt dem Arbeitgeber.</span>
+          </div>
+          <h2>BUAK Compliance Report</h2>
+
+          <div class="filter-row" style="margin-bottom: 20px;">
+            <div class="form-group">
+              <label for="buak-report-von">Von *</label>
+              <input type="text" id="buak-report-von" class="datepicker" placeholder="TT.MM.JJJJ" required>
+            </div>
+            <div class="form-group">
+              <label for="buak-report-bis">Bis *</label>
+              <input type="text" id="buak-report-bis" class="datepicker" placeholder="TT.MM.JJJJ" required>
+            </div>
+            <div class="form-group" style="align-self: flex-end;">
+              <button class="btn btn-primary" onclick="loadBuakReport()">Report erstellen</button>
+            </div>
+          </div>
+
+          <div id="buak-report-content" style="display: none;">
+            <div class="buak-report-actions" style="margin-bottom: 20px;">
+              <button class="btn btn-secondary" onclick="exportBuakCsv()">CSV exportieren</button>
+              <button class="btn btn-secondary" onclick="exportBuakPdf()">PDF exportieren</button>
+            </div>
+
+            <h3>BUAK-relevante Arbeitszeit</h3>
+            <table class="data-table" style="margin-bottom: 30px;">
+              <thead>
+                <tr>
+                  <th>Mitarbeiter-Nr.</th>
+                  <th>Name</th>
+                  <th>Tage</th>
+                  <th>Stunden</th>
+                </tr>
+              </thead>
+              <tbody id="buak-report-arbeitszeit"></tbody>
+              <tfoot id="buak-report-arbeitszeit-total"></tfoot>
+            </table>
+
+            <h3>Schlechtwetter-Ausfälle</h3>
+            <table class="data-table" style="margin-bottom: 30px;">
+              <thead>
+                <tr>
+                  <th>Mitarbeiter-Nr.</th>
+                  <th>Name</th>
+                  <th>Ereignisse</th>
+                  <th>Stunden</th>
+                </tr>
+              </thead>
+              <tbody id="buak-report-schlechtwetter"></tbody>
+            </table>
+
+            <h3>Baustellen-Übersicht</h3>
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Baustelle</th>
+                  <th>Mitarbeiter</th>
+                  <th>Tage</th>
+                  <th>Stunden</th>
+                </tr>
+              </thead>
+              <tbody id="buak-report-baustellen"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SCHLECHTWETTER MODAL -->
+  <div id="schlechtwetter-modal" class="modal hidden">
+    <div class="modal-backdrop" onclick="closeSchlechtwetterModal()"></div>
+    <div class="modal-content card" style="max-width: 600px;">
+      <h2 id="schlechtwetter-modal-title">Schlechtwetter-Ereignis erfassen</h2>
+      <form id="schlechtwetter-form">
+        <input type="hidden" id="schlechtwetter-id">
+        <div class="form-row">
+          <div class="form-group">
+            <label for="sw-datum">Datum *</label>
+            <input type="text" id="sw-datum" class="datepicker" required>
+          </div>
+          <div class="form-group">
+            <label for="sw-grund">Grund *</label>
+            <select id="sw-grund" required>
+              <option value="">Bitte wählen...</option>
+              <option value="regen">Regen</option>
+              <option value="schnee">Schnee</option>
+              <option value="frost">Frost</option>
+              <option value="hitze">Hitze</option>
+              <option value="sturm">Sturm</option>
+              <option value="sonstiges">Sonstiges</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="sw-grund-details">Details zum Grund</label>
+          <input type="text" id="sw-grund-details" placeholder="z.B. Dauerregen über 20mm/h">
+        </div>
+        <div class="form-group">
+          <label for="sw-baustelle">Baustelle</label>
+          <select id="sw-baustelle">
+            <option value="">Bitte wählen...</option>
+          </select>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="sw-beginn">Beginn</label>
+            <input type="time" id="sw-beginn">
+          </div>
+          <div class="form-group">
+            <label for="sw-ende">Ende</label>
+            <input type="time" id="sw-ende">
+          </div>
+          <div class="form-group">
+            <label for="sw-dauer">Dauer (Minuten)</label>
+            <input type="number" id="sw-dauer" min="0" placeholder="Automatisch">
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Betroffene Mitarbeiter</label>
+          <div id="sw-mitarbeiter-checkboxes" class="checkbox-group"></div>
+        </div>
+        <div class="form-group">
+          <label for="sw-notizen">Notizen</label>
+          <textarea id="sw-notizen" rows="2"></textarea>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-secondary" onclick="closeSchlechtwetterModal()">Abbrechen</button>
+          <button type="submit" class="btn btn-primary">Speichern</button>
+        </div>
+      </form>
     </div>
   </div>
 
