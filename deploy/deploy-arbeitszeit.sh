@@ -92,6 +92,7 @@ cp "$REPO_DIR/dist/style.min.css" "$DEPLOY_DIR/public/"
 cp "$REPO_DIR/dist/hilfe.html" "$DEPLOY_DIR/public/" 2>/dev/null || true
 cp "$REPO_DIR/dist/inspektion.html" "$DEPLOY_DIR/public/" 2>/dev/null || true
 cp "$REPO_DIR/dist/datenschutz.html" "$DEPLOY_DIR/public/" 2>/dev/null || true
+cp "$REPO_DIR/dist/impressum.html" "$DEPLOY_DIR/public/" 2>/dev/null || true
 
 # Copy config.json if exists
 cp "$REPO_DIR/public/config.json" "$DEPLOY_DIR/public/" 2>/dev/null || true

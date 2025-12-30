@@ -302,6 +302,10 @@
             <p>Pausenregeln, Kollektivverträge</p>
           </div>
           <div class="feature-card">
+            <h4>BUAK</h4>
+            <p>BUAK-Compliance für Baugewerbe, Schlechtwetter-Dokumentation</p>
+          </div>
+          <div class="feature-card">
             <h4>System</h4>
             <p>Einstellungen, Datenaufbewahrung, Audit-Log</p>
           </div>
@@ -431,6 +435,47 @@
           <li>Konfigurierbare Regeln für Zuschläge</li>
           <li>Mitarbeiter den Gruppen zuordnen</li>
         </ul>
+
+        <h3>BUAK (Bauarbeiter-Urlaubs- und Abfertigungskasse)</h3>
+        <p>Das BUAK-Modul unterstützt Bauunternehmen bei der Dokumentation von Schlechtwetter-Ereignissen gemäß BUAG (Bauarbeiter-Urlaubs- und Abfertigungsgesetz).</p>
+
+        <h4>Modul aktivieren</h4>
+        <ul>
+          <li>Gehe zu Admin &rarr; BUAK &rarr; Konfiguration</li>
+          <li>Aktiviere das BUAK-Modul mit dem Schalter</li>
+          <li>Optional: Aktiviere automatische BUAK-Relevanz für neue Baustellen</li>
+        </ul>
+
+        <h4>BUAK-relevante Baustellen und Mitarbeiter</h4>
+        <ul>
+          <li>Markiere Baustellen als "BUAK-relevant" in der Baustellen-Verwaltung</li>
+          <li>Markiere Mitarbeiter als "BUAK-relevant" in der Mitarbeiter-Verwaltung</li>
+          <li>Nur relevante Einträge werden in BUAK-Berichten berücksichtigt</li>
+        </ul>
+
+        <h4>Schlechtwetter dokumentieren</h4>
+        <p>Dokumentiere witterungsbedingte Arbeitsunterbrechungen:</p>
+        <ul>
+          <li>Gehe zu Admin &rarr; BUAK &rarr; Schlechtwetter</li>
+          <li>Klicke auf "Neuer Eintrag"</li>
+          <li>Wähle Datum und Baustelle (oder gib Freitext ein)</li>
+          <li>Gib Beginn und Ende der Unterbrechung ein</li>
+          <li>Wähle den Grund: Regen, Schnee, Frost, Hitze, Sturm oder Sonstiges</li>
+          <li>Optional: Details und Notizen hinzufügen</li>
+        </ul>
+
+        <h4>BUAK-Berichte</h4>
+        <ul>
+          <li>Gehe zu Admin &rarr; BUAK &rarr; Berichte</li>
+          <li>Wähle Jahr und optional Quartal</li>
+          <li>Der Bericht zeigt Schlechtwetter-Stunden pro Baustelle und Mitarbeiter</li>
+          <li><strong>CSV-Export:</strong> Tabellarische Daten für weitere Verarbeitung</li>
+          <li><strong>PDF-Export:</strong> Druckfertiger Bericht für Dokumentation</li>
+        </ul>
+
+        <div class="help-tip">
+          <strong>Wichtiger Hinweis:</strong> Die Berichte dienen der internen Dokumentation. Für offizielle BUAK-Meldungen prüfe die Daten und übertrage sie in die offiziellen BUAK-Formulare. Die Richtigkeit der gemeldeten Daten liegt in der Verantwortung des Arbeitgebers.
+        </div>
 
         <h3>System</h3>
 
@@ -588,18 +633,34 @@
       </div>
 
       <div class="help-section">
+        <h2>Rechtliche Informationen</h2>
+        <p>Im Footer der Anwendung findest du Links zu den rechtlichen Dokumenten:</p>
+        <ul>
+          <li><strong><a href="/impressum.html" style="color: var(--primary);">Impressum</a>:</strong> Angaben zum Betreiber gemäß § 5 ECG (E-Commerce-Gesetz), Firmenbuchdaten, UID-Nummer und Kontaktinformationen.</li>
+          <li><strong><a href="/datenschutz.html" style="color: var(--primary);">Datenschutzerklärung</a>:</strong> Informationen zur Verarbeitung personenbezogener Daten gemäß DSGVO, Aufbewahrungsfristen, Ihre Rechte und eingesetzte Dienste.</li>
+        </ul>
+      </div>
+
+      <div class="help-section">
         <h2>Support</h2>
         <p>Bei Fragen oder Problemen wende dich an:</p>
         <p style="margin-top: 12px;">
-          <strong>Strali Solutions</strong><br>
-          <a href="mailto:office@strali.solutions" style="color: var(--primary);">office@strali.solutions</a>
+          <strong>Strali Solutions e.U.</strong><br>
+          Nötsch 219, A-9611 Nötsch im Gailtal<br>
+          Tel: <a href="tel:+436769658016" style="color: var(--primary);">+43 (0)676 96 58 016</a><br>
+          E-Mail: <a href="mailto:office@strali.solutions" style="color: var(--primary);">office@strali.solutions</a>
         </p>
       </div>
     </div>
 
-    <div style="text-align: center; margin-top: 32px;">
+    <div style="text-align: center; margin-top: 32px; margin-bottom: 60px;">
       <a href="/" class="btn btn-primary">Zur App</a>
     </div>
   </div>
+
+  <footer class="legal-footer" style="position: fixed; bottom: 0; left: 0; right: 0; background: var(--bg-light); border-top: 1px solid var(--border); padding: 12px 24px; display: flex; justify-content: center; gap: 24px; font-size: 0.85rem; z-index: 100;">
+    <a href="/impressum.html" style="color: var(--text-secondary); text-decoration: none;">Impressum</a>
+    <a href="/datenschutz.html" style="color: var(--text-secondary); text-decoration: none;">Datenschutz</a>
+  </footer>
 </body>
 </html>

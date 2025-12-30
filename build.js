@@ -97,6 +97,16 @@ async function build() {
       fs.writeFileSync('dist/datenschutz.html', datenschutzHtml);
     }
 
+    // Copy impressum.html if exists
+    if (fs.existsSync('public/impressum.html')) {
+      let impressumHtml = fs.readFileSync('public/impressum.html', 'utf8');
+      impressumHtml = impressumHtml.replace(
+        /<link rel="stylesheet" href="style\.css[^"]*">/,
+        `<link rel="stylesheet" href="style.min.css?v=${cssHash}">`
+      );
+      fs.writeFileSync('dist/impressum.html', impressumHtml);
+    }
+
     // Get file sizes
     const originalJs = fs.statSync('public/app.js').size;
     const minifiedJs = fs.statSync('dist/app.min.js').size;
@@ -115,7 +125,7 @@ async function build() {
     console.log(`  Minified: ${(minifiedCss / 1024).toFixed(1)} KB (${((1 - minifiedCss/originalCss) * 100).toFixed(0)}% reduction)`);
     console.log('');
     console.log('Output directory: dist/');
-    console.log('Files: index.html, app.min.js, style.min.css, hilfe.html, datenschutz.html');
+    console.log('Files: index.html, app.min.js, style.min.css, hilfe.html, datenschutz.html, impressum.html');
 
   } catch (error) {
     console.error('Build failed:', error);
