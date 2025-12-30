@@ -360,6 +360,14 @@
           <strong>Audit-Trail:</strong> Jede Änderung an Zeiteinträgen (Erstellen, Bearbeiten, Löschen) wird mit Zeitstempel, Benutzer und IP-Adresse protokolliert. Die Hash-Verkettung stellt sicher, dass keine nachträglichen Manipulationen möglich sind.
         </div>
 
+        <h3>Datenaufbewahrung (DSGVO)</h3>
+        <ul>
+          <li>Konfigurierbare Aufbewahrungsfristen für Zeiteinträge und Audit-Log</li>
+          <li>Automatische Warnungen vor Ablauf der Aufbewahrungsfrist</li>
+          <li>Manuelle oder automatische Löschung alter Daten</li>
+          <li>Vollständiges Löschprotokoll für Compliance-Nachweis</li>
+        </ul>
+
         <h3>Arbeitsinspektions-Zugang</h3>
         <ul>
           <li>Separater Inspektions-Code für Behörden (in Einstellungen konfigurierbar)</li>
@@ -424,6 +432,46 @@
 
         <div class="help-tip">
           <strong>Beispiel:</strong> Ein Baugewerbe-KV könnte folgende Regeln haben: 50% Überstundenzuschlag nach 8h/Tag, 25% Nachtzuschlag (22:00-06:00), 50% Samstagszuschlag, 100% Sonntagszuschlag.
+        </div>
+      </div>
+
+      <div class="help-section">
+        <h2>Datenaufbewahrung (DSGVO)</h2>
+        <p>Gemäß Datenschutz-Grundverordnung (DSGVO) und gesetzlichen Aufbewahrungspflichten können Administratoren die automatische Datenlöschung konfigurieren:</p>
+
+        <h3>Aufbewahrungsfristen</h3>
+        <ul>
+          <li><strong>Zeiteinträge:</strong> Standard 84 Monate (7 Jahre) - entspricht der steuerlichen Aufbewahrungspflicht</li>
+          <li><strong>Audit-Log:</strong> Standard 120 Monate (10 Jahre) - für rechtliche Nachweise</li>
+          <li><strong>0 = unbegrenzt:</strong> Keine automatische Löschung</li>
+        </ul>
+
+        <h3>Warnungen</h3>
+        <p>Administratoren werden automatisch benachrichtigt, wenn Daten demnächst gelöscht werden:</p>
+        <ul>
+          <li>Konfigurierbare Vorwarnzeit (Standard: 30 Tage)</li>
+          <li>Benachrichtigung zeigt Anzahl der betroffenen Einträge</li>
+          <li>Zeit zur Prüfung und ggf. Export vor Löschung</li>
+        </ul>
+
+        <h3>Löschung durchführen</h3>
+        <ul>
+          <li><strong>Manuelle Löschung:</strong> Admin klickt auf "Zeiteinträge löschen" oder "Audit-Einträge löschen"</li>
+          <li><strong>Automatische Löschung:</strong> Optional aktivierbar (empfohlen: deaktiviert lassen)</li>
+          <li><strong>Bestätigung:</strong> Jede Löschung erfordert eine Sicherheitsabfrage</li>
+        </ul>
+
+        <h3>Löschprotokoll</h3>
+        <p>Alle Löschvorgänge werden dokumentiert:</p>
+        <ul>
+          <li>Zeitpunkt der Löschung</li>
+          <li>Anzahl gelöschter Einträge</li>
+          <li>Ältester gelöschter Eintrag</li>
+          <li>Wer die Löschung durchgeführt hat</li>
+        </ul>
+
+        <div class="help-tip">
+          <strong>Empfehlung:</strong> Aktiviere die automatische Löschung nur, wenn du sicher bist, dass alle Daten vor Ablauf der Frist exportiert/archiviert wurden. Die manuelle Löschung gibt dir mehr Kontrolle.
         </div>
       </div>
 
