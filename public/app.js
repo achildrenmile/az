@@ -166,13 +166,33 @@ async function api(endpoint, method = 'GET', body = null, showSpinner = true) {
 
 // Session abgelaufen - zum Login weiterleiten
 function handleSessionExpired() {
+  // Prevent multiple redirects
+  if (!sessionId && views.login && !views.login.classList.contains('hidden')) {
+    return;
+  }
+
+  // Stop session heartbeat
+  if (typeof sessionCheckTimer !== 'undefined' && sessionCheckTimer) {
+    clearInterval(sessionCheckTimer);
+    sessionCheckTimer = null;
+  }
+
   sessionId = null;
   userName = null;
   isAdmin = false;
   localStorage.removeItem('sessionId');
   localStorage.removeItem('userName');
   localStorage.removeItem('isAdmin');
+
+  // Show login view
   showView('login');
+
+  // Show session expired message
+  const errorEl = document.getElementById('login-error');
+  if (errorEl) {
+    errorEl.textContent = 'Deine Sitzung ist abgelaufen. Bitte melde dich erneut an.';
+    errorEl.style.color = 'var(--warning, #f59e0b)';
+  }
 }
 
 // Helper: View wechseln
@@ -247,6 +267,15 @@ document.getElementById('login-form').addEventListener('submit', async (e) => {
     localStorage.setItem('sessionId', sessionId);
     localStorage.setItem('userName', userName);
     localStorage.setItem('isAdmin', isAdmin);
+
+    // Clear any session expired message
+    errorEl.textContent = '';
+    errorEl.style.color = '';
+
+    // Start session heartbeat
+    if (typeof startSessionHeartbeat === 'function') {
+      startSessionHeartbeat();
+    }
 
     initErfassungView();
     showView('erfassung');
@@ -518,6 +547,12 @@ async function logout() {
   try {
     await api('/logout', 'POST');
   } catch (e) {}
+
+  // Stop session heartbeat
+  if (sessionCheckTimer) {
+    clearInterval(sessionCheckTimer);
+    sessionCheckTimer = null;
+  }
 
   sessionId = null;
   userName = null;
@@ -1558,6 +1593,36 @@ async function validateSession() {
 // Beim Laden Session validieren
 validateSession();
 
+// Session-Heartbeat: Periodisch prüfen ob Session noch gültig ist
+const SESSION_CHECK_INTERVAL = 5 * 60 * 1000; // 5 Minuten
+let sessionCheckTimer = null;
+
+function startSessionHeartbeat() {
+  // Stop any existing timer
+  if (sessionCheckTimer) {
+    clearInterval(sessionCheckTimer);
+  }
+
+  sessionCheckTimer = setInterval(async () => {
+    // Only check if we have a session and are not on login page
+    if (!sessionId || (views.login && !views.login.classList.contains('hidden'))) {
+      return;
+    }
+
+    try {
+      // Silent session check (no loading spinner)
+      await api('/session', 'GET', null, false);
+    } catch (error) {
+      // Session invalid - api() already calls handleSessionExpired() for 401
+    }
+  }, SESSION_CHECK_INTERVAL);
+}
+
+// Start heartbeat when page loads (if session exists)
+if (sessionId) {
+  startSessionHeartbeat();
+}
+
 // ==================== STATISTIK ====================
 
 // Jahre-Dropdown initialisieren
@@ -1919,6 +1984,12 @@ document.addEventListener('DOMContentLoaded', () => {
       const response = await fetch(url, {
         headers: { 'X-Session-Id': sessionId }
       });
+
+      // Handle session expiry
+      if (response.status === 401) {
+        handleSessionExpired();
+        return;
+      }
 
       if (!response.ok) {
         // Versuche JSON zu parsen, falls Fehler
