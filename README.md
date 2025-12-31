@@ -52,9 +52,30 @@ Einfache und gesetzeskonforme Arbeitszeiterfassung nach dem österreichischen Ar
 - **Backend:** Node.js + Express
 - **Datenbank:** SQLite (Standard) oder PostgreSQL
 - **Frontend:** Vanilla JavaScript (Single Page App)
-- **Hosting:** PM2 + Cloudflare Tunnel
+- **Hosting:** PM2, Docker oder Cloudflare Tunnel
 
 ## Installation
+
+### Docker (empfohlen)
+
+```bash
+# Image bauen
+docker build -t arbeitszeit:latest .
+
+# Container starten
+docker run -d -p 3000:3000 -v ./data:/data arbeitszeit:latest
+```
+
+Für Multi-Tenant-Deployment mit automatischen Cloudflare Tunnels:
+
+```bash
+./provision.sh kundenname
+./provision.sh demo --with-dummydata
+```
+
+Siehe [DOCKER.md](DOCKER.md) für vollständige Dokumentation.
+
+### Manuell
 
 ```bash
 # Dependencies installieren

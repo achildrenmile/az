@@ -579,12 +579,18 @@ buakSettings.forEach(s => {
 // Standard-Admin erstellen falls nicht vorhanden
 const adminExists = db.prepare('SELECT id FROM mitarbeiter WHERE mitarbeiter_nr = ?').get('admin');
 if (!adminExists) {
-  const pinHash = bcrypt.hashSync('1234', 10);
+  // Use ADMIN_PASSWORD env var if set (for Docker), otherwise default to '1234'
+  const adminPassword = process.env.ADMIN_PASSWORD || '1234';
+  const pinHash = bcrypt.hashSync(adminPassword, 10);
   db.prepare(`
     INSERT INTO mitarbeiter (mitarbeiter_nr, name, pin_hash, ist_admin)
     VALUES (?, ?, ?, 1)
   `).run('admin', 'Administrator', pinHash);
-  console.log('Admin-Benutzer erstellt: Nr=admin, PIN=1234');
+
+  // Only print password if not in init mode (docker-init.js handles its own output)
+  if (!process.env.INIT_MODE) {
+    console.log(`Admin-Benutzer erstellt: Nr=admin, PIN=${adminPassword}`);
+  }
 }
 
 module.exports = {

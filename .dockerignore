@@ -1,0 +1,34 @@
+# Git
+.git
+.gitignore
+
+# Documentation
+*.md
+!README.md
+
+# Development
+.claude/
+node_modules/
+*.db
+
+# Build artifacts
+dist/
+
+# Customer data
+customers/
+
+# Scripts
+*.sh
+deploy.js
+generate-demo-data.js
+issues.sh
+labels.sh
+milestones.sh
+
+# IDE
+.vscode/
+.idea/
+
+# Misc
+.DS_Store
+*.log
