@@ -1,0 +1,47 @@
+# Docker Compose template for Arbeitszeit-Tracker customer deployment
+# This file is used by provision.sh to generate customer-specific docker-compose.yml
+#
+# Variables replaced by provision.sh:
+# - demo: Customer identifier (e.g., "demo", "acme")
+# - eyJhIjoiY2M1OTkzMmM2Mjg1ZjQyYWVjOWMzNjkwNzY3ZGE0YzgiLCJzIjoidXRJZlFybE1yZTlzSHFJclNsU0haVFdXMUJNWUlPN1p4UVQ1dXFoNkpBTT0iLCJ0IjoiMjZlYjYyNDgtOTk3ZC00ZmYzLWIyMWMtYjFhMGQ3NWYxMmYyIn0=: Cloudflare Tunnel token
+# - VIpPNhKhH7CSAusH: Admin password (generated or provided)
+# - true: "true" or "false"
+
+services:
+  app:
+    image: arbeitszeit:latest
+    container_name: az-demo
+    restart: unless-stopped
+    environment:
+      - PORT=3000
+      - DATABASE_PATH=/data/arbeitszeit.db
+      - ADMIN_PASSWORD=VIpPNhKhH7CSAusH
+      - INIT_DUMMY_DATA=true
+      - NODE_ENV=production
+    volumes:
+      - ./data:/data
+    networks:
+      - az-demo-network
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  tunnel:
+    image: cloudflare/cloudflared:latest
+    container_name: az-demo-tunnel
+    restart: unless-stopped
+    command: tunnel run
+    environment:
+      - TUNNEL_TOKEN=eyJhIjoiY2M1OTkzMmM2Mjg1ZjQyYWVjOWMzNjkwNzY3ZGE0YzgiLCJzIjoidXRJZlFybE1yZTlzSHFJclNsU0haVFdXMUJNWUlPN1p4UVQ1dXFoNkpBTT0iLCJ0IjoiMjZlYjYyNDgtOTk3ZC00ZmYzLWIyMWMtYjFhMGQ3NWYxMmYyIn0=
+    networks:
+      - az-demo-network
+    depends_on:
+      app:
+        condition: service_healthy
+
+networks:
+  az-demo-network:
+    driver: bridge

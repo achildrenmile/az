@@ -29,7 +29,10 @@
 set -e
 
 # Configuration
-BASE_DOMAIN="${AZ_BASE_DOMAIN:-az.strali.solutions}"
+# Note: Using az-<customer>.strali.solutions format for SSL compatibility
+# Multi-level subdomains (customer.az.strali.solutions) require Advanced Certificate Manager
+BASE_DOMAIN="${AZ_BASE_DOMAIN:-strali.solutions}"
+CUSTOMER_PREFIX="${AZ_CUSTOMER_PREFIX:-az-}"
 CUSTOMERS_DIR="${AZ_CUSTOMERS_DIR:-./customers}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CF_API_BASE="https://api.cloudflare.com/client/v4"
@@ -286,7 +289,7 @@ get_tunnel_token_cli() {
 create_dns_record_api() {
     local customer="$1"
     local tunnel_id="$2"
-    local hostname="${customer}.${BASE_DOMAIN}"
+    local hostname="${CUSTOMER_PREFIX}${customer}.${BASE_DOMAIN}"
 
     log_info "Creating DNS record via API: $hostname"
 
@@ -327,7 +330,7 @@ create_dns_record_api() {
 create_dns_record_cli() {
     local customer="$1"
     local tunnel_id="$2"
-    local hostname="${customer}.${BASE_DOMAIN}"
+    local hostname="${CUSTOMER_PREFIX}${customer}.${BASE_DOMAIN}"
 
     log_info "Creating DNS record via CLI: $hostname"
 
@@ -341,7 +344,7 @@ create_dns_record_cli() {
 configure_tunnel_ingress_api() {
     local customer="$1"
     local tunnel_id="$2"
-    local hostname="${customer}.${BASE_DOMAIN}"
+    local hostname="${CUSTOMER_PREFIX}${customer}.${BASE_DOMAIN}"
 
     log_info "Configuring tunnel ingress via API..."
 
@@ -391,7 +394,7 @@ create_customer_stack() {
     cat > "$customer_dir/.env" << EOF
 # Arbeitszeit-Tracker Customer: $customer
 # Generated: $(date -Iseconds)
-# URL: https://${customer}.${BASE_DOMAIN}
+# URL: https://${CUSTOMER_PREFIX}${customer}.${BASE_DOMAIN}
 
 CUSTOMER_NAME=$customer
 ADMIN_PASSWORD=$admin_password
@@ -426,7 +429,7 @@ start_customer() {
 print_summary() {
     local customer="$1"
     local admin_password="$2"
-    local hostname="${customer}.${BASE_DOMAIN}"
+    local hostname="${CUSTOMER_PREFIX}${customer}.${BASE_DOMAIN}"
     local customer_dir="${CUSTOMERS_DIR}/${customer}"
 
     echo ""
@@ -541,7 +544,7 @@ main() {
     echo "========================================"
     echo ""
     echo "Customer:    $customer"
-    echo "Domain:      ${customer}.${BASE_DOMAIN}"
+    echo "Domain:      ${CUSTOMER_PREFIX}${customer}.${BASE_DOMAIN}"
     echo "Dummy Data:  $with_dummydata"
     echo ""
 
