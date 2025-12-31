@@ -64,6 +64,11 @@ console.log('Deploying backend files...');
 fs.copyFileSync('server.js', path.join(DEPLOY_DIR, 'server.js'));
 fs.copyFileSync('database.js', path.join(DEPLOY_DIR, 'database.js'));
 
+// Deploy migration script
+if (fs.existsSync('migrate-db.js')) {
+  fs.copyFileSync('migrate-db.js', path.join(DEPLOY_DIR, 'migrate-db.js'));
+}
+
 // Deploy database configuration files (for PostgreSQL support)
 const dbDir = path.join(DEPLOY_DIR, 'db');
 if (!fs.existsSync(dbDir)) {
@@ -101,4 +106,4 @@ console.log('Deployment complete!');
 console.log('');
 console.log('Deployed files:');
 console.log('  Frontend: index.html, app.min.js, style.min.css, hilfe.html, datenschutz.html, impressum.html');
-console.log('  Backend:  server.js, database.js');
+console.log('  Backend:  server.js, database.js, migrate-db.js');

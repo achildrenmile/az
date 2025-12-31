@@ -108,14 +108,119 @@ For production deployments with multiple users:
 - Set `DB_SSL=true` for SSL connections
 - The application uses `rejectUnauthorized: false` by default
 
-## Migration Notes
+## Database Migration
 
-Migrating from SQLite to PostgreSQL:
+A dedicated migration script is provided to safely transfer data between SQLite and PostgreSQL.
 
-1. Export data from SQLite
-2. Create PostgreSQL database
-3. Import data with appropriate type conversions
-4. Update environment variables
-5. Restart application
+### Migration Script Usage
 
-**Note:** Automatic migration between databases is not currently supported.
+```bash
+# Migrate from SQLite to PostgreSQL
+node migrate-db.js --from sqlite --to postgres
+
+# Migrate from PostgreSQL to SQLite
+node migrate-db.js --from postgres --to sqlite
+
+# Dry-run (validate without migrating)
+node migrate-db.js --from sqlite --to postgres --dry-run
+
+# Force migration to non-empty target
+node migrate-db.js --from sqlite --to postgres --force
+
+# Verbose output
+node migrate-db.js --from sqlite --to postgres --verbose
+```
+
+### Options
+
+| Option | Description |
+|--------|-------------|
+| `--from <type>` | Source database type (`sqlite` or `postgres`) |
+| `--to <type>` | Target database type (`sqlite` or `postgres`) |
+| `--force` | Allow migration to non-empty target database |
+| `--dry-run` | Validate and show what would be migrated without making changes |
+| `--verbose` | Show detailed progress for each table |
+| `--skip-validation` | Skip post-migration row count validation |
+
+### Migration Process: SQLite → PostgreSQL
+
+1. **Prepare PostgreSQL database**
+   ```bash
+   # Create database
+   createdb -U postgres arbeitszeit
+
+   # Initialize schema
+   psql -U postgres -d arbeitszeit -f db/schema-postgres.sql
+   ```
+
+2. **Set environment variables**
+   ```bash
+   export DB_HOST=localhost
+   export DB_PORT=5432
+   export DB_NAME=arbeitszeit
+   export DB_USER=postgres
+   export DB_PASSWORD=your_password
+   export DATABASE_PATH=./arbeitszeit.db  # SQLite source
+   ```
+
+3. **Run dry-run first**
+   ```bash
+   node migrate-db.js --from sqlite --to postgres --dry-run --verbose
+   ```
+
+4. **Execute migration**
+   ```bash
+   node migrate-db.js --from sqlite --to postgres --verbose
+   ```
+
+5. **Verify and switch**
+   ```bash
+   # Update application to use PostgreSQL
+   export DB_TYPE=postgres
+   pm2 restart arbeitszeit
+   ```
+
+### What Gets Migrated
+
+The script migrates all tables in the correct order (respecting foreign key dependencies):
+
+- User data: `mitarbeiter`, `sessions`
+- Time entries: `zeiteintraege`, `monatsbestaetigung`, `gleitzeit_saldo`
+- Master data: `kunden`, `baustellen`, `pausenregeln`, `arbeitstypen`
+- Audit trail: `audit_log`, `loeschprotokoll`
+- Collective agreements: `kv_kollektivvertraege`, `kv_regeln`, `kv_gruppen`
+- Service records: `leistungsnachweise`, `leistungsnachweis_mitarbeiter`
+- BUAK data: `buak_schlechtwetter`, `buak_schlechtwetter_mitarbeiter`
+- Settings: `einstellungen`, `admin_benachrichtigungen`
+
+### Safety Features
+
+- **Empty target check**: Migration fails if target contains data (use `--force` to override)
+- **Row count validation**: Verifies all rows were transferred correctly
+- **Dry-run mode**: Preview migration without making changes
+- **Transaction safety**: Errors during migration are clearly reported
+- **ID preservation**: All primary keys and relationships are preserved
+
+### Post-Migration Verification
+
+After migration, verify data integrity:
+
+```bash
+# Check row counts in PostgreSQL
+psql -U postgres -d arbeitszeit -c "SELECT 'mitarbeiter' as table_name, COUNT(*) FROM mitarbeiter UNION ALL SELECT 'zeiteintraege', COUNT(*) FROM zeiteintraege UNION ALL SELECT 'audit_log', COUNT(*) FROM audit_log;"
+
+# Verify audit log hash chain
+curl http://localhost:3000/api/admin/audit/verify
+```
+
+### Rollback
+
+If migration fails or needs to be reverted:
+
+1. Keep the original SQLite database as backup
+2. Switch back to SQLite by unsetting `DB_TYPE`:
+   ```bash
+   unset DB_TYPE
+   pm2 restart arbeitszeit
+   ```
+3. The PostgreSQL database can be dropped and recreated for a fresh migration attempt
