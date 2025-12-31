@@ -80,7 +80,14 @@ pm2 start server.js --name arbeitszeit
 | `DB_USER` | postgres | PostgreSQL Benutzer |
 | `DB_PASSWORD` | - | PostgreSQL Passwort |
 
-Für detaillierte PostgreSQL-Konfiguration siehe [DATABASE.md](DATABASE.md).
+Für detaillierte PostgreSQL-Konfiguration und Migration siehe [DATABASE.md](DATABASE.md).
+
+### Datenbank-Migration
+
+```bash
+# SQLite → PostgreSQL migrieren
+node migrate-db.js --from sqlite --to postgres --verbose
+```
 
 ## API Endpunkte
 
