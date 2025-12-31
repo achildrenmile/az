@@ -64,6 +64,24 @@ console.log('Deploying backend files...');
 fs.copyFileSync('server.js', path.join(DEPLOY_DIR, 'server.js'));
 fs.copyFileSync('database.js', path.join(DEPLOY_DIR, 'database.js'));
 
+// Deploy database configuration files (for PostgreSQL support)
+const dbDir = path.join(DEPLOY_DIR, 'db');
+if (!fs.existsSync(dbDir)) {
+  fs.mkdirSync(dbDir, { recursive: true });
+}
+const dbFiles = ['config.js', 'adapter.js', 'sqlite-adapter.js', 'postgres-adapter.js', 'sql-helpers.js', 'index.js', 'schema-postgres.sql'];
+dbFiles.forEach(file => {
+  const srcPath = path.join('db', file);
+  if (fs.existsSync(srcPath)) {
+    fs.copyFileSync(srcPath, path.join(dbDir, file));
+  }
+});
+
+// Copy documentation
+if (fs.existsSync('DATABASE.md')) {
+  fs.copyFileSync('DATABASE.md', path.join(DEPLOY_DIR, 'DATABASE.md'));
+}
+
 // Copy config.json if exists in public
 if (fs.existsSync('public/config.json')) {
   fs.copyFileSync('public/config.json', path.join(publicDir, 'config.json'));

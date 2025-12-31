@@ -50,7 +50,7 @@ Einfache und gesetzeskonforme Arbeitszeiterfassung nach dem österreichischen Ar
 ## Technologie
 
 - **Backend:** Node.js + Express
-- **Datenbank:** SQLite (better-sqlite3)
+- **Datenbank:** SQLite (Standard) oder PostgreSQL
 - **Frontend:** Vanilla JavaScript (Single Page App)
 - **Hosting:** PM2 + Cloudflare Tunnel
 
@@ -73,6 +73,14 @@ pm2 start server.js --name arbeitszeit
 |----------|----------|--------------|
 | `PORT` | 3000 | Server-Port |
 | `DATABASE_PATH` | ./arbeitszeit.db | SQLite-Datenbankpfad |
+| `DB_TYPE` | sqlite | Datenbank-Backend (`sqlite` oder `postgres`) |
+| `DB_HOST` | localhost | PostgreSQL Host |
+| `DB_PORT` | 5432 | PostgreSQL Port |
+| `DB_NAME` | arbeitszeit | PostgreSQL Datenbankname |
+| `DB_USER` | postgres | PostgreSQL Benutzer |
+| `DB_PASSWORD` | - | PostgreSQL Passwort |
+
+Für detaillierte PostgreSQL-Konfiguration siehe [DATABASE.md](DATABASE.md).
 
 ## API Endpunkte
 

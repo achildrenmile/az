@@ -1,9 +1,103 @@
-const Database = require('better-sqlite3');
 const bcrypt = require('bcryptjs');
 const path = require('path');
+const crypto = require('crypto');
 
-const dbPath = process.env.DATABASE_PATH || path.join(__dirname, 'arbeitszeit.db');
-const db = new Database(dbPath);
+// Database Configuration
+const DB_TYPE = (process.env.DB_TYPE || 'sqlite').toLowerCase();
+const isPostgres = DB_TYPE === 'postgres';
+
+// Database connection
+let db;
+let pool; // PostgreSQL pool
+
+if (isPostgres) {
+  // PostgreSQL configuration
+  const { Pool } = require('pg');
+  pool = new Pool({
+    host: process.env.DB_HOST || 'localhost',
+    port: parseInt(process.env.DB_PORT || '5432', 10),
+    database: process.env.DB_NAME || 'arbeitszeit',
+    user: process.env.DB_USER || 'postgres',
+    password: process.env.DB_PASSWORD || '',
+    ssl: process.env.DB_SSL === 'true' ? { rejectUnauthorized: false } : false,
+    max: parseInt(process.env.DB_POOL_SIZE || '10', 10)
+  });
+
+  // Create a synchronous-like wrapper for backward compatibility
+  // Note: This requires async initialization before use
+  console.log(`Database: PostgreSQL (${process.env.DB_HOST || 'localhost'}:${process.env.DB_PORT || '5432'}/${process.env.DB_NAME || 'arbeitszeit'})`);
+
+  // PostgreSQL helper for simulating better-sqlite3 API
+  db = {
+    prepare: (sql) => ({
+      get: async (...params) => {
+        const result = await pool.query(convertSqlPlaceholders(sql), params);
+        return result.rows[0] || null;
+      },
+      all: async (...params) => {
+        const result = await pool.query(convertSqlPlaceholders(sql), params);
+        return result.rows;
+      },
+      run: async (...params) => {
+        const pgSql = convertSqlPlaceholders(sql);
+        const result = await pool.query(pgSql + (pgSql.toUpperCase().includes('INSERT') ? ' RETURNING id' : ''), params);
+        return {
+          changes: result.rowCount,
+          lastInsertRowid: result.rows[0]?.id || null
+        };
+      }
+    }),
+    exec: async (sql) => {
+      const statements = sql.split(';').filter(s => s.trim());
+      for (const stmt of statements) {
+        if (stmt.trim()) {
+          await pool.query(convertPostgresSchema(stmt));
+        }
+      }
+    },
+    pragma: () => {}, // No-op for PostgreSQL
+    transaction: (fn) => async () => {
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        const result = await fn();
+        await client.query('COMMIT');
+        return result;
+      } catch (e) {
+        await client.query('ROLLBACK');
+        throw e;
+      } finally {
+        client.release();
+      }
+    }
+  };
+
+  // Convert SQLite ? placeholders to PostgreSQL $1, $2, etc.
+  function convertSqlPlaceholders(sql) {
+    let index = 0;
+    return sql.replace(/\?/g, () => `$${++index}`);
+  }
+
+  // Convert SQLite schema to PostgreSQL
+  function convertPostgresSchema(sql) {
+    return sql
+      .replace(/INTEGER PRIMARY KEY AUTOINCREMENT/gi, 'SERIAL PRIMARY KEY')
+      .replace(/DATETIME/gi, 'TIMESTAMP')
+      .replace(/strftime\s*\(\s*'%Y'\s*,\s*([^)]+)\)/gi, "EXTRACT(YEAR FROM $1)::INTEGER")
+      .replace(/strftime\s*\(\s*'%m'\s*,\s*([^)]+)\)/gi, "EXTRACT(MONTH FROM $1)::INTEGER")
+      .replace(/strftime\s*\(\s*'%d'\s*,\s*([^)]+)\)/gi, "EXTRACT(DAY FROM $1)::INTEGER")
+      .replace(/strftime\s*\(\s*'%W'\s*,\s*([^)]+)\)/gi, "EXTRACT(WEEK FROM $1)::INTEGER")
+      .replace(/strftime\s*\(\s*'%H'\s*,\s*([^)]+)\)/gi, "EXTRACT(HOUR FROM $1::TIME)::INTEGER")
+      .replace(/strftime\s*\(\s*'%M'\s*,\s*([^)]+)\)/gi, "EXTRACT(MINUTE FROM $1::TIME)::INTEGER");
+  }
+
+} else {
+  // SQLite configuration (default)
+  const Database = require('better-sqlite3');
+  const dbPath = process.env.DATABASE_PATH || path.join(__dirname, 'arbeitszeit.db');
+  db = new Database(dbPath);
+  console.log(`Database: SQLite (${dbPath})`);
+}
 
 // Tabellen erstellen
 db.exec(`
@@ -443,7 +537,6 @@ defaultArbeitstypen.forEach((typ, index) => {
 });
 
 // Bestehende Audit-Einträge mit Hash versehen (falls noch ohne)
-const crypto = require('crypto');
 try {
   const unhashed = db.prepare('SELECT id, zeitpunkt, mitarbeiter_id, aktion, tabelle, datensatz_id, alte_werte, neue_werte FROM audit_log WHERE eintrag_hash IS NULL').all();
   let prevHash = null;
@@ -3365,5 +3458,22 @@ module.exports = {
       schlechtwetter: schlechtwetterSummary,
       baustellen: baustellenSummary
     };
+  },
+
+  // Database Configuration Exports
+  getDbType: () => DB_TYPE,
+  isPostgres: () => isPostgres,
+  isSqlite: () => !isPostgres,
+
+  // Get raw database connection (for advanced usage)
+  getRawDb: () => isPostgres ? pool : db,
+
+  // Close database connection (for graceful shutdown)
+  close: async () => {
+    if (isPostgres && pool) {
+      await pool.end();
+    } else if (db && db.close) {
+      db.close();
+    }
   }
 };
