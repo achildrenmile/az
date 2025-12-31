@@ -334,8 +334,10 @@ create_dns_record_cli() {
 
     log_info "Creating DNS record via CLI: $hostname"
 
-    # Route tunnel to hostname
-    cloudflared tunnel route dns "$tunnel_id" "$hostname" 2>/dev/null || true
+    # Route tunnel to hostname (--overwrite-dns to replace existing records)
+    if ! cloudflared tunnel route dns --overwrite-dns "$tunnel_id" "$hostname" 2>&1; then
+        log_warning "DNS route command had issues, but continuing..."
+    fi
 
     log_success "DNS record created: https://$hostname"
 }
@@ -369,12 +371,48 @@ configure_tunnel_ingress_api() {
     fi
 }
 
+# Create cloudflared config for locally-managed tunnel (CLI mode)
+create_cloudflared_config() {
+    local customer="$1"
+    local tunnel_id="$2"
+    local customer_dir="${CUSTOMERS_DIR}/${customer}"
+    local hostname="${CUSTOMER_PREFIX}${customer}.${BASE_DOMAIN}"
+    local creds_file="$HOME/.cloudflared/${tunnel_id}.json"
+
+    log_info "Creating cloudflared configuration..."
+
+    mkdir -p "$customer_dir/cloudflared"
+
+    # Copy credentials file
+    if [ -f "$creds_file" ]; then
+        cp "$creds_file" "$customer_dir/cloudflared/credentials.json"
+        chmod 644 "$customer_dir/cloudflared/credentials.json"
+    else
+        log_error "Tunnel credentials file not found: $creds_file"
+        exit 1
+    fi
+
+    # Create config file with ingress rules
+    cat > "$customer_dir/cloudflared/config.yml" << EOF
+tunnel: ${tunnel_id}
+credentials-file: /etc/cloudflared/credentials.json
+
+ingress:
+  - hostname: ${hostname}
+    service: http://app:3000
+  - service: http_status:404
+EOF
+
+    log_success "Cloudflared config created"
+}
+
 # Create customer directory and files
 create_customer_stack() {
     local customer="$1"
     local tunnel_token="$2"
     local admin_password="$3"
     local init_dummy_data="$4"
+    local use_local_config="$5"
     local customer_dir="${CUSTOMERS_DIR}/${customer}"
 
     log_info "Creating customer stack in $customer_dir"
@@ -382,13 +420,62 @@ create_customer_stack() {
     # Create directory
     mkdir -p "$customer_dir/data"
 
-    # Generate docker-compose.yml from template
-    export CUSTOMER_NAME="$customer"
-    export TUNNEL_TOKEN="$tunnel_token"
-    export ADMIN_PASSWORD="$admin_password"
-    export INIT_DUMMY_DATA="$init_dummy_data"
+    # Generate docker-compose.yml
+    if [ "$use_local_config" = "true" ]; then
+        # Use locally-managed tunnel with config file
+        cat > "$customer_dir/docker-compose.yml" << EOF
+# Docker Compose for Arbeitszeit-Tracker customer: ${customer}
+# Customer URL: https://${CUSTOMER_PREFIX}${customer}.${BASE_DOMAIN}
 
-    envsubst < "$SCRIPT_DIR/docker-compose.template.yml" > "$customer_dir/docker-compose.yml"
+services:
+  app:
+    image: arbeitszeit:latest
+    container_name: az-${customer}
+    restart: unless-stopped
+    environment:
+      - PORT=3000
+      - DATABASE_PATH=/data/arbeitszeit.db
+      - ADMIN_PASSWORD=${admin_password}
+      - INIT_DUMMY_DATA=${init_dummy_data}
+      - NODE_ENV=production
+    volumes:
+      - ./data:/data
+    networks:
+      - az-${customer}-network
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  tunnel:
+    image: cloudflare/cloudflared:latest
+    container_name: az-${customer}-tunnel
+    restart: unless-stopped
+    command: tunnel --config /etc/cloudflared/config.yml run
+    volumes:
+      - ./cloudflared/config.yml:/etc/cloudflared/config.yml:ro
+      - ./cloudflared/credentials.json:/etc/cloudflared/credentials.json:ro
+    networks:
+      - az-${customer}-network
+    depends_on:
+      app:
+        condition: service_healthy
+
+networks:
+  az-${customer}-network:
+    driver: bridge
+EOF
+    else
+        # Use token-based tunnel (API mode with remote config)
+        export CUSTOMER_NAME="$customer"
+        export TUNNEL_TOKEN="$tunnel_token"
+        export ADMIN_PASSWORD="$admin_password"
+        export INIT_DUMMY_DATA="$init_dummy_data"
+
+        envsubst < "$SCRIPT_DIR/docker-compose.template.yml" > "$customer_dir/docker-compose.yml"
+    fi
 
     # Create .env file for reference
     cat > "$customer_dir/.env" << EOF
@@ -399,7 +486,6 @@ create_customer_stack() {
 CUSTOMER_NAME=$customer
 ADMIN_PASSWORD=$admin_password
 INIT_DUMMY_DATA=$init_dummy_data
-# TUNNEL_TOKEN is stored in docker-compose.yml
 EOF
 
     log_success "Customer stack created"
@@ -552,20 +638,26 @@ main() {
     check_prerequisites
 
     local tunnel_name="az-${customer}"
+    local use_local_config="false"
 
     # Create tunnel (API or CLI)
     if [ "$USE_API_TOKEN" = true ]; then
+        # API mode: remotely-managed tunnel with token
         create_tunnel_api "$customer"
         get_tunnel_token_api "$TUNNEL_ID"
         create_dns_record_api "$customer" "$TUNNEL_ID"
         configure_tunnel_ingress_api "$customer" "$TUNNEL_ID"
+        use_local_config="false"
     else
+        # CLI mode: locally-managed tunnel with config file
         create_tunnel_cli "$customer"
-        get_tunnel_token_cli "$tunnel_name"
         create_dns_record_cli "$customer" "$TUNNEL_ID"
+        create_cloudflared_config "$customer" "$TUNNEL_ID"
+        use_local_config="true"
+        TUNNEL_TOKEN=""  # Not used in local config mode
     fi
 
-    create_customer_stack "$customer" "$TUNNEL_TOKEN" "$admin_password" "$with_dummydata"
+    create_customer_stack "$customer" "$TUNNEL_TOKEN" "$admin_password" "$with_dummydata" "$use_local_config"
 
     start_customer "$customer"
 

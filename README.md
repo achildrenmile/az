@@ -66,12 +66,27 @@ docker build -t arbeitszeit:latest .
 docker run -d -p 3000:3000 -v ./data:/data arbeitszeit:latest
 ```
 
-Für Multi-Tenant-Deployment mit automatischen Cloudflare Tunnels:
+### Multi-Tenant Provisioning
+
+Automatisches Deployment mit Cloudflare Tunnels für isolierte Kundeninstanzen:
 
 ```bash
+# Neuen Kunden anlegen (interaktiv, erfordert cloudflared login)
 ./provision.sh kundenname
+
+# Mit Demo-Daten
 ./provision.sh demo --with-dummydata
+
+# Mit API Token (vollautomatisch)
+export CLOUDFLARE_API_TOKEN=xxx
+export CLOUDFLARE_ACCOUNT_ID=xxx
+./provision.sh kundenname --with-dummydata
 ```
+
+Jeder Kunde erhält:
+- Isolierten Docker-Container
+- Eigene SQLite-Datenbank
+- HTTPS via Cloudflare Tunnel (`az-<kunde>.strali.solutions`)
 
 Siehe [DOCKER.md](DOCKER.md) für vollständige Dokumentation.
 
