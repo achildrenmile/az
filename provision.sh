@@ -13,15 +13,16 @@
 #   ./provision.sh <customer-name> --with-dummydata
 #   ./provision.sh <customer-name> --password <password>
 #
-# Prerequisites:
-#   - Docker and docker-compose installed
-#   - cloudflared CLI installed and authenticated
-#   - Cloudflare API token with DNS and Tunnel permissions
+# Authentication modes:
+#   1. API Token (automated): Set CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID
+#   2. Interactive: Uses cloudflared CLI login (fallback if no token)
 #
-# Environment variables (optional):
+# Required environment variables for API mode:
+#   CLOUDFLARE_API_TOKEN   - API token with Tunnel and DNS permissions
 #   CLOUDFLARE_ACCOUNT_ID  - Cloudflare account ID
-#   CLOUDFLARE_ZONE_ID     - Zone ID for strali.solutions
-#   CLOUDFLARE_API_TOKEN   - API token for DNS management
+#
+# Optional environment variables:
+#   CLOUDFLARE_ZONE_ID     - Zone ID (auto-detected from domain if not set)
 #   AZ_BASE_DOMAIN         - Base domain (default: az.strali.solutions)
 #   AZ_CUSTOMERS_DIR       - Directory for customer data (default: ./customers)
 
@@ -31,6 +32,7 @@ set -e
 BASE_DOMAIN="${AZ_BASE_DOMAIN:-az.strali.solutions}"
 CUSTOMERS_DIR="${AZ_CUSTOMERS_DIR:-./customers}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CF_API_BASE="https://api.cloudflare.com/client/v4"
 
 # Colors for output
 RED='\033[0;31m'
@@ -38,6 +40,9 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
+
+# Authentication mode
+USE_API_TOKEN=false
 
 # Helper functions
 log_info() {
@@ -58,7 +63,6 @@ log_error() {
 
 # Generate a strong random password
 generate_password() {
-    # Generate 16 character password with letters, numbers, and symbols
     openssl rand -base64 24 | tr -dc 'A-Za-z0-9!@#$%&*' | head -c 16
 }
 
@@ -73,6 +77,41 @@ validate_customer_name() {
         echo "  - Be at least 1 character long"
         exit 1
     fi
+}
+
+# Cloudflare API request helper
+cf_api() {
+    local method="$1"
+    local endpoint="$2"
+    local data="$3"
+
+    local args=(-s -X "$method" -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" -H "Content-Type: application/json")
+
+    if [ -n "$data" ]; then
+        args+=(-d "$data")
+    fi
+
+    curl "${args[@]}" "${CF_API_BASE}${endpoint}"
+}
+
+# Get zone ID from domain
+get_zone_id() {
+    local domain="$1"
+    # Extract root domain (e.g., strali.solutions from az.strali.solutions)
+    local root_domain=$(echo "$domain" | awk -F. '{print $(NF-1)"."$NF}')
+
+    log_info "Looking up zone ID for $root_domain..."
+
+    local response=$(cf_api GET "/zones?name=$root_domain")
+    local zone_id=$(echo "$response" | jq -r '.result[0].id // empty')
+
+    if [ -z "$zone_id" ]; then
+        log_error "Could not find zone for domain: $root_domain"
+        echo "$response" | jq '.errors' 2>/dev/null || echo "$response"
+        exit 1
+    fi
+
+    echo "$zone_id"
 }
 
 # Check prerequisites
@@ -91,11 +130,50 @@ check_prerequisites() {
         exit 1
     fi
 
-    # Check cloudflared
-    if ! command -v cloudflared &> /dev/null; then
-        log_error "cloudflared is not installed"
-        echo "  Install with: curl -L https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -o /usr/local/bin/cloudflared && chmod +x /usr/local/bin/cloudflared"
+    # Check jq
+    if ! command -v jq &> /dev/null; then
+        log_error "jq is not installed (required for JSON parsing)"
+        echo "  Install with: apt install jq"
         exit 1
+    fi
+
+    # Determine authentication mode
+    if [ -n "$CLOUDFLARE_API_TOKEN" ] && [ -n "$CLOUDFLARE_ACCOUNT_ID" ]; then
+        USE_API_TOKEN=true
+        log_info "Using API token authentication"
+
+        # Verify API token
+        local verify=$(cf_api GET "/user/tokens/verify")
+        local status=$(echo "$verify" | jq -r '.result.status // empty')
+
+        if [ "$status" != "active" ]; then
+            log_error "API token is invalid or inactive"
+            echo "$verify" | jq '.errors' 2>/dev/null || echo "$verify"
+            exit 1
+        fi
+        log_success "API token verified"
+
+        # Get or lookup zone ID
+        if [ -z "$CLOUDFLARE_ZONE_ID" ]; then
+            CLOUDFLARE_ZONE_ID=$(get_zone_id "$BASE_DOMAIN")
+        fi
+        log_info "Zone ID: $CLOUDFLARE_ZONE_ID"
+    else
+        USE_API_TOKEN=false
+        log_warning "API token not configured, using interactive mode"
+
+        # Check cloudflared for interactive mode
+        if ! command -v cloudflared &> /dev/null; then
+            log_error "cloudflared is not installed (required for interactive mode)"
+            echo ""
+            echo "Either install cloudflared:"
+            echo "  curl -L https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -o /usr/local/bin/cloudflared && chmod +x /usr/local/bin/cloudflared"
+            echo ""
+            echo "Or configure API token for automated mode:"
+            echo "  export CLOUDFLARE_API_TOKEN=your_token"
+            echo "  export CLOUDFLARE_ACCOUNT_ID=your_account_id"
+            exit 1
+        fi
     fi
 
     # Check if Docker image exists
@@ -108,21 +186,58 @@ check_prerequisites() {
     log_success "All prerequisites met"
 }
 
-# Create Cloudflare Tunnel
-create_tunnel() {
+# Create Cloudflare Tunnel via API
+create_tunnel_api() {
     local customer="$1"
     local tunnel_name="az-${customer}"
 
-    log_info "Creating Cloudflare Tunnel: $tunnel_name"
+    log_info "Creating Cloudflare Tunnel via API: $tunnel_name"
 
     # Check if tunnel already exists
-    if cloudflared tunnel list | grep -q "$tunnel_name"; then
+    local existing=$(cf_api GET "/accounts/$CLOUDFLARE_ACCOUNT_ID/cfd_tunnel?name=$tunnel_name")
+    local existing_id=$(echo "$existing" | jq -r '.result[0].id // empty')
+
+    if [ -n "$existing_id" ]; then
+        log_warning "Tunnel '$tunnel_name' already exists: $existing_id"
+        TUNNEL_ID="$existing_id"
+    else
+        # Generate tunnel secret
+        local tunnel_secret=$(openssl rand -base64 32)
+
+        # Create tunnel
+        local create_data=$(jq -n \
+            --arg name "$tunnel_name" \
+            --arg secret "$tunnel_secret" \
+            '{name: $name, tunnel_secret: $secret, config_src: "cloudflare"}')
+
+        local response=$(cf_api POST "/accounts/$CLOUDFLARE_ACCOUNT_ID/cfd_tunnel" "$create_data")
+        TUNNEL_ID=$(echo "$response" | jq -r '.result.id // empty')
+
+        if [ -z "$TUNNEL_ID" ]; then
+            log_error "Failed to create tunnel"
+            echo "$response" | jq '.errors' 2>/dev/null || echo "$response"
+            exit 1
+        fi
+
+        log_success "Tunnel created: $TUNNEL_ID"
+    fi
+}
+
+# Create Cloudflare Tunnel via CLI (interactive)
+create_tunnel_cli() {
+    local customer="$1"
+    local tunnel_name="az-${customer}"
+
+    log_info "Creating Cloudflare Tunnel via CLI: $tunnel_name"
+
+    # Check if tunnel already exists
+    if cloudflared tunnel list 2>/dev/null | grep -q "$tunnel_name"; then
         log_warning "Tunnel '$tunnel_name' already exists"
-        TUNNEL_ID=$(cloudflared tunnel list --output json | jq -r ".[] | select(.name==\"$tunnel_name\") | .id")
+        TUNNEL_ID=$(cloudflared tunnel list --output json 2>/dev/null | jq -r ".[] | select(.name==\"$tunnel_name\") | .id")
     else
         # Create new tunnel
         cloudflared tunnel create "$tunnel_name"
-        TUNNEL_ID=$(cloudflared tunnel list --output json | jq -r ".[] | select(.name==\"$tunnel_name\") | .id")
+        TUNNEL_ID=$(cloudflared tunnel list --output json 2>/dev/null | jq -r ".[] | select(.name==\"$tunnel_name\") | .id")
     fi
 
     if [ -z "$TUNNEL_ID" ]; then
@@ -131,16 +246,32 @@ create_tunnel() {
     fi
 
     log_success "Tunnel created: $TUNNEL_ID"
-    echo "$TUNNEL_ID"
 }
 
-# Get tunnel token
-get_tunnel_token() {
+# Get tunnel token via API
+get_tunnel_token_api() {
+    local tunnel_id="$1"
+
+    log_info "Getting tunnel token via API..."
+
+    local response=$(cf_api GET "/accounts/$CLOUDFLARE_ACCOUNT_ID/cfd_tunnel/$tunnel_id/token")
+    TUNNEL_TOKEN=$(echo "$response" | jq -r '.result // empty')
+
+    if [ -z "$TUNNEL_TOKEN" ]; then
+        log_error "Failed to get tunnel token"
+        echo "$response" | jq '.errors' 2>/dev/null || echo "$response"
+        exit 1
+    fi
+
+    log_success "Tunnel token retrieved"
+}
+
+# Get tunnel token via CLI
+get_tunnel_token_cli() {
     local tunnel_name="$1"
 
-    log_info "Getting tunnel token..."
+    log_info "Getting tunnel token via CLI..."
 
-    # Get token from cloudflared
     TUNNEL_TOKEN=$(cloudflared tunnel token "$tunnel_name" 2>/dev/null)
 
     if [ -z "$TUNNEL_TOKEN" ]; then
@@ -149,16 +280,56 @@ get_tunnel_token() {
     fi
 
     log_success "Tunnel token retrieved"
-    echo "$TUNNEL_TOKEN"
 }
 
-# Create DNS record
-create_dns_record() {
+# Create DNS record via API
+create_dns_record_api() {
     local customer="$1"
     local tunnel_id="$2"
     local hostname="${customer}.${BASE_DOMAIN}"
 
-    log_info "Creating DNS record: $hostname"
+    log_info "Creating DNS record via API: $hostname"
+
+    # Check if record already exists
+    local existing=$(cf_api GET "/zones/$CLOUDFLARE_ZONE_ID/dns_records?name=$hostname&type=CNAME")
+    local existing_id=$(echo "$existing" | jq -r '.result[0].id // empty')
+
+    local cname_target="${tunnel_id}.cfargotunnel.com"
+
+    if [ -n "$existing_id" ]; then
+        log_warning "DNS record already exists, updating..."
+        local update_data=$(jq -n \
+            --arg name "$hostname" \
+            --arg content "$cname_target" \
+            '{type: "CNAME", name: $name, content: $content, proxied: true}')
+
+        cf_api PUT "/zones/$CLOUDFLARE_ZONE_ID/dns_records/$existing_id" "$update_data" > /dev/null
+    else
+        local create_data=$(jq -n \
+            --arg name "$hostname" \
+            --arg content "$cname_target" \
+            '{type: "CNAME", name: $name, content: $content, proxied: true}')
+
+        local response=$(cf_api POST "/zones/$CLOUDFLARE_ZONE_ID/dns_records" "$create_data")
+        local success=$(echo "$response" | jq -r '.success')
+
+        if [ "$success" != "true" ]; then
+            log_error "Failed to create DNS record"
+            echo "$response" | jq '.errors' 2>/dev/null || echo "$response"
+            exit 1
+        fi
+    fi
+
+    log_success "DNS record created: https://$hostname"
+}
+
+# Create DNS record via CLI
+create_dns_record_cli() {
+    local customer="$1"
+    local tunnel_id="$2"
+    local hostname="${customer}.${BASE_DOMAIN}"
+
+    log_info "Creating DNS record via CLI: $hostname"
 
     # Route tunnel to hostname
     cloudflared tunnel route dns "$tunnel_id" "$hostname" 2>/dev/null || true
@@ -166,27 +337,33 @@ create_dns_record() {
     log_success "DNS record created: https://$hostname"
 }
 
-# Configure tunnel ingress
-configure_tunnel_ingress() {
+# Configure tunnel ingress via API
+configure_tunnel_ingress_api() {
     local customer="$1"
     local tunnel_id="$2"
-    local customer_dir="$3"
     local hostname="${customer}.${BASE_DOMAIN}"
 
-    log_info "Configuring tunnel ingress..."
+    log_info "Configuring tunnel ingress via API..."
 
-    # Create tunnel config
-    cat > "$customer_dir/tunnel-config.yml" << EOF
-tunnel: $tunnel_id
-credentials-file: /etc/cloudflared/credentials.json
+    local config_data=$(jq -n \
+        --arg hostname "$hostname" \
+        '{
+            config: {
+                ingress: [
+                    {hostname: $hostname, service: "http://app:3000"},
+                    {service: "http_status:404"}
+                ]
+            }
+        }')
 
-ingress:
-  - hostname: $hostname
-    service: http://app:3000
-  - service: http_status:404
-EOF
+    local response=$(cf_api PUT "/accounts/$CLOUDFLARE_ACCOUNT_ID/cfd_tunnel/$tunnel_id/configurations" "$config_data")
+    local success=$(echo "$response" | jq -r '.success')
 
-    log_success "Tunnel ingress configured"
+    if [ "$success" != "true" ]; then
+        log_warning "Could not configure tunnel ingress via API (may need manual configuration)"
+    else
+        log_success "Tunnel ingress configured"
+    fi
 }
 
 # Create customer directory and files
@@ -210,7 +387,7 @@ create_customer_stack() {
 
     envsubst < "$SCRIPT_DIR/docker-compose.template.yml" > "$customer_dir/docker-compose.yml"
 
-    # Create .env file for reference (not used by docker-compose, but useful for debugging)
+    # Create .env file for reference
     cat > "$customer_dir/.env" << EOF
 # Arbeitszeit-Tracker Customer: $customer
 # Generated: $(date -Iseconds)
@@ -219,7 +396,7 @@ create_customer_stack() {
 CUSTOMER_NAME=$customer
 ADMIN_PASSWORD=$admin_password
 INIT_DUMMY_DATA=$init_dummy_data
-# TUNNEL_TOKEN is stored in docker-compose.yml for security
+# TUNNEL_TOKEN is stored in docker-compose.yml
 EOF
 
     log_success "Customer stack created"
@@ -234,7 +411,6 @@ start_customer() {
 
     cd "$customer_dir"
 
-    # Use docker compose (v2) or docker-compose (v1)
     if docker compose version &> /dev/null; then
         docker compose up -d
     else
@@ -305,10 +481,20 @@ main() {
                 echo "  --password <pass>   Set admin password (generated if not provided)"
                 echo "  --help              Show this help"
                 echo ""
+                echo "Environment variables:"
+                echo "  CLOUDFLARE_API_TOKEN   API token (for automated mode)"
+                echo "  CLOUDFLARE_ACCOUNT_ID  Account ID (for automated mode)"
+                echo "  CLOUDFLARE_ZONE_ID     Zone ID (optional, auto-detected)"
+                echo "  AZ_BASE_DOMAIN         Base domain (default: az.strali.solutions)"
+                echo ""
                 echo "Examples:"
-                echo "  $0 demo                        # Create 'demo' customer"
-                echo "  $0 demo --with-dummydata       # Create with demo data"
-                echo "  $0 acme --password 'Secret123' # Create with specific password"
+                echo "  # Interactive mode (uses cloudflared login)"
+                echo "  $0 demo"
+                echo ""
+                echo "  # Automated mode (uses API token)"
+                echo "  export CLOUDFLARE_API_TOKEN=xxx"
+                echo "  export CLOUDFLARE_ACCOUNT_ID=xxx"
+                echo "  $0 demo --with-dummydata"
                 exit 0
                 ;;
             -*)
@@ -362,17 +548,21 @@ main() {
     # Run provisioning steps
     check_prerequisites
 
-    tunnel_name="az-${customer}"
-    create_tunnel "$customer"
+    local tunnel_name="az-${customer}"
 
-    tunnel_token=$(get_tunnel_token "$tunnel_name")
+    # Create tunnel (API or CLI)
+    if [ "$USE_API_TOKEN" = true ]; then
+        create_tunnel_api "$customer"
+        get_tunnel_token_api "$TUNNEL_ID"
+        create_dns_record_api "$customer" "$TUNNEL_ID"
+        configure_tunnel_ingress_api "$customer" "$TUNNEL_ID"
+    else
+        create_tunnel_cli "$customer"
+        get_tunnel_token_cli "$tunnel_name"
+        create_dns_record_cli "$customer" "$TUNNEL_ID"
+    fi
 
-    # Get tunnel ID for DNS
-    tunnel_id=$(cloudflared tunnel list --output json | jq -r ".[] | select(.name==\"$tunnel_name\") | .id")
-
-    create_dns_record "$customer" "$tunnel_id"
-
-    create_customer_stack "$customer" "$tunnel_token" "$admin_password" "$with_dummydata"
+    create_customer_stack "$customer" "$TUNNEL_TOKEN" "$admin_password" "$with_dummydata"
 
     start_customer "$customer"
 

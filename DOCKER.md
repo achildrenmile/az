@@ -110,16 +110,39 @@ Each customer gets:
 ### Prerequisites for Provisioning
 
 1. Docker and docker-compose installed
-2. cloudflared CLI installed and authenticated
-3. jq installed for JSON parsing
+2. jq installed for JSON parsing
+3. Either:
+   - **API Token** (automated): `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`
+   - **Interactive**: cloudflared CLI installed and authenticated
+
+### API Token Mode (Recommended)
+
+Create an API token at https://dash.cloudflare.com/profile/api-tokens with permissions:
+- **Zone:DNS:Edit** - for creating DNS records
+- **Account:Cloudflare Tunnel:Edit** - for creating tunnels
+
+```bash
+export CLOUDFLARE_API_TOKEN=your_api_token
+export CLOUDFLARE_ACCOUNT_ID=your_account_id
+# Optional: export CLOUDFLARE_ZONE_ID=your_zone_id (auto-detected if not set)
+
+./provision.sh demo --with-dummydata
+```
+
+### Interactive Mode (Fallback)
+
+If no API token is configured, the script falls back to cloudflared CLI:
 
 ```bash
 # Install cloudflared
 curl -L https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 \
   -o /usr/local/bin/cloudflared && chmod +x /usr/local/bin/cloudflared
 
-# Authenticate
+# Authenticate (opens browser)
 cloudflared tunnel login
+
+# Then provision
+./provision.sh demo
 ```
 
 ## Docker Compose
