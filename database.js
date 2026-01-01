@@ -565,6 +565,11 @@ try {
   db.exec(`ALTER TABLE zeiteintraege ADD COLUMN buak_relevant INTEGER DEFAULT 0`);
 } catch (e) {}
 
+// Migration: Demo-User-Flag zu Mitarbeitern hinzufügen
+try {
+  db.exec(`ALTER TABLE mitarbeiter ADD COLUMN ist_demo INTEGER DEFAULT 0`);
+} catch (e) {}
+
 // BUAK-Einstellungen zu default settings hinzufügen
 const buakSettings = [
   { key: 'buak_modul_aktiv', value: '0', desc: 'BUAK Compliance Support Modul aktiviert (1=ja, 0=nein)' }
@@ -590,6 +595,21 @@ if (!adminExists) {
   // Only print password if not in init mode (docker-init.js handles its own output)
   if (!process.env.INIT_MODE) {
     console.log(`Admin-Benutzer erstellt: Nr=admin, PIN=${adminPassword}`);
+  }
+}
+
+// Demo-Benutzer erstellen falls nicht vorhanden (für öffentliche Demo)
+const demoExists = db.prepare('SELECT id FROM mitarbeiter WHERE mitarbeiter_nr = ?').get('demo@strali.solutions');
+if (!demoExists) {
+  const demoPassword = process.env.DEMO_PASSWORD || 'demo1234';
+  const demoHash = bcrypt.hashSync(demoPassword, 10);
+  db.prepare(`
+    INSERT INTO mitarbeiter (mitarbeiter_nr, name, pin_hash, ist_admin, ist_demo)
+    VALUES (?, ?, ?, 1, 1)
+  `).run('demo@strali.solutions', 'Demo User', demoHash);
+
+  if (!process.env.INIT_MODE) {
+    console.log(`Demo-Benutzer erstellt: Nr=demo@strali.solutions, PIN=${demoPassword}`);
   }
 }
 
@@ -940,7 +960,7 @@ module.exports = {
 
   getSession: (sessionId) => {
     return db.prepare(`
-      SELECT s.*, m.mitarbeiter_nr, m.name, m.ist_admin
+      SELECT s.*, m.mitarbeiter_nr, m.name, m.ist_admin, m.ist_demo
       FROM sessions s
       JOIN mitarbeiter m ON s.mitarbeiter_id = m.id
       WHERE s.id = ? AND s.laeuft_ab_am > datetime('now') AND m.aktiv = 1

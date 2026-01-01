@@ -55,7 +55,8 @@ const checkSession = (req, res, next) => {
     id: session.mitarbeiter_id,
     mitarbeiter_nr: session.mitarbeiter_nr,
     name: session.name,
-    ist_admin: session.ist_admin === 1
+    ist_admin: session.ist_admin === 1,
+    ist_demo: session.ist_demo === 1
   };
 
   next();
@@ -64,6 +65,17 @@ const checkSession = (req, res, next) => {
 const checkAdmin = (req, res, next) => {
   if (!req.session.ist_admin) {
     return res.status(403).json({ error: 'Keine Berechtigung' });
+  }
+  next();
+};
+
+// Demo-User darf Admin-UI sehen, aber keine Änderungen durchführen
+const checkNotDemo = (req, res, next) => {
+  if (req.session.ist_demo) {
+    return res.status(403).json({
+      error: 'Demo-Modus: Diese Aktion ist in der Demo nicht verfügbar',
+      demo_restricted: true
+    });
   }
   next();
 };
@@ -134,6 +146,7 @@ app.post('/api/login', (req, res) => {
     sessionId,
     name: mitarbeiter.name,
     ist_admin: mitarbeiter.ist_admin === 1,
+    ist_demo: mitarbeiter.ist_demo === 1,
     expiresAt
   });
 });
@@ -159,7 +172,7 @@ app.get('/api/session', checkSession, (req, res) => {
 // ==================== ZEITEINTRAG ROUTES ====================
 
 // Neuen Zeiteintrag erstellen
-app.post('/api/zeiteintraege', checkSession, (req, res) => {
+app.post('/api/zeiteintraege', checkSession, checkNotDemo, (req, res) => {
   const { datum, arbeitsbeginn, arbeitsende, pause_minuten, baustelle, kunde, anfahrt, notizen, standort, arbeitstyp } = req.body;
 
   if (!datum || !arbeitsbeginn || !arbeitsende) {
@@ -278,7 +291,7 @@ app.get('/api/zeiteintraege/:id', checkSession, (req, res) => {
 });
 
 // Zeiteintrag aktualisieren (eigene oder Admin)
-app.put('/api/zeiteintraege/:id', checkSession, (req, res) => {
+app.put('/api/zeiteintraege/:id', checkSession, checkNotDemo, (req, res) => {
   const { datum, arbeitsbeginn, arbeitsende, pause_minuten, baustelle, kunde, anfahrt, notizen, standort, arbeitstyp } = req.body;
 
   // Alten Eintrag laden
@@ -377,7 +390,7 @@ app.put('/api/zeiteintraege/:id', checkSession, (req, res) => {
 });
 
 // Zeiteintrag löschen (eigene oder Admin)
-app.delete('/api/zeiteintraege/:id', checkSession, (req, res) => {
+app.delete('/api/zeiteintraege/:id', checkSession, checkNotDemo, (req, res) => {
   const eintrag = db.getZeiteintragById(req.params.id);
 
   if (!eintrag) {
@@ -620,7 +633,7 @@ app.get('/api/admin/zeiteintraege', checkSession, checkAdmin, (req, res) => {
 });
 
 // Zeiteintrag löschen (Admin)
-app.delete('/api/admin/zeiteintraege/:id', checkSession, checkAdmin, (req, res) => {
+app.delete('/api/admin/zeiteintraege/:id', checkSession, checkAdmin, checkNotDemo, (req, res) => {
   db.deleteZeiteintrag(req.params.id);
   res.json({ success: true });
 });
@@ -634,7 +647,7 @@ app.get('/api/admin/mitarbeiter', checkSession, checkAdmin, (req, res) => {
 });
 
 // Neuen Mitarbeiter anlegen (Admin)
-app.post('/api/admin/mitarbeiter', checkSession, checkAdmin, (req, res) => {
+app.post('/api/admin/mitarbeiter', checkSession, checkAdmin, checkNotDemo, (req, res) => {
   const { mitarbeiter_nr, name, pin, password } = req.body;
   const pwd = password || pin; // Abwärtskompatibilität
 
@@ -659,7 +672,7 @@ app.post('/api/admin/mitarbeiter', checkSession, checkAdmin, (req, res) => {
 });
 
 // Mitarbeiter bearbeiten (Admin)
-app.put('/api/admin/mitarbeiter/:id', checkSession, checkAdmin, (req, res) => {
+app.put('/api/admin/mitarbeiter/:id', checkSession, checkAdmin, checkNotDemo, (req, res) => {
   const { name, aktiv, pin, password } = req.body;
   const pwd = password || pin; // Abwärtskompatibilität
 
@@ -939,7 +952,7 @@ app.get('/api/admin/kunden/:id', checkSession, checkAdmin, (req, res) => {
 });
 
 // Neuen Kunden anlegen (Admin)
-app.post('/api/admin/kunden', checkSession, checkAdmin, (req, res) => {
+app.post('/api/admin/kunden', checkSession, checkAdmin, checkNotDemo, (req, res) => {
   const { name, ansprechpartner, strasse, plz, ort, telefon, email, notizen } = req.body;
 
   if (!name || !name.trim()) {
@@ -967,7 +980,7 @@ app.post('/api/admin/kunden', checkSession, checkAdmin, (req, res) => {
 });
 
 // Kunden bearbeiten (Admin)
-app.put('/api/admin/kunden/:id', checkSession, checkAdmin, (req, res) => {
+app.put('/api/admin/kunden/:id', checkSession, checkAdmin, checkNotDemo, (req, res) => {
   const { name, ansprechpartner, strasse, plz, ort, telefon, email, notizen, aktiv } = req.body;
 
   if (!name || !name.trim()) {
@@ -996,7 +1009,7 @@ app.put('/api/admin/kunden/:id', checkSession, checkAdmin, (req, res) => {
 });
 
 // Kunden löschen (Admin)
-app.delete('/api/admin/kunden/:id', checkSession, checkAdmin, (req, res) => {
+app.delete('/api/admin/kunden/:id', checkSession, checkAdmin, checkNotDemo, (req, res) => {
   try {
     db.deleteKunde(req.params.id);
     res.json({ success: true });
@@ -1031,7 +1044,7 @@ app.get('/api/admin/baustellen/:id', checkSession, checkAdmin, (req, res) => {
 });
 
 // Neue Baustelle anlegen (Admin)
-app.post('/api/admin/baustellen', checkSession, checkAdmin, (req, res) => {
+app.post('/api/admin/baustellen', checkSession, checkAdmin, checkNotDemo, (req, res) => {
   const { name, kunde, adresse, notizen } = req.body;
 
   if (!name || !name.trim()) {
@@ -1055,7 +1068,7 @@ app.post('/api/admin/baustellen', checkSession, checkAdmin, (req, res) => {
 });
 
 // Baustelle bearbeiten (Admin)
-app.put('/api/admin/baustellen/:id', checkSession, checkAdmin, (req, res) => {
+app.put('/api/admin/baustellen/:id', checkSession, checkAdmin, checkNotDemo, (req, res) => {
   const { name, kunde, adresse, notizen, aktiv } = req.body;
 
   if (!name || !name.trim()) {
@@ -1080,7 +1093,7 @@ app.put('/api/admin/baustellen/:id', checkSession, checkAdmin, (req, res) => {
 });
 
 // Baustelle löschen (Admin)
-app.delete('/api/admin/baustellen/:id', checkSession, checkAdmin, (req, res) => {
+app.delete('/api/admin/baustellen/:id', checkSession, checkAdmin, checkNotDemo, (req, res) => {
   try {
     db.deleteBaustelle(req.params.id);
     res.json({ success: true });
@@ -1113,7 +1126,7 @@ app.get('/api/admin/arbeitstypen/:id', checkSession, checkAdmin, (req, res) => {
 });
 
 // Neuen Arbeitstyp anlegen (Admin)
-app.post('/api/admin/arbeitstypen', checkSession, checkAdmin, (req, res) => {
+app.post('/api/admin/arbeitstypen', checkSession, checkAdmin, checkNotDemo, (req, res) => {
   const { name, beschreibung, farbe } = req.body;
 
   if (!name || !name.trim()) {
@@ -1136,7 +1149,7 @@ app.post('/api/admin/arbeitstypen', checkSession, checkAdmin, (req, res) => {
 });
 
 // Arbeitstyp bearbeiten (Admin)
-app.put('/api/admin/arbeitstypen/:id', checkSession, checkAdmin, (req, res) => {
+app.put('/api/admin/arbeitstypen/:id', checkSession, checkAdmin, checkNotDemo, (req, res) => {
   const { name, beschreibung, farbe, aktiv } = req.body;
 
   if (!name || !name.trim()) {
@@ -1160,7 +1173,7 @@ app.put('/api/admin/arbeitstypen/:id', checkSession, checkAdmin, (req, res) => {
 });
 
 // Arbeitstyp löschen (Admin)
-app.delete('/api/admin/arbeitstypen/:id', checkSession, checkAdmin, (req, res) => {
+app.delete('/api/admin/arbeitstypen/:id', checkSession, checkAdmin, checkNotDemo, (req, res) => {
   try {
     db.deleteArbeitstyp(req.params.id);
     res.json({ success: true });
@@ -1193,7 +1206,7 @@ app.get('/api/admin/pausenregeln/:id', checkSession, checkAdmin, (req, res) => {
 });
 
 // Neue Pausenregel erstellen (Admin)
-app.post('/api/admin/pausenregeln', checkSession, checkAdmin, (req, res) => {
+app.post('/api/admin/pausenregeln', checkSession, checkAdmin, checkNotDemo, (req, res) => {
   const { name, min_arbeitszeit_minuten, min_pause_minuten, warnung_text, aktiv } = req.body;
 
   if (!name || !min_arbeitszeit_minuten || !min_pause_minuten) {
@@ -1219,7 +1232,7 @@ app.post('/api/admin/pausenregeln', checkSession, checkAdmin, (req, res) => {
 });
 
 // Pausenregel aktualisieren (Admin)
-app.put('/api/admin/pausenregeln/:id', checkSession, checkAdmin, (req, res) => {
+app.put('/api/admin/pausenregeln/:id', checkSession, checkAdmin, checkNotDemo, (req, res) => {
   const { name, min_arbeitszeit_minuten, min_pause_minuten, warnung_text, aktiv } = req.body;
 
   if (!name || !min_arbeitszeit_minuten || !min_pause_minuten) {
@@ -1241,7 +1254,7 @@ app.put('/api/admin/pausenregeln/:id', checkSession, checkAdmin, (req, res) => {
 });
 
 // Pausenregel löschen (Admin)
-app.delete('/api/admin/pausenregeln/:id', checkSession, checkAdmin, (req, res) => {
+app.delete('/api/admin/pausenregeln/:id', checkSession, checkAdmin, checkNotDemo, (req, res) => {
   try {
     db.deletePausenregel(req.params.id);
     res.json({ success: true });
@@ -1292,7 +1305,7 @@ app.get('/api/admin/kv/:id', checkSession, checkAdmin, (req, res) => {
 });
 
 // KV erstellen
-app.post('/api/admin/kv', checkSession, checkAdmin, (req, res) => {
+app.post('/api/admin/kv', checkSession, checkAdmin, checkNotDemo, (req, res) => {
   const { name, beschreibung, branche, gueltig_ab, gueltig_bis } = req.body;
 
   if (!name) {
@@ -1311,7 +1324,7 @@ app.post('/api/admin/kv', checkSession, checkAdmin, (req, res) => {
 });
 
 // KV aktualisieren
-app.put('/api/admin/kv/:id', checkSession, checkAdmin, (req, res) => {
+app.put('/api/admin/kv/:id', checkSession, checkAdmin, checkNotDemo, (req, res) => {
   const id = parseInt(req.params.id);
   const { name, beschreibung, branche, gueltig_ab, gueltig_bis, aktiv } = req.body;
 
@@ -1328,7 +1341,7 @@ app.put('/api/admin/kv/:id', checkSession, checkAdmin, (req, res) => {
 });
 
 // KV löschen
-app.delete('/api/admin/kv/:id', checkSession, checkAdmin, (req, res) => {
+app.delete('/api/admin/kv/:id', checkSession, checkAdmin, checkNotDemo, (req, res) => {
   const result = db.deleteKollektivvertrag(parseInt(req.params.id));
   if (!result.success) {
     return res.status(400).json({ error: result.error });
@@ -1352,7 +1365,7 @@ app.get('/api/admin/kv-gruppen', checkSession, checkAdmin, (req, res) => {
 });
 
 // KV-Gruppe erstellen
-app.post('/api/admin/kv/:kvId/gruppen', checkSession, checkAdmin, (req, res) => {
+app.post('/api/admin/kv/:kvId/gruppen', checkSession, checkAdmin, checkNotDemo, (req, res) => {
   const kv_id = parseInt(req.params.kvId);
   const { name, beschreibung, standard_wochenstunden, standard_monatsstunden } = req.body;
 
@@ -1372,7 +1385,7 @@ app.post('/api/admin/kv/:kvId/gruppen', checkSession, checkAdmin, (req, res) => 
 });
 
 // KV-Gruppe aktualisieren
-app.put('/api/admin/kv-gruppen/:id', checkSession, checkAdmin, (req, res) => {
+app.put('/api/admin/kv-gruppen/:id', checkSession, checkAdmin, checkNotDemo, (req, res) => {
   const id = parseInt(req.params.id);
   const { name, beschreibung, standard_wochenstunden, standard_monatsstunden, aktiv } = req.body;
 
@@ -1389,7 +1402,7 @@ app.put('/api/admin/kv-gruppen/:id', checkSession, checkAdmin, (req, res) => {
 });
 
 // KV-Gruppe löschen
-app.delete('/api/admin/kv-gruppen/:id', checkSession, checkAdmin, (req, res) => {
+app.delete('/api/admin/kv-gruppen/:id', checkSession, checkAdmin, checkNotDemo, (req, res) => {
   db.deleteKVGruppe(parseInt(req.params.id));
   res.json({ success: true });
 });
@@ -1403,7 +1416,7 @@ app.get('/api/admin/kv/:kvId/regeln', checkSession, checkAdmin, (req, res) => {
 });
 
 // KV-Regel erstellen
-app.post('/api/admin/kv/:kvId/regeln', checkSession, checkAdmin, (req, res) => {
+app.post('/api/admin/kv/:kvId/regeln', checkSession, checkAdmin, checkNotDemo, (req, res) => {
   const kv_id = parseInt(req.params.kvId);
   const { regel_typ, name, bedingung, wert, einheit, prioritaet } = req.body;
 
@@ -1420,7 +1433,7 @@ app.post('/api/admin/kv/:kvId/regeln', checkSession, checkAdmin, (req, res) => {
 });
 
 // KV-Regel aktualisieren
-app.put('/api/admin/kv-regeln/:id', checkSession, checkAdmin, (req, res) => {
+app.put('/api/admin/kv-regeln/:id', checkSession, checkAdmin, checkNotDemo, (req, res) => {
   const id = parseInt(req.params.id);
   const { regel_typ, name, bedingung, wert, einheit, prioritaet, aktiv } = req.body;
 
@@ -1437,13 +1450,13 @@ app.put('/api/admin/kv-regeln/:id', checkSession, checkAdmin, (req, res) => {
 });
 
 // KV-Regel löschen
-app.delete('/api/admin/kv-regeln/:id', checkSession, checkAdmin, (req, res) => {
+app.delete('/api/admin/kv-regeln/:id', checkSession, checkAdmin, checkNotDemo, (req, res) => {
   db.deleteKVRegel(parseInt(req.params.id));
   res.json({ success: true });
 });
 
 // Mitarbeiter KV-Gruppe zuordnen
-app.put('/api/admin/mitarbeiter/:id/kv-gruppe', checkSession, checkAdmin, (req, res) => {
+app.put('/api/admin/mitarbeiter/:id/kv-gruppe', checkSession, checkAdmin, checkNotDemo, (req, res) => {
   const mitarbeiterId = parseInt(req.params.id);
   const { kv_gruppe_id } = req.body;
 
@@ -1482,7 +1495,7 @@ app.get('/api/admin/retention/analyse', checkSession, checkAdmin, (req, res) => 
 });
 
 // Retention ausführen (Daten löschen)
-app.post('/api/admin/retention/execute', checkSession, checkAdmin, (req, res) => {
+app.post('/api/admin/retention/execute', checkSession, checkAdmin, checkNotDemo, (req, res) => {
   const { tabelle } = req.body;
 
   if (!tabelle || !['zeiteintraege', 'audit_log'].includes(tabelle)) {
@@ -1533,19 +1546,19 @@ app.get('/api/admin/benachrichtigungen', checkSession, checkAdmin, (req, res) =>
 });
 
 // Benachrichtigung als gelesen markieren
-app.put('/api/admin/benachrichtigungen/:id/gelesen', checkSession, checkAdmin, (req, res) => {
+app.put('/api/admin/benachrichtigungen/:id/gelesen', checkSession, checkAdmin, checkNotDemo, (req, res) => {
   db.markBenachrichtigungGelesen(parseInt(req.params.id));
   res.json({ success: true });
 });
 
 // Alle als gelesen markieren
-app.put('/api/admin/benachrichtigungen/alle-gelesen', checkSession, checkAdmin, (req, res) => {
+app.put('/api/admin/benachrichtigungen/alle-gelesen', checkSession, checkAdmin, checkNotDemo, (req, res) => {
   db.markAlleBenachrichtigungenGelesen();
   res.json({ success: true });
 });
 
 // Retention-Warnungen prüfen und erstellen
-app.post('/api/admin/retention/check-warnings', checkSession, checkAdmin, (req, res) => {
+app.post('/api/admin/retention/check-warnings', checkSession, checkAdmin, checkNotDemo, (req, res) => {
   const created = db.checkAndCreateRetentionWarnung();
   res.json({ created });
 });
@@ -1565,7 +1578,7 @@ app.get('/api/einstellungen/arbeitszeit', checkSession, (req, res) => {
 });
 
 // Einstellung aktualisieren (Admin)
-app.put('/api/admin/einstellungen/:schluessel', checkSession, checkAdmin, (req, res) => {
+app.put('/api/admin/einstellungen/:schluessel', checkSession, checkAdmin, checkNotDemo, (req, res) => {
   const { schluessel } = req.params;
   const { wert } = req.body;
 
@@ -1603,7 +1616,7 @@ app.put('/api/admin/einstellungen/:schluessel', checkSession, checkAdmin, (req, 
 });
 
 // Mehrere Einstellungen auf einmal aktualisieren (Admin)
-app.put('/api/admin/einstellungen', checkSession, checkAdmin, (req, res) => {
+app.put('/api/admin/einstellungen', checkSession, checkAdmin, checkNotDemo, (req, res) => {
   const einstellungen = req.body;
 
   if (!einstellungen || typeof einstellungen !== 'object') {
@@ -1632,7 +1645,7 @@ app.get('/api/admin/gleitzeit/konfig', checkSession, checkAdmin, (req, res) => {
 });
 
 // Gleitzeit-Konfiguration aktualisieren (Admin)
-app.put('/api/admin/gleitzeit/konfig', checkSession, checkAdmin, (req, res) => {
+app.put('/api/admin/gleitzeit/konfig', checkSession, checkAdmin, checkNotDemo, (req, res) => {
   const {
     gleitzeit_aktiv,
     gleitzeit_durchrechnungszeitraum,
@@ -1743,7 +1756,7 @@ app.get('/api/admin/gleitzeit/uebersicht', checkSession, checkAdmin, (req, res) 
 });
 
 // Gleitzeit-Periode abschließen (Admin)
-app.post('/api/admin/gleitzeit/abschliessen', checkSession, checkAdmin, (req, res) => {
+app.post('/api/admin/gleitzeit/abschliessen', checkSession, checkAdmin, checkNotDemo, (req, res) => {
   const { mitarbeiter_id, periode_start } = req.body;
 
   if (!mitarbeiter_id || !periode_start) {
@@ -1774,7 +1787,7 @@ app.get('/api/monatsbestaetigung/status', checkSession, (req, res) => {
 });
 
 // Monat bestätigen (Mitarbeiter)
-app.post('/api/monatsbestaetigung', checkSession, (req, res) => {
+app.post('/api/monatsbestaetigung', checkSession, checkNotDemo, (req, res) => {
   const { jahr, monat, kommentar } = req.body;
 
   if (!jahr || !monat) {
@@ -2262,7 +2275,7 @@ app.get('/api/leistungsnachweise/:id', checkSession, (req, res) => {
 });
 
 // Neuen Leistungsnachweis erstellen
-app.post('/api/leistungsnachweise', checkSession, (req, res) => {
+app.post('/api/leistungsnachweise', checkSession, checkNotDemo, (req, res) => {
   const { datum, kunde_id, baustelle_id, kunde_freitext, baustelle_freitext,
           beschreibung, leistungszeit_von, leistungszeit_bis, leistungsdauer_minuten,
           notizen, mitarbeiter_ids } = req.body;
@@ -2295,7 +2308,7 @@ app.post('/api/leistungsnachweise', checkSession, (req, res) => {
 });
 
 // Leistungsnachweis aktualisieren (nur Entwürfe)
-app.put('/api/leistungsnachweise/:id', checkSession, (req, res) => {
+app.put('/api/leistungsnachweise/:id', checkSession, checkNotDemo, (req, res) => {
   const id = parseInt(req.params.id);
   const ln = db.getLeistungsnachweis(id);
 
@@ -2339,7 +2352,7 @@ app.put('/api/leistungsnachweise/:id', checkSession, (req, res) => {
 });
 
 // Leistungsnachweis unterschreiben
-app.post('/api/leistungsnachweise/:id/unterschreiben', checkSession, (req, res) => {
+app.post('/api/leistungsnachweise/:id/unterschreiben', checkSession, checkNotDemo, (req, res) => {
   const id = parseInt(req.params.id);
   const { unterschrift_daten, unterschrift_name } = req.body;
 
@@ -2368,7 +2381,7 @@ app.post('/api/leistungsnachweise/:id/unterschreiben', checkSession, (req, res) 
 });
 
 // Leistungsnachweis stornieren
-app.post('/api/leistungsnachweise/:id/stornieren', checkSession, (req, res) => {
+app.post('/api/leistungsnachweise/:id/stornieren', checkSession, checkNotDemo, (req, res) => {
   const id = parseInt(req.params.id);
   const { grund } = req.body;
 
@@ -2398,7 +2411,7 @@ app.post('/api/leistungsnachweise/:id/stornieren', checkSession, (req, res) => {
 });
 
 // Leistungsnachweis löschen (nur Entwürfe)
-app.delete('/api/leistungsnachweise/:id', checkSession, (req, res) => {
+app.delete('/api/leistungsnachweise/:id', checkSession, checkNotDemo, (req, res) => {
   const id = parseInt(req.params.id);
   const ln = db.getLeistungsnachweis(id);
 
@@ -2581,7 +2594,7 @@ app.get('/api/buak/config', checkSession, checkAdmin, (req, res) => {
 });
 
 // BUAK-Modul aktivieren/deaktivieren
-app.put('/api/buak/config/aktiv', checkSession, checkAdmin, (req, res) => {
+app.put('/api/buak/config/aktiv', checkSession, checkAdmin, checkNotDemo, (req, res) => {
   try {
     const { aktiv } = req.body;
     db.setSetting('buak_modul_aktiv', aktiv ? '1' : '0');
@@ -2593,7 +2606,7 @@ app.put('/api/buak/config/aktiv', checkSession, checkAdmin, (req, res) => {
 });
 
 // BUAK-Relevanz für Baustelle setzen
-app.put('/api/buak/baustellen/:id/relevant', checkSession, checkAdmin, (req, res) => {
+app.put('/api/buak/baustellen/:id/relevant', checkSession, checkAdmin, checkNotDemo, (req, res) => {
   try {
     const { buak_relevant } = req.body;
     db.setBaustelleBuakRelevant(parseInt(req.params.id), buak_relevant);
@@ -2605,7 +2618,7 @@ app.put('/api/buak/baustellen/:id/relevant', checkSession, checkAdmin, (req, res
 });
 
 // BUAK-Relevanz für Mitarbeiter setzen
-app.put('/api/buak/mitarbeiter/:id/relevant', checkSession, checkAdmin, (req, res) => {
+app.put('/api/buak/mitarbeiter/:id/relevant', checkSession, checkAdmin, checkNotDemo, (req, res) => {
   try {
     const { buak_relevant } = req.body;
     db.setMitarbeiterBuakRelevant(parseInt(req.params.id), buak_relevant);
@@ -2617,7 +2630,7 @@ app.put('/api/buak/mitarbeiter/:id/relevant', checkSession, checkAdmin, (req, re
 });
 
 // BUAK-Relevanz für Zeiteintrag setzen
-app.put('/api/buak/zeiteintraege/:id/relevant', checkSession, checkAdmin, (req, res) => {
+app.put('/api/buak/zeiteintraege/:id/relevant', checkSession, checkAdmin, checkNotDemo, (req, res) => {
   try {
     const { buak_relevant } = req.body;
     db.setZeiteintragBuakRelevant(parseInt(req.params.id), buak_relevant);
@@ -2663,7 +2676,7 @@ app.get('/api/buak/schlechtwetter/:id', checkSession, checkAdmin, (req, res) => 
 });
 
 // Schlechtwetter-Ereignis erstellen
-app.post('/api/buak/schlechtwetter', checkSession, checkAdmin, (req, res) => {
+app.post('/api/buak/schlechtwetter', checkSession, checkAdmin, checkNotDemo, (req, res) => {
   try {
     const { datum, baustelle_id, baustelle_freitext, beginn, ende, dauer_minuten,
             grund, grund_details, notizen, mitarbeiter_ids } = req.body;
@@ -2693,7 +2706,7 @@ app.post('/api/buak/schlechtwetter', checkSession, checkAdmin, (req, res) => {
 });
 
 // Schlechtwetter-Ereignis aktualisieren
-app.put('/api/buak/schlechtwetter/:id', checkSession, checkAdmin, (req, res) => {
+app.put('/api/buak/schlechtwetter/:id', checkSession, checkAdmin, checkNotDemo, (req, res) => {
   try {
     const { datum, baustelle_id, baustelle_freitext, beginn, ende, dauer_minuten,
             grund, grund_details, notizen, mitarbeiter_ids } = req.body;
@@ -2723,7 +2736,7 @@ app.put('/api/buak/schlechtwetter/:id', checkSession, checkAdmin, (req, res) => 
 });
 
 // Schlechtwetter-Ereignis löschen
-app.delete('/api/buak/schlechtwetter/:id', checkSession, checkAdmin, (req, res) => {
+app.delete('/api/buak/schlechtwetter/:id', checkSession, checkAdmin, checkNotDemo, (req, res) => {
   try {
     const result = db.deleteSchlechtwetter(parseInt(req.params.id));
     res.json(result);
