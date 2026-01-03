@@ -2984,11 +2984,6 @@ function formatDatum(dateStr) {
   return `${d}.${m}.${y}`;
 }
 
-// Verstöße Tab initialisieren
-document.addEventListener('DOMContentLoaded', () => {
-  loadVerstoesseMitarbeiter();
-});
-
 // Validierungsmeldungen nach Zeiteintrag-Speicherung anzeigen
 function showValidationMessages(validation) {
   // Entferne alte Meldungen
