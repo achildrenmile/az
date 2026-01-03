@@ -2668,6 +2668,7 @@ document.addEventListener('DOMContentLoaded', () => {
         loadAuditLog();
       }
       if (tab.dataset.tab === 'verstoesse') {
+        loadVerstoesseMitarbeiter();
         loadVerstoesse();
       }
       if (tab.dataset.tab === 'retention') {
@@ -2947,6 +2948,7 @@ async function loadVerstoesse() {
 
 // Mitarbeiter-Dropdown für Verstöße-Filter befüllen
 async function loadVerstoesseMitarbeiter() {
+  if (!sessionId || !isAdmin) return;
   const select = document.getElementById('verstoesse-mitarbeiter');
   if (!select) return;
 
