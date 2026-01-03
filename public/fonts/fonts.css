@@ -1,0 +1,8 @@
+/* Inter Variable Font - Local */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 400 800;
+  font-display: swap;
+  src: url('InterVariable.woff2') format('woff2');
+}
