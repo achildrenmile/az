@@ -1,0 +1,20 @@
+services:
+  arbeitszeit:
+    build: .
+    image: arbeitszeit:latest
+    container_name: arbeitszeit
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - PORT=3000
+      - DATABASE_PATH=/data/arbeitszeit.db
+      - NODE_ENV=production
+    volumes:
+      - /var/www/arbeitszeit:/data
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s

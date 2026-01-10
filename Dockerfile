@@ -22,9 +22,12 @@ FROM node:20-alpine
 
 WORKDIR /app
 
+# Install wget for health check and build dependencies for better-sqlite3
+RUN apk add --no-cache wget python3 make g++
+
 # Install production dependencies only
 COPY package*.json ./
-RUN npm ci --only=production && npm cache clean --force
+RUN npm ci --omit=dev && npm cache clean --force
 
 # Copy built assets and server files
 COPY --from=builder --chown=node:node /app/dist ./dist
