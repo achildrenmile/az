@@ -4,186 +4,139 @@
 
 Einfache Arbeitszeiterfassung konform mit dem österreichischen Arbeitszeitgesetz (AZG).
 
-**URL:** https://azdemo.strali.solutions
-**Lokaler Port:** 3000
-**Login:** admin / 1234
+- **URL:** https://azdemo.strali.solutions
+- **Repository:** https://github.com/achildrenmile/az
+- **Demo Login:** admin / 1234
 
----
+## Tech Stack
 
-## Erstellte Dateien
+- **Backend:** Node.js + Express
+- **Database:** SQLite (better-sqlite3)
+- **Frontend:** Vanilla JS SPA
+- **Auth:** bcryptjs for password hashing
+- **Deployment:** Docker on Synology NAS
+
+## Project Structure
 
 ```
-/var/www/arbeitszeit/
-├── package.json          # Dependencies (express, better-sqlite3, bcryptjs)
-├── server.js             # Express-Server mit REST API
-├── database.js           # SQLite-Datenbank Schema & Funktionen
-├── arbeitszeit.db        # SQLite-Datenbank (wird automatisch erstellt)
-├── README.md             # Benutzer-Dokumentation
-├── CLAUDE.md             # Diese Datei
-└── public/
-    ├── index.html        # Frontend (Single Page App)
-    ├── app.js            # JavaScript (Login, Erfassung, Admin)
-    └── style.css         # Styling (responsive)
+├── server.js             # Express server with REST API
+├── database.js           # SQLite database schema & functions
+├── docker-init.js        # Docker initialization script
+├── build.js              # Build script (minification)
+├── Dockerfile            # Docker container definition
+├── docker-compose.yml    # Docker compose config
+├── deploy-production.sh  # Synology deployment script
+├── public/
+│   ├── index.html        # Frontend SPA
+│   ├── app.js            # JavaScript (Login, Zeiterfassung, Admin)
+│   └── style.css         # Styling (responsive)
+└── data/
+    └── arbeitszeit.db    # SQLite database (runtime, not in repo)
 ```
 
----
+## Deployment
 
-## Deployment-Schritte
-
-### 1. App erstellen
+### Production (Synology NAS)
 
 ```bash
-# Projektstruktur erstellt in /home/oe8yml/arbeitszeit-tracker
-mkdir -p arbeitszeit-tracker/public
+# Deploy to production
+./deploy-production.sh
 ```
 
-### 2. Dependencies installieren
+**Requirements:**
+- Copy `.env.production.example` to `.env.production` and configure
+- SSH access to Synology configured
+
+**Infrastructure:**
+- **Host**: Synology NAS
+- **Container**: `arbeitszeit-synology` on port 3000
+- **Tunnel**: `cloudflared-strali` (shared with strali.solutions)
+- **Database**: SQLite at `/volume1/docker/arbeitszeit/data/arbeitszeit.db`
+
+### Local Development
 
 ```bash
-cd /home/oe8yml/arbeitszeit-tracker
+# Install dependencies
 npm install
+
+# Start development server
+npm start
+
+# Build for production (minify JS/CSS)
+npm run build
 ```
-
-### 3. App nach /var/www kopieren
-
-```bash
-sudo cp -r /home/oe8yml/arbeitszeit-tracker /var/www/arbeitszeit
-sudo chown -R oe8yml:oe8yml /var/www/arbeitszeit
-```
-
-### 4. PM2 Prozess einrichten
-
-```bash
-cd /var/www/arbeitszeit
-pm2 start server.js --name arbeitszeit
-pm2 save
-```
-
-### 5. Cloudflare Tunnel konfigurieren
-
-Config-Datei `/etc/cloudflared/strali.yml` aktualisiert:
-
-```yaml
-resolver: 1.1.1.1
-
-tunnel: 3613bf97-d7ab-4184-908a-c4e260612eb2
-credentials-file: /home/oe8yml/.cloudflared/3613bf97-d7ab-4184-908a-c4e260612eb2.json
-
-ingress:
-  - hostname: strali.solutions
-    service: http://localhost:8080
-  - hostname: azdemo.strali.solutions
-    service: http://localhost:3000
-  - service: http_status:404
-```
-
-### 6. DNS-Route und Tunnel neu starten
-
-```bash
-cloudflared tunnel route dns strali azdemo.strali.solutions
-sudo systemctl restart cloudflared-strali
-```
-
----
 
 ## API Endpoints
 
 ### Auth
-| Method | Endpoint | Beschreibung |
-|--------|----------|--------------|
-| POST | `/api/login` | Login mit mitarbeiter_nr + pin |
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/login` | Login with mitarbeiter_nr + pin |
 | POST | `/api/logout` | Logout |
 
-### Zeiteinträge (Mitarbeiter)
-| Method | Endpoint | Beschreibung |
-|--------|----------|--------------|
-| GET | `/api/zeiteintraege` | Eigene Einträge abrufen |
-| POST | `/api/zeiteintraege` | Neuen Eintrag erstellen |
+### Zeiteinträge (Employee)
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/zeiteintraege` | Get own entries |
+| POST | `/api/zeiteintraege` | Create new entry |
 
 ### Admin
-| Method | Endpoint | Beschreibung |
-|--------|----------|--------------|
-| GET | `/api/admin/zeiteintraege` | Alle Einträge (mit Filter) |
-| DELETE | `/api/admin/zeiteintraege/:id` | Eintrag löschen |
-| GET | `/api/admin/mitarbeiter` | Alle Mitarbeiter |
-| POST | `/api/admin/mitarbeiter` | Neuer Mitarbeiter |
-| PUT | `/api/admin/mitarbeiter/:id` | Mitarbeiter bearbeiten |
-| GET | `/api/admin/export` | CSV-Export |
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/admin/zeiteintraege` | All entries (with filter) |
+| DELETE | `/api/admin/zeiteintraege/:id` | Delete entry |
+| GET | `/api/admin/mitarbeiter` | All employees |
+| POST | `/api/admin/mitarbeiter` | New employee |
+| PUT | `/api/admin/mitarbeiter/:id` | Edit employee |
+| GET | `/api/admin/export` | CSV export |
 
----
+## Database Schema
 
-## Datenbank-Schema
-
-### Tabelle: mitarbeiter
-| Spalte | Typ | Beschreibung |
-|--------|-----|--------------|
+### Table: mitarbeiter
+| Column | Type | Description |
+|--------|------|-------------|
 | id | INTEGER | Primary Key |
-| mitarbeiter_nr | TEXT | Eindeutige Nummer (Login) |
-| name | TEXT | Anzeigename |
-| pin_hash | TEXT | Gehashter PIN (bcrypt) |
-| ist_admin | INTEGER | 0 oder 1 |
-| aktiv | INTEGER | 0 oder 1 |
+| mitarbeiter_nr | TEXT | Unique ID (login) |
+| name | TEXT | Display name |
+| pin_hash | TEXT | Hashed PIN (bcrypt) |
+| ist_admin | INTEGER | 0 or 1 |
+| aktiv | INTEGER | 0 or 1 |
 | erstellt_am | DATETIME | Timestamp |
 
-### Tabelle: zeiteintraege
-| Spalte | Typ | Beschreibung |
-|--------|-----|--------------|
+### Table: zeiteintraege
+| Column | Type | Description |
+|--------|------|-------------|
 | id | INTEGER | Primary Key |
 | mitarbeiter_id | INTEGER | Foreign Key |
-| datum | DATE | Arbeitstag |
-| arbeitsbeginn | TIME | Startzeit |
-| arbeitsende | TIME | Endzeit |
-| pause_minuten | INTEGER | Pausendauer |
-| baustelle | TEXT | Freitext |
-| kunde | TEXT | Freitext |
-| anfahrt | TEXT | Freitext |
-| notizen | TEXT | Freitext |
+| datum | DATE | Work day |
+| arbeitsbeginn | TIME | Start time |
+| arbeitsende | TIME | End time |
+| pause_minuten | INTEGER | Break duration |
+| baustelle | TEXT | Construction site |
+| kunde | TEXT | Customer |
+| anfahrt | TEXT | Travel info |
+| notizen | TEXT | Notes |
 | erstellt_am | DATETIME | Timestamp |
 
----
+## AZG Compliance
 
-## AZG-Konformität
+Compliant with Austrian Working Time Act (Arbeitszeitgesetz):
+- Records start and end of daily working time
+- Records break duration
+- Automatic warning for >6h without 30min break
+- Calculates net working time
 
-Erfasst gemäß österreichischem Arbeitszeitgesetz:
-- Beginn und Ende der täglichen Arbeitszeit
-- Dauer der Ruhepausen
-- Automatische Warnung bei >6h ohne 30min Pause
-- Berechnung der Netto-Arbeitszeit
+## Maintenance
 
----
-
-## Wartung
-
-### Logs prüfen
+### Check logs on Synology
 ```bash
-pm2 logs arbeitszeit
+ssh straliadmin@<SYNOLOGY_IP> '/usr/local/bin/docker logs arbeitszeit-synology'
 ```
 
-### Neustart
+### Database backup
+Database is stored at `/volume1/docker/arbeitszeit/data/arbeitszeit.db` on Synology.
+
+### Verify deployment
 ```bash
-pm2 restart arbeitszeit
+curl -s -o /dev/null -w "%{http_code}" https://azdemo.strali.solutions/
 ```
-
-### Datenbank-Backup
-```bash
-cp /var/www/arbeitszeit/arbeitszeit.db ~/backups/arbeitszeit_$(date +%Y%m%d).db
-```
-
-### Status prüfen
-```bash
-pm2 list
-curl http://localhost:3000/api/login -X POST -H "Content-Type: application/json" -d '{"mitarbeiter_nr":"admin","pin":"1234"}'
-```
-
----
-
-## Services
-
-| Service | Config | Port |
-|---------|--------|------|
-| arbeitszeit (PM2) | /var/www/arbeitszeit/server.js | 3000 |
-| cloudflared-strali | /etc/cloudflared/strali.yml | - |
-
----
-
-*Erstellt am 28.12.2025 mit Claude Code*
